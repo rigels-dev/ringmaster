@@ -1,0 +1,156 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="512" height="512">
+  <defs>
+    <!-- TAME THE BEASTS BACKGROUND: Exact Dark Velvet Maroon with Ember Warmth -->
+    <radialGradient id="tameBgExact" cx="50%" cy="45%" r="70%">
+      <stop offset="0%" stop-color="#3d1822"/>
+      <stop offset="40%" stop-color="#240f17"/>
+      <stop offset="75%" stop-color="#14080e"/>
+      <stop offset="100%" stop-color="#080306"/>
+    </radialGradient>
+
+    <!-- Kinetic Whip Fire Arc: Hot White Core -> Sun Gold -> Crimson Ember -->
+    <linearGradient id="whipFire" x1="0%" y1="100%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#881337"/>
+      <stop offset="30%" stop-color="#ea580c"/>
+      <stop offset="70%" stop-color="#facc15"/>
+      <stop offset="100%" stop-color="#ffffff"/>
+    </linearGradient>
+
+    <!-- Glowing Teal Eye Filter -->
+    <filter id="eyeCyanGlow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="3.5" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+
+    <!-- Container Rim -->
+    <linearGradient id="containerRim" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#4a2530"/>
+      <stop offset="50%" stop-color="#261219"/>
+      <stop offset="100%" stop-color="#0d0509"/>
+    </linearGradient>
+  </defs>
+
+  <!-- FRAME CONTAINER -->
+  <rect x="4" y="4" width="248" height="248" rx="42" fill="url(#containerRim)" stroke="#5c2635" stroke-width="2"/>
+  <rect x="10" y="10" width="236" height="236" rx="36" fill="url(#tameBgExact)"/>
+
+  <!-- TAME THE BEASTS: Spiral whip kinetic motion trail -->
+  <g id="whip-curve">
+    <!-- Outer energy bloom -->
+    <path d="M 28,212 C 14,136 50,42 135,30 C 188,22 232,56 234,106 C 236,152 198,196 148,210" 
+          fill="none" stroke="#be123c" stroke-width="9" opacity="0.32" stroke-linecap="round"/>
+    <!-- Scorching whip cord -->
+    <path d="M 36,216 C 22,145 56,52 138,38 C 184,30 224,62 226,108 C 228,146 195,188 152,202" 
+          fill="none" stroke="url(#whipFire)" stroke-width="5" stroke-linecap="round"/>
+    <!-- Intense white core spark wire -->
+    <path d="M 55,198 C 44,142 75,70 138,52 C 174,42 208,70 214,106" 
+          fill="none" stroke="#ffffff" stroke-width="2" opacity="0.95"/>
+
+    <!-- Kinetic Whip Crack Burst (Top impact) -->
+    <g transform="translate(138, 44)">
+      <polygon points="0,-16 4,-4 16,0 4,4 0,16 -4,4 -16,0 -4,-4" fill="#ffffff"/>
+      <polygon points="0,-8 2,-2 8,0 2,2 0,8 -2,2 -8,0 -2,-2" fill="#fef08a"/>
+      <circle cx="16" cy="-8" r="2.5" fill="#facc15"/>
+      <circle cx="-14" cy="-12" r="2" fill="#fb923c"/>
+      <circle cx="20" cy="10" r="1.5" fill="#f97316"/>
+    </g>
+  </g>
+
+  <!-- CHARACTER: COGLIOSTRO KETTLE (True Dota 2 Design & Palette) -->
+  <g id="ringmaster-puppet" transform="translate(0, 4)">
+
+    <!-- DARK MAHOGANY COAT & COLLAR (#24110c / #362018) -->
+    <path d="M 48,244 L 72,188 L 128,214 L 184,188 L 208,244 Z" fill="#24110c" stroke="#120604" stroke-width="2"/>
+    <!-- Lapels with brass border trim -->
+    <polygon points="76,188 128,216 116,244 62,244" fill="#362018"/>
+    <polygon points="180,188 128,216 140,244 194,244" fill="#2e1912"/>
+    <line x1="78" y1="188" x2="66" y2="242" stroke="#c59b27" stroke-width="2.5" stroke-linecap="round"/>
+    <line x1="178" y1="188" x2="190" y2="242" stroke="#c59b27" stroke-width="2.5" stroke-linecap="round"/>
+
+    <!-- Neck Medallion / Brass Mechanism -->
+    <circle cx="128" cy="222" r="5.5" fill="#d4af37" stroke="#78350f" stroke-width="1.2"/>
+    <circle cx="128" cy="222" r="2.5" fill="#1e293b"/>
+
+    <!-- CARVED WOODEN VENTRILOQUIST HEAD: Warm ochre/pale wood palette (#d3c18e / #c5a96f / #9b8059) -->
+    <!-- Base Head Silhouette -->
+    <polygon points="128,102 166,114 172,138 164,168 144,194 128,202 112,194 92,168 84,138 90,114" 
+             fill="#c5a96f" stroke="#362018" stroke-width="2"/>
+    <!-- Right side pale wood highlight -->
+    <polygon points="128,105 162,116 166,138 158,164 140,190 128,198" fill="#e2d7a4"/>
+    <!-- Left side shadowed wood grain -->
+    <polygon points="128,105 96,116 90,138 96,162 114,188 128,198" fill="#9b8059"/>
+
+    <!-- CHEEKBONE CARVINGS & WRINKLES -->
+    <path d="M 98,148 Q 106,156 112,164" fill="none" stroke="#6b5336" stroke-width="1.5" stroke-linecap="round"/>
+    <path d="M 158,148 Q 150,156 144,164" fill="none" stroke="#6b5336" stroke-width="1.5" stroke-linecap="round"/>
+
+    <!-- SEPARATE VENTRILOQUIST JAW CUTS (Celah rahang mekanik boneka) -->
+    <line x1="110" y1="178" x2="112" y2="196" stroke="#24110c" stroke-width="2.5"/>
+    <line x1="146" y1="178" x2="144" y2="196" stroke="#24110c" stroke-width="2.5"/>
+
+    <!-- CARVED POINTED WOOD CHIN / GOATEE (#f5eb90 / #eae58e gading muda) -->
+    <polygon points="128,186 136,192 134,208 128,214 122,208 120,192" fill="#785d43" stroke="#24110c" stroke-width="1.2"/>
+    <polygon points="128,198 133,200 131,210 128,214 125,210 123,200" fill="#f5eb90"/>
+
+    <!-- MANIC SHOWMAN'S GRIN (Senyum menyeringai lebar khas Kettle) -->
+    <!-- Dark interior mouth -->
+    <path d="M 104,164 Q 128,186 152,164 Q 128,172 104,164 Z" fill="#190704" stroke="#362018" stroke-width="1.5"/>
+    <!-- Top row exposed carved teeth -->
+    <path d="M 108,165 Q 128,178 148,165 L 146,169 Q 128,181 110,169 Z" fill="#ffffe0"/>
+
+    <!-- CARVED WOODEN MUSTACHE (Kumis tipis melengkung cokelat gelap #362018) -->
+    <path d="M 102,162 Q 116,154 128,161 Q 140,154 154,162 Q 162,166 166,162" 
+          fill="none" stroke="#362018" stroke-width="2.8" stroke-linecap="round"/>
+
+    <!-- PROMINENT HOOKED NOSE (Hidung bengkok runcing) -->
+    <polygon points="126,124 129,148 122,156 128,158 134,154 131,124" fill="#7a6241"/>
+    <polygon points="128,124 131,124 134,154 128,158" fill="#f1f7cb"/>
+
+    <!-- DARK EYE SOCKETS & TEAL/CYAN GLOWING MECHANICAL OCULARS -->
+    <!-- Left eye socket & curved dark brow -->
+    <path d="M 96,124 Q 110,114 122,122" fill="none" stroke="#2b1a10" stroke-width="2.8" stroke-linecap="round"/>
+    <ellipse cx="112" cy="132" rx="5.5" ry="4.5" fill="#141a18"/>
+    <!-- Left Eye Glowing Cyan Ocular -->
+    <circle cx="113" cy="132" r="2.8" fill="#33dde5" filter="url(#eyeCyanGlow)"/>
+    <circle cx="113" cy="132" r="1.2" fill="#ffffff"/>
+
+    <!-- Right eye socket & arched brow -->
+    <path d="M 134,122 Q 146,114 160,124" fill="none" stroke="#2b1a10" stroke-width="2.8" stroke-linecap="round"/>
+    <ellipse cx="144" cy="132" rx="5.5" ry="4.5" fill="#141a18"/>
+    <!-- Right Eye Glowing Cyan Ocular -->
+    <circle cx="143" cy="132" r="2.8" fill="#33dde5" filter="url(#eyeCyanGlow)"/>
+    <circle cx="143" cy="132" r="1.2" fill="#ffffff"/>
+
+    <!-- TILTED TOP HAT: PALE IVORY/KHAKI VELVET (#d5d4ad / #c7c292 / #fafcf0) miring ke kanan -->
+    <g id="ringmaster-hat" transform="rotate(-8 128 96)">
+      <!-- Hat Crown Body -->
+      <polygon points="98,94 104,38 154,36 160,92" fill="#d5d4ad" stroke="#454230" stroke-width="2"/>
+      <!-- Hat Crown Top Ellipse -->
+      <ellipse cx="129" cy="37" rx="25" ry="5.5" fill="#fafcf0" stroke="#454230" stroke-width="1.5"/>
+      <!-- Pale silk sheen highlight -->
+      <path d="M 112,93 L 116,39 L 130,38 L 123,93 Z" fill="#ffffff" opacity="0.6"/>
+
+      <!-- DARK MAROON HAT BAND (#581622) -->
+      <polygon points="97,92 99,80 159,78 161,90" fill="#581622" stroke="#2a0910" stroke-width="1"/>
+
+      <!-- GOLD CARNIVAL TICKET (Diselipkan di sisi kanan pita topi) -->
+      <g transform="translate(150, 66) rotate(18)">
+        <polygon points="0,0 16,-4 20,18 4,22" fill="#d97706" stroke="#451a03" stroke-width="1"/>
+        <line x1="4" y1="5" x2="16" y2="2" stroke="#451a03" stroke-width="1" stroke-dasharray="1.5,1.5"/>
+        <line x1="5" y1="10" x2="17" y2="7" stroke="#451a03" stroke-width="0.8"/>
+        <line x1="6" y1="15" x2="18" y2="12" stroke="#451a03" stroke-width="0.8"/>
+      </g>
+
+      <!-- WIDE CURVED HAT BRIM (Pale Ivory Top, Dark Khaki Underbrim) -->
+      <ellipse cx="129" cy="96" rx="46" ry="9.5" fill="#a09b80" stroke="#363328" stroke-width="2"/>
+      <ellipse cx="129" cy="94" rx="44" ry="8" fill="#e5e6c4"/>
+    </g>
+
+  </g>
+
+  <!-- INNER SHADOW VIGNETTE BORDER -->
+  <rect x="10" y="10" width="236" height="236" rx="36" fill="none" stroke="#000000" stroke-width="3" opacity="0.45"/>
+</svg>

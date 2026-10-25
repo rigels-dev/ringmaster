@@ -1,0 +1,58 @@
+[providers.ninerouter]
+base_url = "http://localhost:20128/v1"
+api_key_env = "NINEROUTER_API_KEY"
+
+[providers.ollama_local]
+base_url = "http://localhost:11434/v1"
+api_key_env = "OLLAMA_API_KEY"
+
+[providers.openrouter]
+base_url = "https://openrouter.ai/api/v1"
+api_key_env = "OPENROUTER_API_KEY"
+
+[agents.master]
+provider = "ninerouter"
+model = "claude-opus-5-5"
+role = "master"
+
+[agents.coder-cheap]
+provider = "ollama_local"
+model = "qwen2.5-coder:7b"
+role = "worker"
+tool_calling = true
+
+[agents.coder-fast]
+provider = "openrouter"
+model = "anthropic/claude-3.5-haiku"
+role = "worker"
+tool_calling = true
+
+[routing]
+default_master = "master"
+default_worker = "coder-cheap"
+fallback_worker = "coder-fast"
+
+[budget]
+max_tokens_per_project = 2000000
+max_tokens_per_task = 300000
+
+[sandbox]
+allow = [
+  "pytest",
+  "ruff",
+  "mypy",
+  "python",
+  "node",
+  "npm",
+  "go test",
+  "git status",
+  "git diff"
+]
+
+[estimates.backend]
+tokens_in = [20000, 80000]
+tokens_out = [5000, 25000]
+
+[estimates.frontend]
+tokens_in = [15000, 60000]
+tokens_out = [4000, 20000]

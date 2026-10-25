@@ -1,0 +1,22 @@
+# Binaries
+bin/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Ringmaster local & runtime artifacts
+.worktrees/
+.ringmaster/
+projects/*/repo/.git/
+projects/*/.ringmaster/
+projects/*/outputs/
+
+# Environment and sensitive configs
+ringmaster.toml
+.env
+
+# Test outputs
+coverage.out
+*.test
