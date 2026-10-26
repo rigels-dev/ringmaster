@@ -45,7 +45,8 @@ func RunInit(name string, force bool) error {
 		isCurrentDir = true
 	} else {
 		// Init target directory directly
-		projectDir = name
+		cwd, _ := os.Getwd()
+		projectDir = filepath.Join(cwd, name)
 		repoDir = filepath.Join(projectDir, "repo")
 
 		if info, err := os.Stat(projectDir); err == nil && info.IsDir() {
@@ -53,6 +54,14 @@ func RunInit(name string, force bool) error {
 				return fmt.Errorf("directory '%s' already exists (use --force to overwrite)", projectDir)
 			}
 		}
+	}
+
+	// Record this as the latest active project in user's global ringmaster profile
+	homeDir, _ := os.UserHomeDir()
+	if homeDir != "" {
+		activeFile := filepath.Join(homeDir, ".ringmaster", "active_project")
+		_ = os.MkdirAll(filepath.Dir(activeFile), 0755)
+		_ = os.WriteFile(activeFile, []byte(projectDir), 0644)
 	}
 
 	dirsToCreate := []string{

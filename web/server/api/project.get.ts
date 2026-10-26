@@ -1,9 +1,37 @@
 import fs from 'node:fs'
 import path from 'node:path'
+import os from 'node:os'
 
 export default defineEventHandler((event) => {
-  // Check RINGMASTER_PROJECT_DIR from environment or fallback to current directory
-  const projectDir = process.env.RINGMASTER_PROJECT_DIR || process.cwd()
+  // 1. Resolve project directory in priority:
+  // a. Environment variable RINGMASTER_PROJECT_DIR
+  // b. Global active project file (~/.ringmaster/active_project)
+  // c. Process CWD if contains ringmaster project markers
+  // d. Fallback to /home/ubuntu/project/ringmaster/examples/todo-app
+  let projectDir = process.env.RINGMASTER_PROJECT_DIR
+
+  if (!projectDir || projectDir.includes('.openclaw')) {
+    const activeFile = path.join(os.homedir(), '.ringmaster', 'active_project')
+    if (fs.existsSync(activeFile)) {
+      try {
+        const stored = fs.readFileSync(activeFile, 'utf-8').trim()
+        if (stored && fs.existsSync(stored)) {
+          projectDir = stored
+        }
+      } catch {}
+    }
+  }
+
+  const cwd = process.cwd()
+  if (!projectDir) {
+    if (fs.existsSync(path.join(cwd, 'ringmaster.toml')) || fs.existsSync(path.join(cwd, 'BRIEF.md'))) {
+      projectDir = cwd
+    } else {
+      const exampleDir = '/home/ubuntu/project/ringmaster/examples/todo-app'
+      projectDir = fs.existsSync(exampleDir) ? exampleDir : cwd
+    }
+  }
+
   const projectName = path.basename(projectDir)
 
   // 1. Read BRIEF.md
