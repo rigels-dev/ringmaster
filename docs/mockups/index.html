@@ -2212,7 +2212,27 @@
     }
 
     function deleteProvider(name) {
+      const boundAgents = Object.entries(currentConfig.agents || {})
+        .filter(([_, a]) => a.provider === name)
+        .map(([alias, a]) => `${alias} (${a.model})`);
+
+      let msg = `Are you sure you want to delete provider '${name}'?`;
+      if (boundAgents.length > 0) {
+        msg += `\n\n⚠ WARNING: Deleting this provider will also delete ${boundAgents.length} dependent agent(s):\n• ${boundAgents.join('\n• ')}`;
+      }
+
+      if (!confirm(msg)) {
+        return;
+      }
+
       delete currentConfig.providers[name];
+      for (const [alias, a] of Object.entries(currentConfig.agents || {})) {
+        if (a.provider === name) {
+          delete currentConfig.agents[alias];
+        }
+      }
+
+      renderRosterUI();
       renderModalTables();
     }
 

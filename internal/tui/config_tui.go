@@ -107,6 +107,7 @@ const (
 	modeClaudeOAuth       // Interactive OAuth URL + Code paste
 	modePickModel         // Step 3: Pick Model from fetched list
 	modePickModelRole     // Step 4: Pick Role for chosen model
+	modeConfirmDeleteProvider // Step: Confirm provider deletion
 	modeEditProvider
 	modeAddProvider
 	modePickAgentTemplate
@@ -358,6 +359,7 @@ type ConfigModel struct {
 	modelSearchQuery      string
 	selectedModelID       string
 	roleCursor            int
+	deletingProviderName  string
 	oauthURL              string
 	oauthVerifier         string
 	oauthState            string
@@ -519,12 +521,9 @@ func (m ConfigModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if m.activeTab == tabProviders {
 					names := m.getProviderNames()
 					if m.cursor < len(names) {
-						delete(m.cfg.Providers, names[m.cursor])
-						_ = config.SaveFile(m.configPath, m.cfg)
-						m.statusMsg = fmt.Sprintf("Deleted provider '%s'", names[m.cursor])
-						if m.cursor > 0 {
-							m.cursor--
-						}
+						m.deletingProviderName = names[m.cursor]
+						m.mode = modeConfirmDeleteProvider
+						return m, nil
 					}
 				} else {
 					aliases := m.getAgentAliases()
@@ -924,6 +923,56 @@ func (m ConfigModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.modelCursor = 0
 					return m, nil
 				}
+			}
+
+		case modeConfirmDeleteProvider:
+			switch msg.String() {
+			case "y", "enter":
+				provName := m.deletingProviderName
+				if provName != "" {
+					delete(m.cfg.Providers, provName)
+
+					// Delete all agents bound to this provider as well
+					deletedAgentsCount := 0
+					for aName, a := range m.cfg.Agents {
+						if a.Provider == provName {
+							delete(m.cfg.Agents, aName)
+							deletedAgentsCount++
+						}
+					}
+
+					// Update routing defaults if they pointed to deleted agents
+					if m.cfg.Routing.DefaultMaster != "" {
+						if _, exists := m.cfg.Agents[m.cfg.Routing.DefaultMaster]; !exists {
+							m.cfg.Routing.DefaultMaster = ""
+						}
+					}
+					if m.cfg.Routing.DefaultWorker != "" {
+						if _, exists := m.cfg.Agents[m.cfg.Routing.DefaultWorker]; !exists {
+							m.cfg.Routing.DefaultWorker = ""
+						}
+					}
+
+					_ = config.SaveFile(m.configPath, m.cfg)
+					if deletedAgentsCount > 0 {
+						m.statusMsg = fmt.Sprintf("✓ Deleted provider '%s' and %d dependent agent(s)", provName, deletedAgentsCount)
+					} else {
+						m.statusMsg = fmt.Sprintf("✓ Deleted provider '%s'", provName)
+					}
+
+					if m.cursor > 0 {
+						m.cursor--
+					}
+				}
+				m.deletingProviderName = ""
+				m.mode = modeList
+				return m, nil
+
+			case "n", "esc", "q":
+				m.deletingProviderName = ""
+				m.statusMsg = "Deletion cancelled."
+				m.mode = modeList
+				return m, nil
 			}
 
 		case modePickModelRole: // Step 4: Pick Role (Master or Worker) for selected model
@@ -1405,6 +1454,35 @@ func (m ConfigModel) View() string {
 		}
 
 		b.WriteString(hintStyle.Render("Ctrl+C: Copy full URL to clipboard · [Enter] Submit code · [Esc] Cancel") + "\n")
+		return b.String()
+	}
+
+	// ==========================================
+	// CONFIRM DELETE PROVIDER MODAL
+	// ==========================================
+	if m.mode == modeConfirmDeleteProvider {
+		provName := m.deletingProviderName
+		var boundAgents []string
+		for aName, a := range m.cfg.Agents {
+			if a.Provider == provName {
+				boundAgents = append(boundAgents, fmt.Sprintf("%s (%s)", aName, a.Model))
+			}
+		}
+
+		b.WriteString(errStyle.Render("⚠ CONFIRM PROVIDER DELETION") + "\n\n")
+		b.WriteString(normalItemStyle.Render(fmt.Sprintf("Are you sure you want to delete provider '%s'?", provName)) + "\n\n")
+
+		if len(boundAgents) > 0 {
+			b.WriteString(errStyle.Render(fmt.Sprintf("WARNING: Deleting this provider will also delete %d dependent agent(s):", len(boundAgents))) + "\n")
+			for _, ag := range boundAgents {
+				b.WriteString(hintStyle.Render("  • "+ag) + "\n")
+			}
+			b.WriteString("\n")
+		} else {
+			b.WriteString(hintStyle.Render("No agents are currently using this provider.") + "\n\n")
+		}
+
+		b.WriteString(selectedBulletStyle.Render("[y / Enter] Confirm Delete") + "   " + normalItemStyle.Render("[n / Esc] Cancel") + "\n")
 		return b.String()
 	}
 

@@ -8,6 +8,48 @@ import (
 	"testing"
 )
 
+func TestDeleteProviderConfirmation(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.Providers["test_prov"] = config.ProviderConfig{Type: "openai", BaseURL: "http://localhost:8080"}
+	cfg.Agents["agent1"] = config.AgentConfig{Provider: "test_prov", Model: "gpt-4", Role: "master"}
+	cfg.Agents["agent2"] = config.AgentConfig{Provider: "test_prov", Model: "gpt-3.5", Role: "worker"}
+
+	model := NewConfigModel(cfg, "ringmaster.toml")
+
+	// Press 'd' to trigger delete confirmation
+	m1, _ := model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'d'}})
+	v1 := m1.(ConfigModel).View()
+
+	if !strings.Contains(v1, "CONFIRM PROVIDER DELETION") {
+		t.Errorf("expected CONFIRM PROVIDER DELETION prompt, got:\n%s", v1)
+	}
+	if !strings.Contains(v1, "WARNING: Deleting this provider will also delete 2 dependent agent(s)") {
+		t.Errorf("expected warning about 2 dependent agents, got:\n%s", v1)
+	}
+
+	fmt.Println("--- Delete Confirmation Prompt View: ---")
+	fmt.Println(v1)
+
+	// Press 'n' -> cancel
+	mCancel, _ := m1.(ConfigModel).Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'n'}})
+	if len(mCancel.(ConfigModel).cfg.Providers) != 1 {
+		t.Errorf("expected provider not deleted on cancel")
+	}
+
+	// Press 'd' again and press 'y' -> confirm delete
+	m2, _ := mCancel.(ConfigModel).Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'d'}})
+	mConfirm, _ := m2.(ConfigModel).Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'y'}})
+
+	if len(mConfirm.(ConfigModel).cfg.Providers) != 0 {
+		t.Errorf("expected provider to be deleted")
+	}
+	if len(mConfirm.(ConfigModel).cfg.Agents) != 0 {
+		t.Errorf("expected all 2 bound agents to be deleted as well, got: %d", len(mConfirm.(ConfigModel).cfg.Agents))
+	}
+
+	fmt.Println("--- Delete Confirmed: Provider and Bound Agents Successfully Deleted! ---")
+}
+
 func TestClaudeOAuthURLView(t *testing.T) {
 	cfg := config.DefaultConfig()
 	model := NewConfigModel(cfg, "ringmaster.toml")
@@ -51,7 +93,7 @@ func TestClaudeExistingSessionAndVersionedModels(t *testing.T) {
 		t.Errorf("expected agents in list view, got:\n%s", v7)
 	}
 
-	// Press 'm' to set highlighted agent (coder-sonnet) as Master!
+	// Press 'm' to set highlighted agent as Master!
 	m8, _ := m7.(ConfigModel).Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'m'}})
 	v8 := m8.(ConfigModel).View()
 
@@ -60,5 +102,4 @@ func TestClaudeExistingSessionAndVersionedModels(t *testing.T) {
 	}
 
 	fmt.Println("--- Final Screen After Pressing [m] to Set Master: ---")
-	fmt.Println(v8)
 }
