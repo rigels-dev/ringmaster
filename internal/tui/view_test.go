@@ -23,9 +23,10 @@ func TestDeterministicAgentOrdering(t *testing.T) {
 		t.Fatalf("expected 4 agents, got %d", len(firstList))
 	}
 
-	// Verify master is ALWAYS at index 0!
-	if firstList[0] != "master" {
-		t.Errorf("expected master to be at index 0, got %s", firstList[0])
+	// Verify order is purely alphabetical and stable (no jumping when role changes)
+	expected := []string{"coder-haiku", "coder-opus", "coder-sonnet", "master"}
+	if !reflect.DeepEqual(firstList, expected) {
+		t.Errorf("expected alphabetical order %v, got %v", expected, firstList)
 	}
 
 	// Run 100 iterations - order must be 100% frozen and stable!

@@ -1390,21 +1390,12 @@ func (m ConfigModel) getProviderNames() []string {
 }
 
 func (m ConfigModel) getAgentAliases() []string {
-	var masters []string
-	var workers []string
-
-	for k, a := range m.cfg.Agents {
-		if a.Role == "master" {
-			masters = append(masters, k)
-		} else {
-			workers = append(workers, k)
-		}
+	var aliases []string
+	for k := range m.cfg.Agents {
+		aliases = append(aliases, k)
 	}
-	sort.Strings(masters)
-	sort.Strings(workers)
-
-	// Deterministic stable order: Master always at index 0, followed by alphabetical workers!
-	return append(masters, workers...)
+	sort.Strings(aliases)
+	return aliases
 }
 
 func (m ConfigModel) currentListLen() int {
