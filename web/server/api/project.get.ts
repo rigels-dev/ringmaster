@@ -61,27 +61,43 @@ export default defineEventHandler((event) => {
     } catch {}
   }
 
-  // 4. Read ringmaster.toml for active master & workers
+  // 4. Resolve Master Planner & Workers configuration:
+  // Global fleet config is in /home/ubuntu/project/ringmaster/ringmaster.toml
+  // Local project manifest is in <projectDir>/ringmaster.toml
   let master = 'none'
   let workers: string[] = []
-  const tomlPath = path.join(projectDir, 'ringmaster.toml')
-  const rootToml = '/home/ubuntu/project/ringmaster/ringmaster.toml'
-  const targetToml = fs.existsSync(tomlPath) ? tomlPath : rootToml
 
-  if (fs.existsSync(targetToml)) {
+  const rootToml = '/home/ubuntu/project/ringmaster/ringmaster.toml'
+  const projectToml = path.join(projectDir, 'ringmaster.toml')
+
+  // Helper to parse master & workers from toml content
+  const parseFleet = (filePath: string) => {
+    if (!fs.existsSync(filePath)) return
     try {
-      const content = fs.readFileSync(targetToml, 'utf-8')
+      const content = fs.readFileSync(filePath, 'utf-8')
       const masterMatch = content.match(/default_master\s*=\s*['"]([^'"]+)['"]/)
-      if (masterMatch) master = masterMatch[1]
+      if (masterMatch && masterMatch[1]) {
+        master = masterMatch[1]
+      }
       
-      const agentMatches = content.matchAll(/\[agents\.([a-zA-Z0-9_\-]+)\]/g)
+      const agentMatches = content.matchAll(/\[agents\.([^\]]+)\]/g)
       for (const m of agentMatches) {
-        if (m[1] !== master) workers.push(m[1])
+        const aName = m[1].trim()
+        if (aName !== master && !workers.includes(aName)) {
+          workers.push(aName)
+        }
       }
     } catch {}
   }
 
-  const isInitialized = fs.existsSync(briefPath) || fs.existsSync(tomlPath)
+  // Read root fleet first (where providers & agents are configured)
+  parseFleet(rootToml)
+  // If local project toml has specific overrides, apply them
+  if (projectToml !== rootToml) {
+    parseFleet(projectToml)
+  }
+
+  const isInitialized = fs.existsSync(briefPath) || fs.existsSync(projectToml)
   const isBlank = !plan || !plan.tasks || plan.tasks.length === 0
 
   return {
