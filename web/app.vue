@@ -559,7 +559,17 @@
                       {{ a.tool_calling ? 'YES' : 'NO' }}
                     </span>
                   </td>
-                  <td class="py-3 text-right space-x-2">
+                  <td class="py-3 text-right space-x-1.5 whitespace-nowrap">
+                    <!-- Agent Ping Test Button -->
+                    <button 
+                      @click="pingAgent(a)" 
+                      :disabled="agentPingStates[a.id]?.loading"
+                      class="px-2 py-0.5 rounded text-[10px] bg-slate-inner hover:border-cyan-dim text-cyan-energy border border-steel transition disabled:opacity-50"
+                      title="Test Chat Ping with this Agent's Model"
+                    >
+                      <span v-if="agentPingStates[a.id]?.loading">⏳ Pinging...</span>
+                      <span v-else>⚡ Ping</span>
+                    </button>
                     <!-- Quick Set Master button -->
                     <button 
                       v-if="a.role !== 'master'" 
@@ -660,6 +670,7 @@ const showApiKey = ref(false)
 const showAddAgentModal = ref(false)
 const isLoadingModels = ref(false)
 const fetchedModelList = ref([])
+const agentPingStates = ref({})
 
 const newAgent = ref({
   id: '',
@@ -893,6 +904,38 @@ async function testPing() {
     pingStatus.value = { ok: false, message: '✗ Network error: ' + err.message }
   } finally {
     isPinging.value = false
+  }
+}
+
+async function pingAgent(a) {
+  const p = providersData.value.providers?.find(prov => prov.id === a.provider)
+  if (!p) {
+    alert(`Provider '${a.provider}' not found in active providers config.`)
+    return
+  }
+
+  agentPingStates.value[a.id] = { loading: true }
+  try {
+    const res = await fetch('/api/ping', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        type: p.type,
+        base_url: p.base_url,
+        api_key_env: p.api_key_env,
+        model: a.model
+      })
+    })
+    const data = await res.json()
+    if (data.ok) {
+      alert(`✓ Agent Ping SUCCESS for '${a.id}' (${data.latency_ms}ms)!\n${data.message}`)
+    } else {
+      alert(`✗ Agent Ping FAILED for '${a.id}' (${data.latency_ms || 0}ms):\n${data.error}`)
+    }
+  } catch (err) {
+    alert(`✗ Connection error pinging '${a.id}': ` + err.message)
+  } finally {
+    agentPingStates.value[a.id] = { loading: false }
   }
 }
 

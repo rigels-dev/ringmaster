@@ -1509,6 +1509,7 @@ var _sfc_main$2 = {
 		const showAddAgentModal = ref(false);
 		const isLoadingModels = ref(false);
 		const fetchedModelList = ref([]);
+		const agentPingStates = ref({});
 		const newAgent = ref({
 			id: "",
 			provider: "",
@@ -1693,7 +1694,10 @@ var _sfc_main$2 = {
 					_push(`<span>${ssrInterpolate(a.id)}</span>`);
 					if (providersData.value.defaultMaster === a.id) _push(`<span class="text-[8px] bg-gear-dark/40 text-gear-gold px-1 rounded border border-gear-dark">DEFAULT MASTER</span>`);
 					else _push(`<!---->`);
-					_push(`</td><td class="py-3 font-mono text-[11px] text-zinc-300">${ssrInterpolate(a.model)}</td><td class="py-3 text-zinc-400">${ssrInterpolate(a.provider)}</td><td class="py-3"><span class="${ssrRenderClass([a.role === "master" ? "bg-gear-gold text-slate-deep" : "bg-slate-inner text-cyan-energy border border-cyan-dim/40", "text-[9px] font-bold px-2 py-0.5 rounded uppercase"])}">${ssrInterpolate(a.role)}</span></td><td class="py-3"><span class="${ssrRenderClass([a.tool_calling ? "text-green-400" : "text-zinc-500", "text-[10px] font-bold"])}">${ssrInterpolate(a.tool_calling ? "YES" : "NO")}</span></td><td class="py-3 text-right space-x-2">`);
+					_push(`</td><td class="py-3 font-mono text-[11px] text-zinc-300">${ssrInterpolate(a.model)}</td><td class="py-3 text-zinc-400">${ssrInterpolate(a.provider)}</td><td class="py-3"><span class="${ssrRenderClass([a.role === "master" ? "bg-gear-gold text-slate-deep" : "bg-slate-inner text-cyan-energy border border-cyan-dim/40", "text-[9px] font-bold px-2 py-0.5 rounded uppercase"])}">${ssrInterpolate(a.role)}</span></td><td class="py-3"><span class="${ssrRenderClass([a.tool_calling ? "text-green-400" : "text-zinc-500", "text-[10px] font-bold"])}">${ssrInterpolate(a.tool_calling ? "YES" : "NO")}</span></td><td class="py-3 text-right space-x-1.5 whitespace-nowrap"><button${ssrIncludeBooleanAttr(agentPingStates.value[a.id]?.loading) ? " disabled" : ""} class="px-2 py-0.5 rounded text-[10px] bg-slate-inner hover:border-cyan-dim text-cyan-energy border border-steel transition disabled:opacity-50" title="Test Chat Ping with this Agent&#39;s Model">`);
+					if (agentPingStates.value[a.id]?.loading) _push(`<span>⏳ Pinging...</span>`);
+					else _push(`<span>⚡ Ping</span>`);
+					_push(`</button>`);
 					if (a.role !== "master") _push(`<button class="px-2 py-0.5 rounded text-[10px] bg-gear-dark/40 hover:bg-gear-gold hover:text-slate-deep text-gear-gold border border-gear-dark transition" title="Promote to Master Planner"> ★ Set Master </button>`);
 					else _push(`<!---->`);
 					if (a.role !== "worker") _push(`<button class="px-2 py-0.5 rounded text-[10px] bg-slate-inner hover:bg-cyan-energy hover:text-slate-deep text-cyan-energy border border-steel transition" title="Set as Worker"> ⚡ Set Worker </button>`);
