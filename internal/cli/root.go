@@ -20,6 +20,10 @@ var RootCmd = &cobra.Command{
 to orchestrate AI agent task workflows with a "cheap-by-default" philosophy.
 A smart planner decomposes specifications into DAG tasks executed by
 focused, budget-friendly workers in isolated git worktrees.`,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		// When run without subcommands, launch interactive UI selector
+		return RunInteractiveLauncher()
+	},
 }
 
 func Execute() {
