@@ -37,12 +37,12 @@ var (
 			Padding(0, 2)
 
 	inactiveTabStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.AdaptiveColor{Light: "#8493A0", Dark: "#8493A0"}).
+			Foreground(lipgloss.AdaptiveColor{Light: "#64748B", Dark: "#8493A0"}).
 			Background(lipgloss.AdaptiveColor{Light: "#E2E8F0", Dark: "#232B33"}).
 			Padding(0, 2)
 
 	headerStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.AdaptiveColor{Light: "#B6432A", Dark: "#DEAA3B"}).
+			Foreground(lipgloss.AdaptiveColor{Light: "#9A3412", Dark: "#DEAA3B"}).
 			Bold(true)
 
 	stepDoneBullet = lipgloss.NewStyle().
@@ -77,6 +77,10 @@ var (
 				Background(lipgloss.AdaptiveColor{Light: "#E2E8F0", Dark: "#2A3642"}).
 				Bold(true)
 
+	cursorIndicator = lipgloss.NewStyle().
+			Foreground(lipgloss.AdaptiveColor{Light: "#B45309", Dark: "#DEAA3B"}).
+			Bold(true)
+
 	normalItemStyle = lipgloss.NewStyle().
 			Foreground(lipgloss.AdaptiveColor{Light: "#1E293B", Dark: "#EFE4CE"})
 
@@ -96,27 +100,26 @@ var (
 			Foreground(lipgloss.AdaptiveColor{Light: "#B91C1C", Dark: "#E05436"}).
 			Bold(true)
 
-	// Ringmaster Badges
 	badgeMasterStyle = lipgloss.NewStyle().
-				Foreground(lipgloss.Color("#192026")).
-				Background(lipgloss.Color("#DEAA3B")).
+				Foreground(lipgloss.AdaptiveColor{Light: "#FFFFFF", Dark: "#192026"}).
+				Background(lipgloss.AdaptiveColor{Light: "#B45309", Dark: "#DEAA3B"}).
 				Bold(true).
 				Padding(0, 1)
 
 	badgeWorkerStyle = lipgloss.NewStyle().
-				Foreground(lipgloss.Color("#EFE4CE")).
-				Background(lipgloss.Color("#2E3842")).
+				Foreground(lipgloss.AdaptiveColor{Light: "#334155", Dark: "#EFE4CE"}).
+				Background(lipgloss.AdaptiveColor{Light: "#CBD5E1", Dark: "#2E3842"}).
 				Padding(0, 1)
 
 	badgeToolYes = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#29F2EC")).
+			Foreground(lipgloss.AdaptiveColor{Light: "#0D9488", Dark: "#29F2EC"}).
 			Bold(true)
 
 	badgeToolNo = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#51606D"))
+			Foreground(lipgloss.AdaptiveColor{Light: "#94A3B8", Dark: "#51606D"})
 
 	tableBorderLine = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#2E3842"))
+			Foreground(lipgloss.AdaptiveColor{Light: "#CBD5E1", Dark: "#2E3842"})
 )
 type tab int
 
@@ -1762,8 +1765,8 @@ func (m ConfigModel) View() string {
 			masterInfo := fmt.Sprintf(" 🎪 ROUTING: [★ Master Planner: %s]  [⚡ Default Worker: %s] ", currentMaster, currentWorker)
 			routingBox := lipgloss.NewStyle().
 				Border(lipgloss.RoundedBorder()).
-				BorderForeground(lipgloss.Color("#2E3842")).
-				Foreground(lipgloss.Color("#DEAA3B")).
+				BorderForeground(lipgloss.AdaptiveColor{Light: "#CBD5E1", Dark: "#2E3842"}).
+				Foreground(lipgloss.AdaptiveColor{Light: "#B45309", Dark: "#DEAA3B"}).
 				Bold(true).
 				Render(masterInfo)
 
@@ -1771,7 +1774,7 @@ func (m ConfigModel) View() string {
 			b.WriteString(hintStyle.Render(" [m] Set highlighted as Master · [w] Set as Default Worker") + "\n\n")
 
 			// Table Header with wider columns for Model
-			plainHeader := fmt.Sprintf("  %-18s %-32s %-16s %-10s %-6s", "ALIAS", "MODEL", "PROVIDER", "ROLE", "TOOLS")
+			plainHeader := fmt.Sprintf("  %-18s %-32s %-16s %-12s %-6s", "ALIAS", "MODEL", "PROVIDER", "ROLE", "TOOLS")
 			b.WriteString(headerStyle.Render(plainHeader) + "\n")
 			b.WriteString(tableBorderLine.Render("────────────────────────────────────────────────────────────────────────────────────────────") + "\n")
 
@@ -1781,7 +1784,7 @@ func (m ConfigModel) View() string {
 				lineStyle := normalItemStyle
 				isCursor := i == m.cursor
 				if isCursor {
-					prefix = "▸ "
+					prefix = cursorIndicator.Render("▸ ")
 					lineStyle = selectedItemStyle
 				}
 
@@ -1805,11 +1808,11 @@ func (m ConfigModel) View() string {
 				modelCol := fmt.Sprintf("%-32s", a.Model)
 				provCol := fmt.Sprintf("%-16s", dispProv)
 
-				rowText := fmt.Sprintf("%s %s %s %-10s %s", aliasCol, modelCol, provCol, roleBadge, toolsBadge)
 				if isCursor {
-					b.WriteString(prefix + lineStyle.Render(fmt.Sprintf("%s %s %s ", aliasCol, modelCol, provCol)) + roleBadge + " " + toolsBadge + "\n")
+					colsRendered := lineStyle.Render(fmt.Sprintf("%s %s %s", aliasCol, modelCol, provCol))
+					b.WriteString(prefix + colsRendered + " " + fmt.Sprintf("%-12s", roleBadge) + " " + toolsBadge + "\n")
 				} else {
-					b.WriteString(prefix + rowText + "\n")
+					b.WriteString(prefix + fmt.Sprintf("%s %s %s %-12s %s", aliasCol, modelCol, provCol, roleBadge, toolsBadge) + "\n")
 				}
 			}
 		}
