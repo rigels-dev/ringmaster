@@ -812,20 +812,52 @@ func (m ConfigModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						role = "master"
 						toolCalling = false
 					} else {
-						// Worker naming
+						// Clean short alias naming
 						clean := strings.ToLower(modelID)
-						if strings.Contains(clean, "sonnet") || strings.Contains(clean, "opus") {
-							alias = "coder-smart"
-						} else if strings.Contains(clean, "haiku") || strings.Contains(clean, "flash") || strings.Contains(clean, "mini") {
-							alias = "coder-fast"
+						base := "coder"
+						if strings.Contains(clean, "sonnet") {
+							if strings.Contains(clean, "3-7") {
+								base = "coder-sonnet"
+							} else if strings.Contains(clean, "5-5") || strings.Contains(clean, "55") {
+								base = "coder-sonnet-55"
+							} else {
+								base = "coder-sonnet"
+							}
+						} else if strings.Contains(clean, "haiku") {
+							if strings.Contains(clean, "5-5") || strings.Contains(clean, "55") {
+								base = "coder-haiku-55"
+							} else {
+								base = "coder-haiku"
+							}
+						} else if strings.Contains(clean, "opus") {
+							if strings.Contains(clean, "5-5") || strings.Contains(clean, "55") {
+								base = "coder-opus-55"
+							} else {
+								base = "coder-opus"
+							}
+						} else if strings.Contains(clean, "flash") {
+							base = "coder-flash"
+						} else if strings.Contains(clean, "mini") {
+							base = "coder-mini"
+						} else if strings.Contains(clean, "qwen") {
+							base = "coder-qwen"
 						} else {
-							alias = "coder-cheap"
+							parts := strings.Split(clean, "/")
+							last := parts[len(parts)-1]
+							if len(last) > 10 {
+								last = last[:10]
+							}
+							base = "coder-" + last
 						}
 
-						if _, exists := m.cfg.Agents[alias]; exists {
-							cleanSuffix := strings.ReplaceAll(modelID, "/", "-")
-							cleanSuffix = strings.ReplaceAll(cleanSuffix, ":", "-")
-							alias = fmt.Sprintf("worker-%s", cleanSuffix)
+						alias = base
+						idx := 2
+						for {
+							if _, exists := m.cfg.Agents[alias]; !exists {
+								break
+							}
+							alias = fmt.Sprintf("%s-%d", base, idx)
+							idx++
 						}
 					}
 
@@ -1319,24 +1351,11 @@ func (m ConfigModel) View() string {
 		b.WriteString(stepActiveBullet.Render("●") + " " + stepTitleStyle.Render("Claude Subscription Authorization") + "\n\n")
 
 		b.WriteString("  1. " + normalItemStyle.Render("Open this authorization URL in your browser:") + "\n")
-		boxWidth := 74
-		if m.width > 20 && m.width < 90 {
-			boxWidth = m.width - 10
-		}
-		urlBoxStyle := lipgloss.NewStyle().
-			Foreground(lipgloss.AdaptiveColor{Light: "#0284C7", Dark: "#38BDF8"}).
-			Bold(true).
-			Width(boxWidth).
-			Padding(0, 1).
-			Border(lipgloss.RoundedBorder()).
-			BorderForeground(lipgloss.AdaptiveColor{Light: "#94A3B8", Dark: "#475569"})
+		b.WriteString("     " + selectedItemStyle.Render(m.oauthURL) + "\n\n")
+		b.WriteString("     " + hintStyle.Render("(Saved to: ~/.claude/auth_url.txt · Press [Ctrl+C] to copy)") + "\n\n")
 
-		clickable := fmt.Sprintf("\x1b]8;;%s\x07%s\x1b]8;;\x07", m.oauthURL, "[👉 Click here to open in browser]")
-		b.WriteString("     " + selectedItemStyle.Render(clickable) + "\n")
-		b.WriteString("     " + urlBoxStyle.Render(m.oauthURL) + "\n\n")
-
-		b.WriteString("  2. " + normalItemStyle.Render("Log in to Claude Pro/Team and approve access.") + "\n")
-		b.WriteString("  3. " + normalItemStyle.Render("Copy the authorized code or the full redirect URL, and paste it below:") + "\n\n")
+		b.WriteString("  2. " + normalItemStyle.Render("Log in to Claude and click 'Approve'.") + "\n")
+		b.WriteString("  3. " + normalItemStyle.Render("Copy the authorized code from the browser and paste it below:") + "\n\n")
 
 		b.WriteString("  " + m.oauthInput.View() + "\n\n")
 
@@ -1515,8 +1534,8 @@ func (m ConfigModel) View() string {
 		if len(names) == 0 {
 			b.WriteString(hintStyle.Render("No providers registered yet. Press [a] to choose a provider.") + "\n")
 		} else {
-			b.WriteString(fmt.Sprintf("%-18s %-16s %-32s %-20s\n", headerStyle.Render("PROVIDER NAME"), headerStyle.Render("TYPE"), headerStyle.Render("BASE URL"), headerStyle.Render("API KEY ENV")))
-			b.WriteString(lipgloss.NewStyle().Foreground(lipgloss.Color("#2E3842")).Render("──────────────────────────────────────────────────────────────────────────────────────────") + "\n")
+			b.WriteString(fmt.Sprintf("%-20s %-20s %-34s %-18s\n", headerStyle.Render("PROVIDER NAME"), headerStyle.Render("TYPE"), headerStyle.Render("ENDPOINT / BASE URL"), headerStyle.Render("API KEY ENV")))
+			b.WriteString(lipgloss.NewStyle().Foreground(lipgloss.Color("#2E3842")).Render("────────────────────────────────────────────────────────────────────────────────────────────") + "\n")
 
 			for i, name := range names {
 				p := m.cfg.Providers[name]
@@ -1536,7 +1555,7 @@ func (m ConfigModel) View() string {
 					displayURL = "local (claude-cli / subscription)"
 				}
 
-				row := fmt.Sprintf("%s%-16s %-16s %-32s %-20s", prefix, name, pType, displayURL, p.APIKeyEnv)
+				row := fmt.Sprintf("%s%-18s %-20s %-34s %-18s", prefix, name, pType, displayURL, p.APIKeyEnv)
 				b.WriteString(lineStyle.Render(row) + "\n")
 			}
 		}
@@ -1546,8 +1565,8 @@ func (m ConfigModel) View() string {
 		if len(aliases) == 0 {
 			b.WriteString(hintStyle.Render("No agents configured yet. Press [a] to add an agent.") + "\n")
 		} else {
-			b.WriteString(fmt.Sprintf("%-16s %-16s %-24s %-10s %-12s\n", headerStyle.Render("ALIAS"), headerStyle.Render("PROVIDER"), headerStyle.Render("MODEL"), headerStyle.Render("ROLE"), headerStyle.Render("TOOL CALL")))
-			b.WriteString(lipgloss.NewStyle().Foreground(lipgloss.Color("#2E3842")).Render("──────────────────────────────────────────────────────────────────────────────────────────") + "\n")
+			b.WriteString(fmt.Sprintf("%-20s %-22s %-32s %-10s %-10s\n", headerStyle.Render("ALIAS"), headerStyle.Render("PROVIDER"), headerStyle.Render("MODEL"), headerStyle.Render("ROLE"), headerStyle.Render("TOOL CALL")))
+			b.WriteString(lipgloss.NewStyle().Foreground(lipgloss.Color("#2E3842")).Render("────────────────────────────────────────────────────────────────────────────────────────────") + "\n")
 
 			for i, alias := range aliases {
 				a := m.cfg.Agents[alias]
@@ -1563,7 +1582,7 @@ func (m ConfigModel) View() string {
 					tc = "yes"
 				}
 
-				row := fmt.Sprintf("%s%-14s %-16s %-24s %-10s %-12s", prefix, alias, a.Provider, a.Model, a.Role, tc)
+				row := fmt.Sprintf("%s%-18s %-22s %-32s %-10s %-10s", prefix, alias, a.Provider, a.Model, a.Role, tc)
 				b.WriteString(lineStyle.Render(row) + "\n")
 			}
 		}
