@@ -33,6 +33,14 @@ var (
 			Foreground(lipgloss.Color("#DEAA3B")).
 			Bold(true)
 
+	stepHeaderStyle = lipgloss.NewStyle().
+			Foreground(lipgloss.Color("#E05436")).
+			Bold(true)
+
+	selectedBulletStyle = lipgloss.NewStyle().
+				Foreground(lipgloss.Color("#5BF28D")).
+				Bold(true)
+
 	selectedItemStyle = lipgloss.NewStyle().
 				Foreground(lipgloss.Color("#29F2EC")).
 				Bold(true)
@@ -64,7 +72,8 @@ type viewMode int
 
 const (
 	modeList viewMode = iota
-	modePickProviderTemplate
+	modePickProviderStep1 // Step 1: Choose Provider
+	modePickProviderStep2 // Step 2: Choose Auth Method
 	modeEditProvider
 	modeAddProvider
 	modePickAgentTemplate
@@ -72,63 +81,162 @@ const (
 	modeAddAgent
 )
 
-type ProviderTemplate struct {
-	Title       string
+type AuthMethodOption struct {
+	ID          string
+	Label       string
 	Description string
-	Name        string
 	Type        string
 	BaseURL     string
-	APIKeyEnv   string
+	DefaultEnv  string
+	NeedsInput  bool
 }
 
-var providerTemplates = []ProviderTemplate{
+type ProviderOption struct {
+	ID          string
+	Name        string
+	Description string
+	AuthMethods []AuthMethodOption
+}
+
+var popularProviders = []ProviderOption{
 	{
-		Title:       "Claude Subscription",
-		Description: "Uses local ~/.claude session / Claude Code CLI (No API key or URL required)",
-		Name:        "claude_sub",
-		Type:        "claude_subscription",
-		BaseURL:     "",
-		APIKeyEnv:   "",
+		ID:          "anthropic",
+		Name:        "Anthropic",
+		Description: "Claude 3.5 Sonnet, Haiku, Opus",
+		AuthMethods: []AuthMethodOption{
+			{
+				ID:          "claude_cli",
+				Label:       "Anthropic Claude CLI (Reuse a local Claude CLI login on this host)",
+				Description: "Uses local ~/.claude subscription / Pro / Team (Zero API key)",
+				Type:        "claude_subscription",
+				BaseURL:     "",
+				DefaultEnv:  "",
+				NeedsInput:  false,
+			},
+			{
+				ID:          "api_key",
+				Label:       "Anthropic API key",
+				Description: "Direct Anthropic Messages API (ANTHROPIC_API_KEY)",
+				Type:        "anthropic",
+				BaseURL:     "https://api.anthropic.com/v1",
+				DefaultEnv:  "ANTHROPIC_API_KEY",
+				NeedsInput:  false,
+			},
+		},
 	},
 	{
-		Title:       "OpenAI Compatible",
-		Description: "Standard OpenAI endpoint (OpenAI, OpenRouter, vLLM)",
-		Name:        "openai",
-		Type:        "openai",
-		BaseURL:     "https://api.openai.com/v1",
-		APIKeyEnv:   "OPENAI_API_KEY",
+		ID:          "openai",
+		Name:        "OpenAI",
+		Description: "GPT-4o, GPT-4o-mini, o1",
+		AuthMethods: []AuthMethodOption{
+			{
+				ID:          "api_key",
+				Label:       "OpenAI API key",
+				Description: "Official api.openai.com endpoint (OPENAI_API_KEY)",
+				Type:        "openai",
+				BaseURL:     "https://api.openai.com/v1",
+				DefaultEnv:  "OPENAI_API_KEY",
+				NeedsInput:  false,
+			},
+			{
+				ID:          "custom_url",
+				Label:       "Custom OpenAI-compatible URL",
+				Description: "Reverse proxy, gateway, or enterprise OpenAI deployment",
+				Type:        "openai",
+				BaseURL:     "https://api.openai.com/v1",
+				DefaultEnv:  "OPENAI_API_KEY",
+				NeedsInput:  true,
+			},
+		},
 	},
 	{
-		Title:       "Claude Official API",
-		Description: "Direct Anthropic Messages API (api.anthropic.com)",
-		Name:        "claude",
-		Type:        "anthropic",
-		BaseURL:     "https://api.anthropic.com/v1",
-		APIKeyEnv:   "ANTHROPIC_API_KEY",
+		ID:          "openrouter",
+		Name:        "OpenRouter",
+		Description: "Unified gateway to Claude, Llama, Gemini, etc.",
+		AuthMethods: []AuthMethodOption{
+			{
+				ID:          "api_key",
+				Label:       "OpenRouter API key",
+				Description: "openrouter.ai/api/v1 (OPENROUTER_API_KEY)",
+				Type:        "openai",
+				BaseURL:     "https://openrouter.ai/api/v1",
+				DefaultEnv:  "OPENROUTER_API_KEY",
+				NeedsInput:  false,
+			},
+		},
 	},
 	{
-		Title:       "9router (Local Proxy)",
-		Description: "Local multi-provider proxy on http://localhost:20128/v1",
+		ID:          "ollama",
+		Name:        "Ollama",
+		Description: "Local LLMs running on localhost:11434",
+		AuthMethods: []AuthMethodOption{
+			{
+				ID:          "local",
+				Label:       "Local Ollama instance",
+				Description: "http://localhost:11434/v1 (No API key needed)",
+				Type:        "openai",
+				BaseURL:     "http://localhost:11434/v1",
+				DefaultEnv:  "",
+				NeedsInput:  false,
+			},
+		},
+	},
+	{
+		ID:          "9router",
 		Name:        "9router",
-		Type:        "openai",
-		BaseURL:     "http://localhost:20128/v1",
-		APIKeyEnv:   "NINEROUTER_API_KEY",
+		Description: "Local multi-provider proxy on localhost:20128",
+		AuthMethods: []AuthMethodOption{
+			{
+				ID:          "local",
+				Label:       "Local 9router instance",
+				Description: "http://localhost:20128/v1 (NINEROUTER_API_KEY)",
+				Type:        "openai",
+				BaseURL:     "http://localhost:20128/v1",
+				DefaultEnv:  "NINEROUTER_API_KEY",
+				NeedsInput:  false,
+			},
+		},
 	},
 	{
-		Title:       "Ollama (Local LLM)",
-		Description: "Self-hosted local models on http://localhost:11434/v1",
-		Name:        "ollama_local",
-		Type:        "openai",
-		BaseURL:     "http://localhost:11434/v1",
-		APIKeyEnv:   "",
+		ID:          "deepseek",
+		Name:        "DeepSeek",
+		Description: "DeepSeek-V3, DeepSeek-R1",
+		AuthMethods: []AuthMethodOption{
+			{
+				ID:          "api_key",
+				Label:       "DeepSeek API key",
+				Description: "api.deepseek.com/v1 (DEEPSEEK_API_KEY)",
+				Type:        "openai",
+				BaseURL:     "https://api.deepseek.com/v1",
+				DefaultEnv:  "DEEPSEEK_API_KEY",
+				NeedsInput:  false,
+			},
+		},
 	},
 	{
-		Title:       "Custom Manual Entry",
-		Description: "Fill provider name, type, endpoint URL, and API key environment variable",
-		Name:        "",
-		Type:        "openai",
-		BaseURL:     "",
-		APIKeyEnv:   "",
+		ID:          "custom",
+		Name:        "Custom Provider",
+		Description: "Custom self-hosted model or private gateway",
+		AuthMethods: []AuthMethodOption{
+			{
+				ID:          "custom_openai",
+				Label:       "OpenAI-compatible Endpoint",
+				Description: "Manually specify base URL and API key environment variable",
+				Type:        "openai",
+				BaseURL:     "http://localhost:8000/v1",
+				DefaultEnv:  "",
+				NeedsInput:  true,
+			},
+			{
+				ID:          "custom_anthropic",
+				Label:       "Anthropic-compatible Endpoint",
+				Description: "Manually specify Anthropic /v1/messages URL and API key",
+				Type:        "anthropic",
+				BaseURL:     "https://api.anthropic.com/v1",
+				DefaultEnv:  "",
+				NeedsInput:  true,
+			},
+		},
 	},
 }
 
@@ -177,17 +285,21 @@ var agentTemplates = []AgentTemplate{
 }
 
 type ConfigModel struct {
-	cfg            *config.Config
-	configPath     string
-	activeTab      tab
-	mode           viewMode
-	cursor         int
-	templateCursor int
-	inputs         []textinput.Model
-	statusMsg      string
-	err            error
-	width          int
-	height         int
+	cfg              *config.Config
+	configPath       string
+	activeTab        tab
+	mode             viewMode
+	cursor           int
+	providerCursor   int
+	authMethodCursor int
+	templateCursor   int
+	searchQuery      string
+	selectedProvider *ProviderOption
+	inputs           []textinput.Model
+	statusMsg        string
+	err              error
+	width            int
+	height           int
 }
 
 func NewConfigModel(cfg *config.Config, configPath string) ConfigModel {
@@ -202,6 +314,20 @@ func NewConfigModel(cfg *config.Config, configPath string) ConfigModel {
 
 func (m ConfigModel) Init() tea.Cmd {
 	return textinput.Blink
+}
+
+func (m ConfigModel) getFilteredProviders() []ProviderOption {
+	if strings.TrimSpace(m.searchQuery) == "" {
+		return popularProviders
+	}
+	q := strings.ToLower(strings.TrimSpace(m.searchQuery))
+	var res []ProviderOption
+	for _, p := range popularProviders {
+		if strings.Contains(strings.ToLower(p.Name), q) || strings.Contains(strings.ToLower(p.Description), q) {
+			res = append(res, p)
+		}
+	}
+	return res
 }
 
 func (m ConfigModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -247,11 +373,13 @@ func (m ConfigModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, nil
 			case "a":
 				m.statusMsg = ""
-				m.templateCursor = 0
 				if m.activeTab == tabProviders {
-					m.mode = modePickProviderTemplate
+					m.mode = modePickProviderStep1
+					m.providerCursor = 0
+					m.searchQuery = ""
 				} else {
 					m.mode = modePickAgentTemplate
+					m.templateCursor = 0
 				}
 				return m, nil
 			case "enter", "e":
@@ -306,29 +434,101 @@ func (m ConfigModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 			}
 
-		case modePickProviderTemplate:
+		case modePickProviderStep1: // Step 1: Search & Choose Provider
+			filtered := m.getFilteredProviders()
 			switch msg.String() {
-			case "esc", "q":
+			case "esc":
 				m.mode = modeList
 				return m, nil
+			case "up":
+				if m.providerCursor > 0 {
+					m.providerCursor--
+				}
+				return m, nil
+			case "down":
+				if m.providerCursor < len(filtered)-1 {
+					m.providerCursor++
+				}
+				return m, nil
+			case "backspace":
+				if len(m.searchQuery) > 0 {
+					m.searchQuery = m.searchQuery[:len(m.searchQuery)-1]
+					m.providerCursor = 0
+				}
+				return m, nil
+			case "enter":
+				if len(filtered) > 0 && m.providerCursor < len(filtered) {
+					prov := filtered[m.providerCursor]
+					m.selectedProvider = &prov
+					m.authMethodCursor = 0
+					m.mode = modePickProviderStep2
+				}
+				return m, nil
+			default:
+				// Type to search
+				if len(msg.String()) == 1 && msg.String() >= " " && msg.String() <= "~" {
+					m.searchQuery += msg.String()
+					m.providerCursor = 0
+					return m, nil
+				}
+			}
+
+		case modePickProviderStep2: // Step 2: Choose Auth Method for selected provider
+			if m.selectedProvider == nil {
+				m.mode = modePickProviderStep1
+				return m, nil
+			}
+
+			// Options include methods + "Back"
+			totalOptions := len(m.selectedProvider.AuthMethods) + 1 // last is Back
+			switch msg.String() {
+			case "esc":
+				m.mode = modePickProviderStep1
+				return m, nil
 			case "up", "k":
-				if m.templateCursor > 0 {
-					m.templateCursor--
+				if m.authMethodCursor > 0 {
+					m.authMethodCursor--
 				}
 				return m, nil
 			case "down", "j":
-				if m.templateCursor < len(providerTemplates)-1 {
-					m.templateCursor++
+				if m.authMethodCursor < totalOptions-1 {
+					m.authMethodCursor++
 				}
 				return m, nil
-			case "1", "2", "3", "4", "5", "6":
-				idx := int(msg.Runes[0] - '1')
-				if idx >= 0 && idx < len(providerTemplates) {
-					m.templateCursor = idx
-					return m.selectProviderTemplate()
-				}
 			case "enter":
-				return m.selectProviderTemplate()
+				if m.authMethodCursor == totalOptions-1 {
+					// Back
+					m.mode = modePickProviderStep1
+					return m, nil
+				}
+
+				method := m.selectedProvider.AuthMethods[m.authMethodCursor]
+				p := config.ProviderConfig{
+					Type:      method.Type,
+					BaseURL:   method.BaseURL,
+					APIKeyEnv: method.DefaultEnv,
+				}
+
+				providerKey := m.selectedProvider.ID
+				if method.Type == "claude_subscription" {
+					providerKey = "claude_subscription"
+				}
+
+				if method.NeedsInput {
+					m.initProviderInputs(providerKey, p)
+					m.mode = modeAddProvider
+					return m, m.focusCurrentInput()
+				}
+
+				// Direct auto-configure and save
+				m.cfg.Providers[providerKey] = p
+				if err := config.SaveFile(m.configPath, m.cfg); err != nil {
+					m.err = err
+				} else {
+					m.statusMsg = fmt.Sprintf("✓ Configured provider '%s' (%s) successfully!", providerKey, method.Label)
+				}
+				m.mode = modeList
+				return m, nil
 			}
 
 		case modePickAgentTemplate:
@@ -386,18 +586,6 @@ func (m ConfigModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 
 	return m, nil
-}
-
-func (m *ConfigModel) selectProviderTemplate() (tea.Model, tea.Cmd) {
-	tmpl := providerTemplates[m.templateCursor]
-	p := config.ProviderConfig{
-		Type:      tmpl.Type,
-		BaseURL:   tmpl.BaseURL,
-		APIKeyEnv: tmpl.APIKeyEnv,
-	}
-	m.initProviderInputs(tmpl.Name, p)
-	m.mode = modeAddProvider
-	return m, m.focusCurrentInput()
 }
 
 func (m *ConfigModel) selectAgentTemplate() (tea.Model, tea.Cmd) {
@@ -656,49 +844,84 @@ func (m ConfigModel) View() string {
 	b.WriteString(lipgloss.JoinHorizontal(lipgloss.Top, tabProv, " ", tabAg))
 	b.WriteString("\n\n")
 
-	if m.mode == modePickProviderTemplate {
-		b.WriteString(headerStyle.Render("★ CHOOSE A PROVIDER TEMPLATE"))
-		b.WriteString("\n")
-		b.WriteString(hintStyle.Render("Press [1-6] or use [↑/↓] and press [Enter] to select. Press [Esc] to cancel."))
-		b.WriteString("\n\n")
-
-		for i, tmpl := range providerTemplates {
-			prefix := "  "
-			itemStyle := normalItemStyle
-			if i == m.templateCursor {
-				prefix = "▸ "
-				itemStyle = selectedItemStyle
-			}
-
-			numBadge := fmt.Sprintf("[%d] ", i+1)
-			b.WriteString(prefix)
-			b.WriteString(itemStyle.Render(numBadge + tmpl.Title))
-			b.WriteString("\n")
-			b.WriteString("    " + hintStyle.Render(tmpl.Description) + "\n\n")
+	// ==========================================
+	// STEP 1: CHOOSE MODEL / AUTH PROVIDER
+	// ==========================================
+	if m.mode == modePickProviderStep1 {
+		b.WriteString(stepHeaderStyle.Render("● Model/auth provider\n"))
+		
+		searchPrompt := "  Search: "
+		if m.searchQuery != "" {
+			searchPrompt += m.searchQuery
+		} else {
+			searchPrompt += hintStyle.Render("(type to filter...)")
 		}
+		b.WriteString(headerStyle.Render(searchPrompt) + "\n\n")
+
+		filtered := m.getFilteredProviders()
+		if len(filtered) == 0 {
+			b.WriteString(hintStyle.Render("  No matching providers found.\n\n"))
+		} else {
+			for i, p := range filtered {
+				if i == m.providerCursor {
+					b.WriteString(selectedBulletStyle.Render("  ● ") + selectedItemStyle.Render(p.Name) + " " + hintStyle.Render("("+p.Description+")") + "\n")
+				} else {
+					b.WriteString(normalItemStyle.Render("  ○ " + p.Name) + " " + hintStyle.Render("("+p.Description+")") + "\n")
+				}
+			}
+		}
+
+		b.WriteString("\n" + hintStyle.Render("↑/↓ to select · Enter: confirm · Type: to search · Esc: cancel") + "\n")
+		return b.String()
+	}
+
+	// ==========================================
+	// STEP 2: CHOOSE AUTH METHOD FOR SELECTED PROVIDER
+	// ==========================================
+	if m.mode == modePickProviderStep2 && m.selectedProvider != nil {
+		b.WriteString(hintStyle.Render("● Model/auth provider\n"))
+		b.WriteString(normalItemStyle.Render("  " + m.selectedProvider.Name + "\n\n"))
+
+		headerText := fmt.Sprintf("● %s auth method\n", m.selectedProvider.Name)
+		b.WriteString(stepHeaderStyle.Render(headerText))
+
+		totalOptions := len(m.selectedProvider.AuthMethods) + 1
+		for i := 0; i < totalOptions; i++ {
+			if i < len(m.selectedProvider.AuthMethods) {
+				mth := m.selectedProvider.AuthMethods[i]
+				if i == m.authMethodCursor {
+					b.WriteString(selectedBulletStyle.Render("  ● ") + selectedItemStyle.Render(mth.Label) + "\n")
+				} else {
+					b.WriteString(normalItemStyle.Render("  ○ " + mth.Label) + "\n")
+				}
+			} else {
+				// Back button
+				if i == m.authMethodCursor {
+					b.WriteString(selectedBulletStyle.Render("  ● ") + selectedItemStyle.Render("Back") + "\n")
+				} else {
+					b.WriteString(normalItemStyle.Render("  ○ Back") + "\n")
+				}
+			}
+		}
+
+		b.WriteString("\n" + hintStyle.Render("↑/↓ to navigate · Enter: confirm · Esc: back") + "\n")
 		return b.String()
 	}
 
 	if m.mode == modePickAgentTemplate {
-		b.WriteString(headerStyle.Render("★ CHOOSE AN AGENT TEMPLATE"))
-		b.WriteString("\n")
-		b.WriteString(hintStyle.Render("Press [1-4] or use [↑/↓] and press [Enter] to select. Press [Esc] to cancel."))
-		b.WriteString("\n\n")
+		b.WriteString(stepHeaderStyle.Render("● Choose Agent Role / Template\n\n"))
 
 		for i, tmpl := range agentTemplates {
-			prefix := "  "
-			itemStyle := normalItemStyle
-			if i == m.templateCursor {
-				prefix = "▸ "
-				itemStyle = selectedItemStyle
-			}
-
 			numBadge := fmt.Sprintf("[%d] ", i+1)
-			b.WriteString(prefix)
-			b.WriteString(itemStyle.Render(numBadge + tmpl.Title))
-			b.WriteString("\n")
-			b.WriteString("    " + hintStyle.Render(tmpl.Description) + "\n\n")
+			if i == m.templateCursor {
+				b.WriteString(selectedBulletStyle.Render("  ● ") + selectedItemStyle.Render(numBadge+tmpl.Title) + "\n")
+				b.WriteString("      " + hintStyle.Render(tmpl.Description) + "\n")
+			} else {
+				b.WriteString(normalItemStyle.Render("  ○ "+numBadge+tmpl.Title) + "\n")
+				b.WriteString("      " + hintStyle.Render(tmpl.Description) + "\n")
+			}
 		}
+		b.WriteString("\n" + hintStyle.Render("Press [1-4] or ↑/↓ and Enter to confirm · Esc: cancel") + "\n")
 		return b.String()
 	}
 
@@ -712,10 +935,8 @@ func (m ConfigModel) View() string {
 			title = "Edit Agent"
 		}
 
-		b.WriteString(headerStyle.Render(fmt.Sprintf("★ %s", strings.ToUpper(title))))
-		b.WriteString("\n")
-		b.WriteString(hintStyle.Render("Press [Tab] or [↓] to switch fields, [Enter] on last field to submit, [Esc] to cancel."))
-		b.WriteString("\n\n")
+		b.WriteString(headerStyle.Render(fmt.Sprintf("★ %s\n", strings.ToUpper(title))))
+		b.WriteString(hintStyle.Render("Press [Tab] or [↓] to switch fields, [Enter] on last field to submit, [Esc] to cancel.\n\n"))
 
 		for i := range m.inputs {
 			b.WriteString(m.inputs[i].View())
@@ -733,8 +954,7 @@ func (m ConfigModel) View() string {
 	if m.activeTab == tabProviders {
 		names := m.getProviderNames()
 		if len(names) == 0 {
-			b.WriteString(hintStyle.Render("No providers registered yet. Press [a] to choose a template."))
-			b.WriteString("\n")
+			b.WriteString(hintStyle.Render("No providers registered yet. Press [a] to choose a provider.\n"))
 		} else {
 			b.WriteString(fmt.Sprintf("%-18s %-16s %-32s %-20s\n", headerStyle.Render("PROVIDER NAME"), headerStyle.Render("TYPE"), headerStyle.Render("BASE URL"), headerStyle.Render("API KEY ENV")))
 			b.WriteString(lipgloss.NewStyle().Foreground(lipgloss.Color("#2E3842")).Render("──────────────────────────────────────────────────────────────────────────────────────────\n"))
@@ -765,8 +985,7 @@ func (m ConfigModel) View() string {
 	} else {
 		aliases := m.getAgentAliases()
 		if len(aliases) == 0 {
-			b.WriteString(hintStyle.Render("No agents configured yet. Press [a] to choose a template."))
-			b.WriteString("\n")
+			b.WriteString(hintStyle.Render("No agents configured yet. Press [a] to add an agent.\n"))
 		} else {
 			b.WriteString(fmt.Sprintf("%-16s %-16s %-24s %-10s %-12s\n", headerStyle.Render("ALIAS"), headerStyle.Render("PROVIDER"), headerStyle.Render("MODEL"), headerStyle.Render("ROLE"), headerStyle.Render("TOOL CALL")))
 			b.WriteString(lipgloss.NewStyle().Foreground(lipgloss.Color("#2E3842")).Render("──────────────────────────────────────────────────────────────────────────────────────────\n"))

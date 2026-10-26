@@ -1228,22 +1228,32 @@
         </table>
 
         <div class="add-form-row">
-          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-            <strong style="font-size: 11px; color: var(--gear-gold);">+ Add New Provider</strong>
-            <div style="display: flex; align-items: center; gap: 8px;">
-              <span style="font-size: 10px; color: var(--text-dim);">Template:</span>
-              <select id="provPresetSelect" onchange="applyProviderPreset(this.value)" style="background: var(--bg-inner); border: 1px solid var(--gear-gold); color: var(--gear-gold); padding: 4px 8px; border-radius: 4px; font-size: 10px; font-weight: 600;">
-                <option value="">Choose a Template...</option>
-                <option value="claude_sub">★ Claude Subscription (Local ~/.claude)</option>
-                <option value="openai">OpenAI Compatible (api.openai.com)</option>
-                <option value="claude_api">Claude Official API (api.anthropic.com)</option>
-                <option value="9router">9router (Local Proxy :20128)</option>
-                <option value="ollama">Ollama (Local LLM :11434)</option>
-                <option value="custom">Custom Manual Entry</option>
-              </select>
+          <div style="margin-bottom: 8px;">
+            <strong style="font-size: 11px; color: var(--gear-gold);">+ Add New Provider (2-Step Wizard)</strong>
+          </div>
+
+          <!-- Wizard Container -->
+          <div id="providerWizardStep1" style="background: var(--bg-inner); border: 1px solid var(--border-steel); border-radius: 4px; padding: 10px; margin-bottom: 10px;">
+            <div style="font-size: 10px; color: var(--coat-crimson-bright); font-weight: 700; margin-bottom: 6px;">● Model/auth provider</div>
+            <div style="display: flex; gap: 6px; margin-bottom: 8px;">
+              <input type="text" id="wizardSearchInput" oninput="filterWizardProviders(this.value)" placeholder="Search provider (Anthropic, OpenAI, Ollama...)" style="flex: 1; background: #11161b; border: 1px solid var(--border-steel); color: #fff; padding: 4px 8px; border-radius: 3px; font-size: 10px;">
+            </div>
+            <div id="wizardProviderList" style="display: flex; flex-direction: column; gap: 4px; max-height: 140px; overflow-y: auto;">
+              <!-- Populated via JS -->
             </div>
           </div>
-          <div class="form-grid">
+
+          <!-- Wizard Step 2 (Auth Method) -->
+          <div id="providerWizardStep2" style="display: none; background: var(--bg-inner); border: 1px solid var(--border-steel); border-radius: 4px; padding: 10px; margin-bottom: 10px;">
+            <div style="font-size: 10px; color: var(--text-dim); margin-bottom: 2px;">● Model/auth provider: <strong id="wizardSelectedProvName" style="color: #fff;"></strong></div>
+            <div id="wizardAuthMethodTitle" style="font-size: 10px; color: var(--coat-crimson-bright); font-weight: 700; margin: 6px 0 8px 0;">● Auth method</div>
+            <div id="wizardAuthMethodList" style="display: flex; flex-direction: column; gap: 4px;">
+              <!-- Populated via JS -->
+            </div>
+          </div>
+
+          <!-- Custom / Manual Form Fields -->
+          <div class="form-grid" id="providerManualForm">
             <div class="form-group">
               <label>Provider Name</label>
               <input type="text" id="newProvName" placeholder="e.g. claude_subscription, claude, openai">
@@ -1265,7 +1275,7 @@
               <input type="text" id="newProvEnv" placeholder="e.g. ANTHROPIC_API_KEY, OPENAI_API_KEY">
             </div>
           </div>
-          <button class="cfg-btn-top" style="align-self: flex-start;" onclick="addNewProvider()">+ Add Provider</button>
+          <button class="cfg-btn-top" style="align-self: flex-start; margin-top: 6px;" onclick="addNewProvider()">💾 Save & Bind Provider</button>
         </div>
       </div>
 
@@ -2048,6 +2058,137 @@
       }
     }
 
+        const popularWizardProviders = [
+      {
+        id: 'anthropic',
+        name: 'Anthropic',
+        desc: 'Claude 3.5 Sonnet, Haiku, Opus',
+        methods: [
+          { label: 'Anthropic Claude CLI (Reuse local Claude CLI login on this host)', type: 'claude_subscription', url: '', env: '' },
+          { label: 'Anthropic API key (ANTHROPIC_API_KEY)', type: 'anthropic', url: 'https://api.anthropic.com/v1', env: 'ANTHROPIC_API_KEY' }
+        ]
+      },
+      {
+        id: 'openai',
+        name: 'OpenAI',
+        desc: 'GPT-4o, GPT-4o-mini, o1',
+        methods: [
+          { label: 'OpenAI API key (Official api.openai.com)', type: 'openai', url: 'https://api.openai.com/v1', env: 'OPENAI_API_KEY' },
+          { label: 'Custom OpenAI-compatible URL', type: 'openai', url: 'https://api.openai.com/v1', env: 'OPENAI_API_KEY' }
+        ]
+      },
+      {
+        id: 'openrouter',
+        name: 'OpenRouter',
+        desc: 'Unified gateway to Claude, Llama, Gemini',
+        methods: [
+          { label: 'OpenRouter API key (OPENROUTER_API_KEY)', type: 'openai', url: 'https://openrouter.ai/api/v1', env: 'OPENROUTER_API_KEY' }
+        ]
+      },
+      {
+        id: 'ollama',
+        name: 'Ollama',
+        desc: 'Local LLMs on localhost:11434',
+        methods: [
+          { label: 'Local Ollama instance (No API key needed)', type: 'openai', url: 'http://localhost:11434/v1', env: '' }
+        ]
+      },
+      {
+        id: '9router',
+        name: '9router',
+        desc: 'Local multi-provider proxy on localhost:20128',
+        methods: [
+          { label: 'Local 9router instance (NINEROUTER_API_KEY)', type: 'openai', url: 'http://localhost:20128/v1', env: 'NINEROUTER_API_KEY' }
+        ]
+      },
+      {
+        id: 'deepseek',
+        name: 'DeepSeek',
+        desc: 'DeepSeek-V3, DeepSeek-R1',
+        methods: [
+          { label: 'DeepSeek API key (DEEPSEEK_API_KEY)', type: 'openai', url: 'https://api.deepseek.com/v1', env: 'DEEPSEEK_API_KEY' }
+        ]
+      },
+      {
+        id: 'custom',
+        name: 'Custom Provider',
+        desc: 'Manual Endpoint & Env Configuration',
+        methods: [
+          { label: 'OpenAI-compatible Endpoint', type: 'openai', url: 'http://localhost:8000/v1', env: '' },
+          { label: 'Anthropic-compatible Endpoint', type: 'anthropic', url: 'https://api.anthropic.com/v1', env: '' }
+        ]
+      }
+    ];
+
+    let currentSelectedWizardProv = null;
+
+    function renderWizardProviders(filter = '') {
+      const list = document.getElementById('wizardProviderList');
+      if (!list) return;
+      list.innerHTML = '';
+      const q = filter.toLowerCase().trim();
+
+      popularWizardProviders.forEach((p, idx) => {
+        if (q && !p.name.toLowerCase().includes(q) && !p.desc.toLowerCase().includes(q)) return;
+        const btn = document.createElement('div');
+        btn.style = 'padding: 5px 8px; border-radius: 3px; background: #161d24; cursor: pointer; display: flex; justify-content: space-between; align-items: center; border: 1px solid var(--border-steel); font-size: 10px; transition: all 0.2s;';
+        btn.onmouseover = () => btn.style.borderColor = 'var(--cyan-energy)';
+        btn.onmouseout = () => btn.style.borderColor = 'var(--border-steel)';
+        btn.onclick = () => selectWizardProvider(p);
+        btn.innerHTML = `<div><span style="color: var(--gear-gold); font-weight: 600;">○ ${p.name}</span> <span style="color: var(--text-dim); font-size: 9px;">(${p.desc})</span></div><span style="color: var(--cyan-energy); font-size: 9px;">Select ▸</span>`;
+        list.appendChild(btn);
+      });
+    }
+
+    function filterWizardProviders(val) {
+      renderWizardProviders(val);
+    }
+
+    function selectWizardProvider(p) {
+      currentSelectedWizardProv = p;
+      document.getElementById('providerWizardStep1').style.display = 'none';
+      document.getElementById('providerWizardStep2').style.display = 'block';
+      document.getElementById('wizardSelectedProvName').textContent = p.name;
+      document.getElementById('wizardAuthMethodTitle').textContent = `● ${p.name} auth method`;
+
+      const mList = document.getElementById('wizardAuthMethodList');
+      mList.innerHTML = '';
+
+      p.methods.forEach(m => {
+        const item = document.createElement('div');
+        item.style = 'padding: 6px 10px; border-radius: 3px; background: #161d24; cursor: pointer; display: flex; justify-content: space-between; align-items: center; border: 1px solid var(--border-steel); font-size: 10px; transition: all 0.2s;';
+        item.onmouseover = () => item.style.borderColor = 'var(--coat-crimson-bright)';
+        item.onmouseout = () => item.style.borderColor = 'var(--border-steel)';
+        item.onclick = () => applyWizardMethod(p, m);
+        item.innerHTML = `<span style="color: #fff;">● ${m.label}</span><span style="color: var(--gear-gold); font-size: 9px;">Apply ▸</span>`;
+        mList.appendChild(item);
+      });
+
+      // Back button
+      const backBtn = document.createElement('div');
+      backBtn.style = 'padding: 5px 10px; border-radius: 3px; background: #11161b; cursor: pointer; color: var(--text-muted); font-size: 10px; margin-top: 4px;';
+      backBtn.onclick = () => {
+        document.getElementById('providerWizardStep2').style.display = 'none';
+        document.getElementById('providerWizardStep1').style.display = 'block';
+      };
+      backBtn.innerHTML = '← Back to provider list';
+      mList.appendChild(backBtn);
+    }
+
+    function applyWizardMethod(prov, method) {
+      let key = prov.id;
+      if (method.type === 'claude_subscription') key = 'claude_subscription';
+      
+      document.getElementById('newProvName').value = key;
+      document.getElementById('newProvType').value = method.type;
+      document.getElementById('newProvURL').value = method.url;
+      document.getElementById('newProvEnv').value = method.env;
+
+      // Reset wizard view back to step 1
+      document.getElementById('providerWizardStep2').style.display = 'none';
+      document.getElementById('providerWizardStep1').style.display = 'block';
+    }
+
     function addNewProvider() {
       const name = document.getElementById('newProvName').value.trim();
       const type = document.getElementById('newProvType').value;
@@ -2119,6 +2260,7 @@
     function openConfigModal() {
       document.getElementById('configModal').classList.add('active');
       renderModalTables();
+      renderWizardProviders();
     }
 
     function closeConfigModal() {
