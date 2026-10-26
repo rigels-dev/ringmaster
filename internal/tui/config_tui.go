@@ -17,6 +17,7 @@ import (
 	"ringmaster/internal/auth"
 	"ringmaster/internal/config"
 	"ringmaster/internal/llm"
+	"ringmaster/internal/registry"
 )
 
 var (
@@ -143,6 +144,13 @@ const (
 
 type claudeLoginDoneMsg struct {
 	err error
+}
+
+type pingResultMsg struct {
+	target  string
+	latency time.Duration
+	err     error
+	tokens  int
 }
 
 type AuthMethodOption struct {
@@ -462,6 +470,18 @@ func (m ConfigModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.mode = modePickModel
 		return m, nil
 
+	case pingResultMsg:
+		if msg.err != nil {
+			m.statusMsg = fmt.Sprintf("✗ Ping failed for '%s' (%s): %v", msg.target, msg.latency.Round(time.Millisecond), msg.err)
+		} else {
+			if msg.tokens > 0 {
+				m.statusMsg = fmt.Sprintf("✓ Ping succeeded for '%s' in %s! (Tokens: %d)", msg.target, msg.latency.Round(time.Millisecond), msg.tokens)
+			} else {
+				m.statusMsg = fmt.Sprintf("✓ Ping succeeded for '%s' in %s!", msg.target, msg.latency.Round(time.Millisecond))
+			}
+		}
+		return m, nil
+
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
@@ -600,6 +620,73 @@ func (m ConfigModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						_ = config.SaveFile(m.configPath, m.cfg)
 						m.statusMsg = fmt.Sprintf("⚡ '%s' (%s) is now the DEFAULT Worker!", selectedAlias, target.Model)
 						return m, nil
+					}
+				}
+
+			case "p": // Ping / Test selected agent or provider
+				if m.activeTab == tabAgents {
+					aliases := m.getAgentAliases()
+					if m.cursor < len(aliases) {
+						selectedAlias := aliases[m.cursor]
+						agentCfg := m.cfg.Agents[selectedAlias]
+						m.statusMsg = fmt.Sprintf("⏳ Pinging agent '%s' (%s via %s)...", selectedAlias, agentCfg.Model, agentCfg.Provider)
+
+						cfgCopy := m.cfg
+						return m, func() tea.Msg {
+							reg := registry.NewRegistry(cfgCopy)
+							provider, resolvedAgent, err := reg.GetProviderForAgent(selectedAlias)
+							if err != nil {
+								return pingResultMsg{target: selectedAlias, err: err}
+							}
+
+							start := time.Now()
+							ctx, cancel := context.WithTimeout(context.Background(), 25*time.Second)
+							defer cancel()
+
+							resp, err := provider.Chat(ctx, resolvedAgent.Model, llm.ChatRequest{
+								Messages: []llm.Message{
+									{Role: "user", Content: "Respond with exactly the single word 'PONG'."},
+								},
+							})
+							latency := time.Since(start)
+
+							tokens := 0
+							if resp != nil {
+								tokens = resp.Usage.TotalTokens
+							}
+							return pingResultMsg{
+								target:  selectedAlias,
+								latency: latency,
+								err:     err,
+								tokens:  tokens,
+							}
+						}
+					}
+				} else {
+					names := m.getProviderNames()
+					if m.cursor < len(names) {
+						selectedProv := names[m.cursor]
+						p := m.cfg.Providers[selectedProv]
+						m.statusMsg = fmt.Sprintf("⏳ Pinging provider '%s' (%s)...", selectedProv, p.Type)
+
+						return m, func() tea.Msg {
+							start := time.Now()
+							client := llm.NewProvider(p.Type, p.BaseURL, p.APIKeyEnv)
+							ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+							defer cancel()
+
+							models, err := client.ListModels(ctx)
+							latency := time.Since(start)
+
+							if err != nil {
+								return pingResultMsg{target: selectedProv, latency: latency, err: err}
+							}
+							return pingResultMsg{
+								target:  fmt.Sprintf("%s (%d models reachable)", selectedProv, len(models)),
+								latency: latency,
+								err:     nil,
+							}
+						}
 					}
 				}
 
@@ -1824,9 +1911,9 @@ func (m ConfigModel) View() string {
 
 	var helpText string
 	if m.activeTab == tabAgents {
-		helpText = "[↑/↓] Move · [←] Top · [→] Bottom · [m] Set Master · [w] Set Worker · [e] Edit · [d] Del · [Tab] Switch · [q] Quit"
+		helpText = "[↑/↓] Move · [p] Ping · [m] Set Master · [w] Set Worker · [e] Edit · [d] Del · [Tab] Switch · [q] Quit"
 	} else {
-		helpText = "[↑/↓] Move · [←] Top · [→] Bottom · [a] Add · [e] Edit · [d] Del · [s] Save · [Tab] Switch · [q] Quit"
+		helpText = "[↑/↓] Move · [p] Ping · [a] Add · [e] Edit · [d] Del · [s] Save · [Tab] Switch · [q] Quit"
 	}
 	help := hintStyle.Render(helpText)
 	b.WriteString(help + "\n")
