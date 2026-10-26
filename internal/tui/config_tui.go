@@ -4,7 +4,9 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -639,6 +641,13 @@ func (m ConfigModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.oauthURL = authURL
 					m.oauthVerifier = verifier
 					m.oauthState = state
+
+					// Save URL to file so user can always copy it easily
+					if home, err := os.UserHomeDir(); err == nil {
+						_ = os.MkdirAll(filepath.Join(home, ".claude"), 0700)
+						_ = os.WriteFile(filepath.Join(home, ".claude", "auth_url.txt"), []byte(authURL), 0644)
+					}
+					_ = os.WriteFile("/tmp/claude_auth_url.txt", []byte(authURL), 0644)
 
 					ti := textinput.New()
 					ti.Placeholder = "Paste authorization code or callback URL here..."
@@ -1310,7 +1319,21 @@ func (m ConfigModel) View() string {
 		b.WriteString(stepActiveBullet.Render("●") + " " + stepTitleStyle.Render("Claude Subscription Authorization") + "\n\n")
 
 		b.WriteString("  1. " + normalItemStyle.Render("Open this authorization URL in your browser:") + "\n")
-		b.WriteString("     " + selectedItemStyle.Render(m.oauthURL) + "\n\n")
+		boxWidth := 74
+		if m.width > 20 && m.width < 90 {
+			boxWidth = m.width - 10
+		}
+		urlBoxStyle := lipgloss.NewStyle().
+			Foreground(lipgloss.AdaptiveColor{Light: "#0284C7", Dark: "#38BDF8"}).
+			Bold(true).
+			Width(boxWidth).
+			Padding(0, 1).
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(lipgloss.AdaptiveColor{Light: "#94A3B8", Dark: "#475569"})
+
+		clickable := fmt.Sprintf("\x1b]8;;%s\x07%s\x1b]8;;\x07", m.oauthURL, "[👉 Click here to open in browser]")
+		b.WriteString("     " + selectedItemStyle.Render(clickable) + "\n")
+		b.WriteString("     " + urlBoxStyle.Render(m.oauthURL) + "\n\n")
 
 		b.WriteString("  2. " + normalItemStyle.Render("Log in to Claude Pro/Team and approve access.") + "\n")
 		b.WriteString("  3. " + normalItemStyle.Render("Copy the authorized code or the full redirect URL, and paste it below:") + "\n\n")

@@ -65,17 +65,17 @@ func GenerateAuthURL() (authURL, verifier, state string, err error) {
 	}
 	state = verifier
 
-	q := url.Values{}
-	q.Set("code", "true")
-	q.Set("client_id", ClientID)
-	q.Set("response_type", "code")
-	q.Set("redirect_uri", RedirectURI)
-	q.Set("scope", Scopes)
-	q.Set("code_challenge", challenge)
-	q.Set("code_challenge_method", "S256")
-	q.Set("state", state)
+	// Order parameters with redirect_uri and client_id first so they are never truncated by terminal line wraps
+	params := fmt.Sprintf(
+		"redirect_uri=%s&client_id=%s&response_type=code&code=true&scope=%s&code_challenge=%s&code_challenge_method=S256&state=%s",
+		url.QueryEscape(RedirectURI),
+		url.QueryEscape(ClientID),
+		url.QueryEscape(Scopes),
+		url.QueryEscape(challenge),
+		url.QueryEscape(state),
+	)
 
-	return fmt.Sprintf("%s?%s", AuthorizeURL, q.Encode()), verifier, state, nil
+	return fmt.Sprintf("%s?%s", AuthorizeURL, params), verifier, state, nil
 }
 
 func ParseAuthCode(raw string) (code, state string) {
