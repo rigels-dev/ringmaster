@@ -537,6 +537,47 @@ func (m ConfigModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						}
 					}
 				}
+			case "m": // Set highlighted agent as Master
+				if m.activeTab == tabAgents {
+					aliases := m.getAgentAliases()
+					if m.cursor < len(aliases) {
+						selectedAlias := aliases[m.cursor]
+						// Set all other agents to worker if they were master
+						for aName, a := range m.cfg.Agents {
+							if a.Role == "master" && aName != selectedAlias {
+								a.Role = "worker"
+								a.ToolCalling = true
+								m.cfg.Agents[aName] = a
+							}
+						}
+						// Set selected as master
+						target := m.cfg.Agents[selectedAlias]
+						target.Role = "master"
+						target.ToolCalling = false
+						m.cfg.Agents[selectedAlias] = target
+						m.cfg.Routing.DefaultMaster = selectedAlias
+						_ = config.SaveFile(m.configPath, m.cfg)
+						m.statusMsg = fmt.Sprintf("★ '%s' (%s) is now the MASTER Planner!", selectedAlias, target.Model)
+						return m, nil
+					}
+				}
+
+			case "w": // Set highlighted agent as Default Worker
+				if m.activeTab == tabAgents {
+					aliases := m.getAgentAliases()
+					if m.cursor < len(aliases) {
+						selectedAlias := aliases[m.cursor]
+						target := m.cfg.Agents[selectedAlias]
+						target.Role = "worker"
+						target.ToolCalling = true
+						m.cfg.Agents[selectedAlias] = target
+						m.cfg.Routing.DefaultWorker = selectedAlias
+						_ = config.SaveFile(m.configPath, m.cfg)
+						m.statusMsg = fmt.Sprintf("⚡ '%s' (%s) is now the DEFAULT Worker!", selectedAlias, target.Model)
+						return m, nil
+					}
+				}
+
 			case "s":
 				if err := config.SaveFile(m.configPath, m.cfg); err != nil {
 					m.err = err
@@ -1534,7 +1575,8 @@ func (m ConfigModel) View() string {
 		if len(names) == 0 {
 			b.WriteString(hintStyle.Render("No providers registered yet. Press [a] to choose a provider.") + "\n")
 		} else {
-			b.WriteString(fmt.Sprintf("%-20s %-20s %-34s %-18s\n", headerStyle.Render("PROVIDER NAME"), headerStyle.Render("TYPE"), headerStyle.Render("ENDPOINT / BASE URL"), headerStyle.Render("API KEY ENV")))
+			plainHeader := fmt.Sprintf("  %-18s %-20s %-34s %-18s", "PROVIDER NAME", "TYPE", "ENDPOINT / BASE URL", "API KEY ENV")
+			b.WriteString(headerStyle.Render(plainHeader) + "\n")
 			b.WriteString(lipgloss.NewStyle().Foreground(lipgloss.Color("#2E3842")).Render("────────────────────────────────────────────────────────────────────────────────────────────") + "\n")
 
 			for i, name := range names {
@@ -1565,7 +1607,23 @@ func (m ConfigModel) View() string {
 		if len(aliases) == 0 {
 			b.WriteString(hintStyle.Render("No agents configured yet. Press [a] to add an agent.") + "\n")
 		} else {
-			b.WriteString(fmt.Sprintf("%-20s %-22s %-32s %-10s %-10s\n", headerStyle.Render("ALIAS"), headerStyle.Render("PROVIDER"), headerStyle.Render("MODEL"), headerStyle.Render("ROLE"), headerStyle.Render("TOOL CALL")))
+			currentMaster := m.cfg.Routing.DefaultMaster
+			if currentMaster == "" {
+				for aName, a := range m.cfg.Agents {
+					if a.Role == "master" {
+						currentMaster = aName
+						break
+					}
+				}
+			}
+			currentWorker := m.cfg.Routing.DefaultWorker
+
+			masterInfo := fmt.Sprintf("★ Master Planner: %s · Default Worker: %s", currentMaster, currentWorker)
+			b.WriteString(stepAnswerStyle.Render(masterInfo) + "\n")
+			b.WriteString(hintStyle.Render("  [m] Set highlighted as Master · [w] Set as Default Worker") + "\n\n")
+
+			plainHeader := fmt.Sprintf("  %-18s %-22s %-32s %-10s %-10s", "ALIAS", "PROVIDER", "MODEL", "ROLE", "TOOL CALL")
+			b.WriteString(headerStyle.Render(plainHeader) + "\n")
 			b.WriteString(lipgloss.NewStyle().Foreground(lipgloss.Color("#2E3842")).Render("────────────────────────────────────────────────────────────────────────────────────────────") + "\n")
 
 			for i, alias := range aliases {
@@ -1593,7 +1651,13 @@ func (m ConfigModel) View() string {
 		b.WriteString(statusStyle.Render(m.statusMsg) + "\n\n")
 	}
 
-	help := hintStyle.Render("[a] Add · [e/Enter] Edit · [d] Delete · [s] Save · [Tab] Switch Tab · [q] Quit")
+	var helpText string
+	if m.activeTab == tabAgents {
+		helpText = "[m] Set Master · [w] Set Worker · [e/Enter] Edit · [d] Delete · [s] Save · [Tab] Switch · [q] Quit"
+	} else {
+		helpText = "[a] Add Provider · [e/Enter] Edit · [d] Delete · [s] Save · [Tab] Switch Tab · [q] Quit"
+	}
+	help := hintStyle.Render(helpText)
 	b.WriteString(help + "\n")
 
 	return b.String()
