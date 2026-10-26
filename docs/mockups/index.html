@@ -1260,22 +1260,26 @@
             </div>
             <div class="form-group">
               <label>Provider Type</label>
-              <select id="newProvType" style="background: var(--bg-inner); border: 1px solid var(--border-steel); color: #ccd7e2; padding: 6px 10px; border-radius: 4px; font-size: 11px;">
+              <select id="newProvType" onchange="handleProviderTypeChange()" style="background: var(--bg-inner); border: 1px solid var(--border-steel); color: #ccd7e2; padding: 6px 10px; border-radius: 4px; font-size: 11px;">
                 <option value="openai">OpenAI Compatible (OpenAI, 9router, Ollama, OpenRouter)</option>
                 <option value="anthropic">Claude API (Anthropic Messages API)</option>
                 <option value="claude_subscription">Claude Subscription (Claude Pro / Team OAuth)</option>
               </select>
             </div>
             <div class="form-group">
-              <label>Base URL (Optional for Claude Subscription)</label>
+              <label>Base URL</label>
               <input type="text" id="newProvURL" placeholder="e.g. https://api.anthropic.com/v1 or http://localhost:11434/v1">
             </div>
             <div class="form-group">
-              <label>API Key Env Var (Optional for local / subscription)</label>
+              <label>API Key Env Var</label>
               <input type="text" id="newProvEnv" placeholder="e.g. ANTHROPIC_API_KEY, OPENAI_API_KEY">
             </div>
           </div>
-          <button class="cfg-btn-top" style="align-self: flex-start; margin-top: 6px;" onclick="addNewProvider()">💾 Save & Bind Provider</button>
+          <div style="display: flex; gap: 8px; align-items: center; margin-top: 6px;">
+            <button class="cfg-btn-top" onclick="testPingNewProvider()">⚡ Test Connection / Ping</button>
+            <button class="cfg-btn-top" style="background: var(--gear-gold); color: #192026;" onclick="addNewProvider()">💾 Save & Bind Provider</button>
+            <span id="pingStatusMsg" style="font-size: 10px; font-weight: 600; margin-left: 8px;"></span>
+          </div>
         </div>
       </div>
 
@@ -1998,7 +2002,10 @@
           <td><span class="panel-badge">${pType}</span></td>
           <td>${displayURL}</td>
           <td><code>${p.api_key_env || '—'}</code></td>
-          <td><button class="cfg-btn-del" onclick="deleteProvider('${name}')">Delete</button></td>
+          <td style="display: flex; gap: 4px;">
+            <button class="cfg-btn-top" style="padding: 3px 8px; font-size: 9px;" onclick="testPingExisting('${name}', '${pType}', '${p.base_url || ''}', '${p.api_key_env || ''}')">⚡ Ping</button>
+            <button class="cfg-btn-del" onclick="deleteProvider('${name}')">Delete</button>
+          </td>
         `;
         pBody.appendChild(tr);
 
@@ -2175,6 +2182,36 @@
       mList.appendChild(backBtn);
     }
 
+    function handleProviderTypeChange() {
+      const type = document.getElementById('newProvType').value;
+      const urlInput = document.getElementById('newProvURL');
+      const envInput = document.getElementById('newProvEnv');
+
+      if (type === 'claude_subscription') {
+        urlInput.disabled = true;
+        urlInput.placeholder = '(Not needed - uses local Claude CLI / OAuth)';
+        urlInput.value = '';
+        urlInput.style.opacity = '0.4';
+        urlInput.style.cursor = 'not-allowed';
+
+        envInput.disabled = true;
+        envInput.placeholder = '(Not needed - uses ~/.claude/ credentials)';
+        envInput.value = '';
+        envInput.style.opacity = '0.4';
+        envInput.style.cursor = 'not-allowed';
+      } else {
+        urlInput.disabled = false;
+        urlInput.placeholder = type === 'anthropic' ? 'https://api.anthropic.com/v1' : 'e.g. https://api.openai.com/v1 or http://localhost:11434/v1';
+        urlInput.style.opacity = '1';
+        urlInput.style.cursor = 'text';
+
+        envInput.disabled = false;
+        envInput.placeholder = type === 'anthropic' ? 'ANTHROPIC_API_KEY' : 'e.g. OPENAI_API_KEY';
+        envInput.style.opacity = '1';
+        envInput.style.cursor = 'text';
+      }
+    }
+
     function applyWizardMethod(prov, method) {
       let key = prov.id;
       if (method.type === 'claude_subscription') key = 'claude_subscription';
@@ -2184,9 +2221,60 @@
       document.getElementById('newProvURL').value = method.url;
       document.getElementById('newProvEnv').value = method.env;
 
+      handleProviderTypeChange();
+
       // Reset wizard view back to step 1
       document.getElementById('providerWizardStep2').style.display = 'none';
       document.getElementById('providerWizardStep1').style.display = 'block';
+    }
+
+    async function testPingNewProvider() {
+      const name = document.getElementById('newProvName').value.trim();
+      const type = document.getElementById('newProvType').value;
+      const url = document.getElementById('newProvURL').value.trim();
+      const env = document.getElementById('newProvEnv').value.trim();
+      const statusEl = document.getElementById('pingStatusMsg');
+
+      statusEl.style.color = 'var(--cyan-energy)';
+      statusEl.textContent = '⏳ Testing endpoint & credentials...';
+
+      try {
+        const res = await fetch('/api/ping', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ type: type, base_url: url, api_key_env: env })
+        });
+        const data = await res.json();
+        if (data.ok) {
+          statusEl.style.color = '#5bf28d';
+          statusEl.textContent = `✓ Ping Succeeded (${data.latency_ms}ms) — ${data.message}`;
+        } else {
+          statusEl.style.color = '#e05436';
+          statusEl.textContent = `✗ Ping Failed (${data.latency_ms || 0}ms): ${data.error}`;
+        }
+      } catch (err) {
+        statusEl.style.color = '#e05436';
+        statusEl.textContent = '✗ Network error: ' + err.message;
+      }
+    }
+
+    async function testPingExisting(name, type, url, env) {
+      alert(`Testing ping for ${name}... (Check response in a moment)`);
+      try {
+        const res = await fetch('/api/ping', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ type: type, base_url: url, api_key_env: env })
+        });
+        const data = await res.json();
+        if (data.ok) {
+          alert(`✓ Ping for ${name} SUCCESS (${data.latency_ms}ms)!\n${data.message}`);
+        } else {
+          alert(`✗ Ping for ${name} FAILED (${data.latency_ms || 0}ms):\n${data.error}`);
+        }
+      } catch (err) {
+        alert('✗ Ping error: ' + err.message);
+      }
     }
 
     function addNewProvider() {

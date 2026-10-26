@@ -25,6 +25,30 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
         super().do_GET()
 
     def do_POST(self):
+        if self.path == "/api/ping":
+            content_length = int(self.headers.get("Content-Length", 0))
+            body = self.rfile.read(content_length).decode("utf-8")
+            try:
+                data = json.loads(body)
+                p_type = data.get("type", "openai")
+                base_url = data.get("base_url", "")
+                api_key_env = data.get("api_key_env", "")
+                model = data.get("model", "")
+
+                res = self.test_ping(p_type, base_url, api_key_env, model)
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Access-Control-Allow-Origin", "*")
+                self.end_headers()
+                self.wfile.write(json.dumps(res).encode("utf-8"))
+            except Exception as e:
+                self.send_response(400)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Access-Control-Allow-Origin", "*")
+                self.end_headers()
+                self.wfile.write(json.dumps({"ok": False, "error": str(e)}).encode("utf-8"))
+            return
+
         if self.path == "/api/config":
             content_length = int(self.headers.get("Content-Length", 0))
             body = self.rfile.read(content_length).decode("utf-8")
@@ -51,6 +75,58 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
         self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
         self.send_header("Access-Control-Allow-Headers", "Content-Type")
         self.end_headers()
+
+    def test_ping(self, p_type, base_url, api_key_env, model):
+        import time, urllib.request, urllib.error
+        start = time.time()
+
+        if p_type in ["claude_subscription", "claude_sub"]:
+            # Check ~/.claude existence or cli
+            claude_dir = os.path.expanduser("~/.claude")
+            if os.path.exists(claude_dir):
+                latency = int((time.time() - start) * 1000)
+                return {"ok": True, "latency_ms": latency, "message": f"Claude CLI credentials detected (~/.claude/)"}
+            return {"ok": False, "error": "No ~/.claude session found on host. Run 'claude auth login' first."}
+
+        # Resolve API Key
+        api_key = os.environ.get(api_key_env, "")
+        if not api_key and api_key_env:
+            return {"ok": False, "error": f"Environment variable '{api_key_env}' is not set on host"}
+
+        if not base_url:
+            if p_type == "anthropic":
+                base_url = "https://api.anthropic.com/v1"
+            else:
+                base_url = "https://api.openai.com/v1"
+
+        try:
+            # Query /models or test endpoint
+            target_url = base_url.rstrip("/") + "/models"
+            req = urllib.request.Request(target_url)
+            if api_key:
+                if p_type == "anthropic":
+                    req.add_header("x-api-key", api_key)
+                    req.add_header("anthropic-version", "2023-06-01")
+                else:
+                    req.add_header("Authorization", f"Bearer {api_key}")
+
+            req.add_header("User-Agent", "Ringmaster/0.4")
+            with urllib.request.urlopen(req, timeout=8) as response:
+                status_code = response.getcode()
+                raw = response.read()
+                latency = int((time.time() - start) * 1000)
+                try:
+                    js = json.loads(raw)
+                    model_count = len(js.get("data", js.get("models", [])))
+                    return {"ok": True, "latency_ms": latency, "message": f"Connected ({model_count} models reachable)"}
+                except:
+                    return {"ok": True, "latency_ms": latency, "message": "Endpoint reachable"}
+        except urllib.error.HTTPError as e:
+            latency = int((time.time() - start) * 1000)
+            return {"ok": False, "latency_ms": latency, "error": f"HTTP {e.code}: {e.reason}"}
+        except Exception as e:
+            latency = int((time.time() - start) * 1000)
+            return {"ok": False, "latency_ms": latency, "error": str(e)}
 
     def read_toml_config(self):
         if not os.path.exists(CONFIG_FILE):
