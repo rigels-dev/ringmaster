@@ -20,42 +20,45 @@ import (
 )
 
 var (
+	// Ringmaster Circus / Steampunk Orchestration Palette
+	// Gear Gold: #DEAA3B, Coat Crimson: #B6432A, Cyan Energy: #29F2EC, Slate Deep: #192026, Parchment: #EFE4CE
+
 	titleStyle = lipgloss.NewStyle().
 			Bold(true).
 			Foreground(lipgloss.AdaptiveColor{Light: "#9A3412", Dark: "#DEAA3B"}).
-			Padding(0, 1).
+			Padding(0, 2).
 			Border(lipgloss.RoundedBorder()).
-			BorderForeground(lipgloss.AdaptiveColor{Light: "#0284C7", Dark: "#29F2EC"})
+			BorderForeground(lipgloss.AdaptiveColor{Light: "#B6432A", Dark: "#DEAA3B"})
 
 	activeTabStyle = lipgloss.NewStyle().
 			Bold(true).
-			Foreground(lipgloss.Color("#FFFFFF")).
-			Background(lipgloss.AdaptiveColor{Light: "#0284C7", Dark: "#0EA5E9"}).
+			Foreground(lipgloss.Color("#192026")).
+			Background(lipgloss.AdaptiveColor{Light: "#DEAA3B", Dark: "#DEAA3B"}).
 			Padding(0, 2)
 
 	inactiveTabStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.AdaptiveColor{Light: "#475569", Dark: "#8493A0"}).
-			Background(lipgloss.AdaptiveColor{Light: "#E2E8F0", Dark: "#1B2229"}).
+			Foreground(lipgloss.AdaptiveColor{Light: "#8493A0", Dark: "#8493A0"}).
+			Background(lipgloss.AdaptiveColor{Light: "#E2E8F0", Dark: "#232B33"}).
 			Padding(0, 2)
 
 	headerStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.AdaptiveColor{Light: "#0F172A", Dark: "#DEAA3B"}).
+			Foreground(lipgloss.AdaptiveColor{Light: "#B6432A", Dark: "#DEAA3B"}).
 			Bold(true)
 
 	stepDoneBullet = lipgloss.NewStyle().
-			Foreground(lipgloss.AdaptiveColor{Light: "#16A34A", Dark: "#22C55E"}).
+			Foreground(lipgloss.AdaptiveColor{Light: "#16A34A", Dark: "#29F2EC"}).
 			Bold(true)
 
 	stepActiveBullet = lipgloss.NewStyle().
-			Foreground(lipgloss.AdaptiveColor{Light: "#0284C7", Dark: "#38BDF8"}).
+			Foreground(lipgloss.AdaptiveColor{Light: "#B6432A", Dark: "#E05436"}).
 			Bold(true)
 
 	stepTitleStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.AdaptiveColor{Light: "#0F172A", Dark: "#F8FAFC"}).
+			Foreground(lipgloss.AdaptiveColor{Light: "#0F172A", Dark: "#EFE4CE"}).
 			Bold(true)
 
 	stepDimTitleStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.AdaptiveColor{Light: "#475569", Dark: "#94A3B8"}).
+			Foreground(lipgloss.AdaptiveColor{Light: "#64748B", Dark: "#8493A0"}).
 			Bold(true)
 
 	stepAnswerStyle = lipgloss.NewStyle().
@@ -63,34 +66,57 @@ var (
 			Bold(true)
 
 	selectedBulletStyle = lipgloss.NewStyle().
-				Foreground(lipgloss.AdaptiveColor{Light: "#16A34A", Dark: "#22C55E"}).
+				Foreground(lipgloss.AdaptiveColor{Light: "#DEAA3B", Dark: "#29F2EC"}).
 				Bold(true)
 
 	normalBulletStyle = lipgloss.NewStyle().
-				Foreground(lipgloss.AdaptiveColor{Light: "#64748B", Dark: "#94A3B8"})
+				Foreground(lipgloss.AdaptiveColor{Light: "#64748B", Dark: "#51606D"})
 
 	selectedItemStyle = lipgloss.NewStyle().
-				Foreground(lipgloss.AdaptiveColor{Light: "#0284C7", Dark: "#38BDF8"}).
+				Foreground(lipgloss.AdaptiveColor{Light: "#0F172A", Dark: "#FFFFFF"}).
+				Background(lipgloss.AdaptiveColor{Light: "#E2E8F0", Dark: "#2A3642"}).
 				Bold(true)
 
 	normalItemStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.AdaptiveColor{Light: "#1E293B", Dark: "#E2E8F0"})
+			Foreground(lipgloss.AdaptiveColor{Light: "#1E293B", Dark: "#EFE4CE"})
 
 	descStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.AdaptiveColor{Light: "#475569", Dark: "#94A3B8"}).
+			Foreground(lipgloss.AdaptiveColor{Light: "#64748B", Dark: "#8493A0"}).
 			Italic(true)
 
 	hintStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.AdaptiveColor{Light: "#475569", Dark: "#94A3B8"}).
+			Foreground(lipgloss.AdaptiveColor{Light: "#64748B", Dark: "#8493A0"}).
 			Italic(true)
 
 	statusStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.AdaptiveColor{Light: "#15803D", Dark: "#5BF28D"}).
+			Foreground(lipgloss.AdaptiveColor{Light: "#15803D", Dark: "#29F2EC"}).
 			Bold(true)
 
 	errStyle = lipgloss.NewStyle().
 			Foreground(lipgloss.AdaptiveColor{Light: "#B91C1C", Dark: "#E05436"}).
 			Bold(true)
+
+	// Ringmaster Badges
+	badgeMasterStyle = lipgloss.NewStyle().
+				Foreground(lipgloss.Color("#192026")).
+				Background(lipgloss.Color("#DEAA3B")).
+				Bold(true).
+				Padding(0, 1)
+
+	badgeWorkerStyle = lipgloss.NewStyle().
+				Foreground(lipgloss.Color("#EFE4CE")).
+				Background(lipgloss.Color("#2E3842")).
+				Padding(0, 1)
+
+	badgeToolYes = lipgloss.NewStyle().
+			Foreground(lipgloss.Color("#29F2EC")).
+			Bold(true)
+
+	badgeToolNo = lipgloss.NewStyle().
+			Foreground(lipgloss.Color("#51606D"))
+
+	tableBorderLine = lipgloss.NewStyle().
+			Foreground(lipgloss.Color("#2E3842"))
 )
 type tab int
 
@@ -1690,9 +1716,9 @@ func (m ConfigModel) View() string {
 		if len(names) == 0 {
 			b.WriteString(hintStyle.Render("No providers registered yet. Press [a] to choose a provider.") + "\n")
 		} else {
-			plainHeader := fmt.Sprintf("  %-18s %-20s %-34s %-18s", "PROVIDER NAME", "TYPE", "ENDPOINT / BASE URL", "API KEY ENV")
+			plainHeader := fmt.Sprintf("  %-18s %-20s %-38s %-18s", "PROVIDER NAME", "TYPE", "ENDPOINT / BASE URL", "API KEY ENV")
 			b.WriteString(headerStyle.Render(plainHeader) + "\n")
-			b.WriteString(lipgloss.NewStyle().Foreground(lipgloss.Color("#2E3842")).Render("────────────────────────────────────────────────────────────────────────────────────────────") + "\n")
+			b.WriteString(tableBorderLine.Render("────────────────────────────────────────────────────────────────────────────────────────────") + "\n")
 
 			for i, name := range names {
 				p := m.cfg.Providers[name]
@@ -1712,8 +1738,8 @@ func (m ConfigModel) View() string {
 					displayURL = "local (claude-cli / subscription)"
 				}
 
-				row := fmt.Sprintf("%s%-18s %-20s %-34s %-18s", prefix, name, pType, displayURL, p.APIKeyEnv)
-				b.WriteString(lineStyle.Render(row) + "\n")
+				row := fmt.Sprintf("%-18s %-20s %-38s %-18s", name, pType, displayURL, p.APIKeyEnv)
+				b.WriteString(prefix + lineStyle.Render(row) + "\n")
 			}
 		}
 	} else {
@@ -1733,26 +1759,40 @@ func (m ConfigModel) View() string {
 			}
 			currentWorker := m.cfg.Routing.DefaultWorker
 
-			masterInfo := fmt.Sprintf("★ Master Planner: %s · Default Worker: %s", currentMaster, currentWorker)
-			b.WriteString(stepAnswerStyle.Render(masterInfo) + "\n")
-			b.WriteString(hintStyle.Render("  [m] Set highlighted as Master · [w] Set as Default Worker") + "\n\n")
+			masterInfo := fmt.Sprintf(" 🎪 ROUTING: [★ Master Planner: %s]  [⚡ Default Worker: %s] ", currentMaster, currentWorker)
+			routingBox := lipgloss.NewStyle().
+				Border(lipgloss.RoundedBorder()).
+				BorderForeground(lipgloss.Color("#2E3842")).
+				Foreground(lipgloss.Color("#DEAA3B")).
+				Bold(true).
+				Render(masterInfo)
 
-			plainHeader := fmt.Sprintf("  %-16s %-26s %-14s %-8s %-5s", "ALIAS", "MODEL", "PROVIDER", "ROLE", "TOOLS")
+			b.WriteString(routingBox + "\n")
+			b.WriteString(hintStyle.Render(" [m] Set highlighted as Master · [w] Set as Default Worker") + "\n\n")
+
+			// Table Header with wider columns for Model
+			plainHeader := fmt.Sprintf("  %-18s %-32s %-16s %-10s %-6s", "ALIAS", "MODEL", "PROVIDER", "ROLE", "TOOLS")
 			b.WriteString(headerStyle.Render(plainHeader) + "\n")
-			b.WriteString(lipgloss.NewStyle().Foreground(lipgloss.Color("#2E3842")).Render("───────────────────────────────────────────────────────────────────────") + "\n")
+			b.WriteString(tableBorderLine.Render("────────────────────────────────────────────────────────────────────────────────────────────") + "\n")
 
 			for i, alias := range aliases {
 				a := m.cfg.Agents[alias]
 				prefix := "  "
 				lineStyle := normalItemStyle
-				if i == m.cursor {
+				isCursor := i == m.cursor
+				if isCursor {
 					prefix = "▸ "
 					lineStyle = selectedItemStyle
 				}
 
-				tc := "no"
+				roleBadge := badgeWorkerStyle.Render("worker")
+				if a.Role == "master" {
+					roleBadge = badgeMasterStyle.Render("★ master")
+				}
+
+				toolsBadge := badgeToolNo.Render("no")
 				if a.ToolCalling {
-					tc = "yes"
+					toolsBadge = badgeToolYes.Render("yes")
 				}
 
 				dispProv := a.Provider
@@ -1760,8 +1800,17 @@ func (m ConfigModel) View() string {
 					dispProv = "claude_sub"
 				}
 
-				row := fmt.Sprintf("%s%-14s %-26s %-14s %-8s %-5s", prefix, alias, a.Model, dispProv, a.Role, tc)
-				b.WriteString(lineStyle.Render(row) + "\n")
+				// Format row with fixed width columns
+				aliasCol := fmt.Sprintf("%-18s", alias)
+				modelCol := fmt.Sprintf("%-32s", a.Model)
+				provCol := fmt.Sprintf("%-16s", dispProv)
+
+				rowText := fmt.Sprintf("%s %s %s %-10s %s", aliasCol, modelCol, provCol, roleBadge, toolsBadge)
+				if isCursor {
+					b.WriteString(prefix + lineStyle.Render(fmt.Sprintf("%s %s %s ", aliasCol, modelCol, provCol)) + roleBadge + " " + toolsBadge + "\n")
+				} else {
+					b.WriteString(prefix + rowText + "\n")
+				}
 			}
 		}
 	}
