@@ -44,13 +44,13 @@ func RunInit(name string, force bool) error {
 		repoDir = projectDir
 		isCurrentDir = true
 	} else {
-		// Init inside projects/<name>
-		projectDir = filepath.Join("projects", name)
+		// Init target directory directly
+		projectDir = name
 		repoDir = filepath.Join(projectDir, "repo")
 
 		if info, err := os.Stat(projectDir); err == nil && info.IsDir() {
 			if !force {
-				return fmt.Errorf("project '%s' already exists at %s (use --force to overwrite)", name, projectDir)
+				return fmt.Errorf("directory '%s' already exists (use --force to overwrite)", projectDir)
 			}
 		}
 	}

@@ -26,14 +26,14 @@ var runCmd = &cobra.Command{
 			return fmt.Errorf("configuration not loaded. Please create ringmaster.toml or pass --config")
 		}
 
-		projectName := "demo"
+		projectName := ""
 		if len(args) > 0 {
 			projectName = args[0]
 		}
 
-		projectDir := filepath.Join("projects", projectName)
-		if fi, err := os.Stat(projectDir); err != nil || !fi.IsDir() {
-			return fmt.Errorf("project directory '%s' does not exist", projectDir)
+		projectDir, err := ResolveProjectDir(projectName)
+		if err != nil {
+			return err
 		}
 
 		engine, err := scheduler.NewEngine(projectDir, cfg, runMaxParallel)
@@ -72,10 +72,10 @@ var answerCmd = &cobra.Command{
 		}
 
 		projectName, _ := cmd.Flags().GetString("project")
-		if projectName == "" {
-			projectName = "demo"
+		projectDir, err := ResolveProjectDir(projectName)
+		if err != nil {
+			return err
 		}
-		projectDir := filepath.Join("projects", projectName)
 
 		// 1. Find and update task markdown file
 		tasksDir := filepath.Join(projectDir, "tasks")

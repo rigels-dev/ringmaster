@@ -26,12 +26,12 @@ func TestInitProject(t *testing.T) {
 	}
 
 	// Verify directories and files
-	expectedBrief := filepath.Join("projects", projectName, "BRIEF.md")
+	expectedBrief := filepath.Join(projectName, "BRIEF.md")
 	if _, err := os.Stat(expectedBrief); os.IsNotExist(err) {
 		t.Errorf("expected BRIEF.md at %s", expectedBrief)
 	}
 
-	expectedGit := filepath.Join("projects", projectName, "repo", ".git")
+	expectedGit := filepath.Join(projectName, "repo", ".git")
 	if _, err := os.Stat(expectedGit); os.IsNotExist(err) {
 		t.Errorf("expected .git directory at %s", expectedGit)
 	}

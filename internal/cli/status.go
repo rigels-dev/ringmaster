@@ -55,11 +55,14 @@ var statusCmd = &cobra.Command{
 	Short: "Display DAG visual execution tree, task status, and blockers",
 	Args:  cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		projectName := "demo"
+		projectName := ""
 		if len(args) > 0 {
 			projectName = args[0]
 		}
-		projectDir := filepath.Join("projects", projectName)
+		projectDir, err := ResolveProjectDir(projectName)
+		if err != nil {
+			return err
+		}
 
 		if statusWatch {
 			// Periodic loop
