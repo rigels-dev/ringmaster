@@ -798,7 +798,7 @@ func (m ConfigModel) View() string {
 		b.WriteString("\n\n")
 	}
 
-	help := hintStyle.Render("[a] Add with Template · [e/Enter] Edit · [d] Delete · [s] Save to TOML · [Tab] Switch Tab · [q] Quit")
+	help := hintStyle.Render("[a] Add · [e/Enter] Edit · [d] Delete · [s] Save · [Tab] Switch Tab · [q] Quit")
 	b.WriteString(help)
 	b.WriteString("\n")
 
