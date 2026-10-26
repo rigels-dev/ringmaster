@@ -59,7 +59,7 @@
       <div 
         v-for="toast in toastList" 
         :key="toast.id"
-        class="p-4 rounded-xl shadow-2xl border backdrop-blur-md font-mono text-xs pointer-events-auto transition-all animate-bounce"
+        class="p-4 rounded-xl shadow-2xl border backdrop-blur-md font-mono text-xs pointer-events-auto transition-all duration-300"
         :class="{
           'bg-slate-dark/95 border-green-500/50 text-parchment shadow-green-500/10': toast.type === 'success',
           'bg-slate-dark/95 border-red-500/50 text-parchment shadow-red-500/10': toast.type === 'error',
