@@ -62,8 +62,14 @@ type ChatResponse struct {
 	Usage        TokenUsage `json:"usage"`
 }
 
+type ModelInfo struct {
+	ID   string `json:"id"`
+	Desc string `json:"desc,omitempty"`
+}
+
 type Provider interface {
 	Chat(ctx context.Context, model string, req ChatRequest) (*ChatResponse, error)
+	ListModels(ctx context.Context) ([]ModelInfo, error)
 }
 
 type OpenAICompatibleClient struct {
@@ -207,4 +213,46 @@ func (c *OpenAICompatibleClient) Chat(ctx context.Context, model string, req Cha
 	}
 
 	return nil, fmt.Errorf("failed after %d retries: %w", maxRetries, lastErr)
+}
+
+func (c *OpenAICompatibleClient) ListModels(ctx context.Context) ([]ModelInfo, error) {
+	apiKey, _ := c.getAPIKey()
+	endpoint := fmt.Sprintf("%s/models", c.BaseURL)
+
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create models request: %w", err)
+	}
+
+	if apiKey != "" {
+		httpReq.Header.Set("Authorization", fmt.Sprintf("Bearer %s", apiKey))
+	}
+
+	resp, err := c.HTTPClient.Do(httpReq)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch models from %s: %w", endpoint, err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode >= 400 {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("models endpoint returned HTTP %d: %s", resp.StatusCode, string(body))
+	}
+
+	var raw struct {
+		Data []struct {
+			ID string `json:"id"`
+		} `json:"data"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&raw); err != nil {
+		return nil, fmt.Errorf("failed to decode models response: %w", err)
+	}
+
+	var models []ModelInfo
+	for _, m := range raw.Data {
+		if m.ID != "" {
+			models = append(models, ModelInfo{ID: m.ID})
+		}
+	}
+	return models, nil
 }

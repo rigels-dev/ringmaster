@@ -1,13 +1,16 @@
 package tui
 
 import (
+	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"ringmaster/internal/config"
+	"ringmaster/internal/llm"
 )
 
 var (
@@ -96,6 +99,8 @@ const (
 	modeList viewMode = iota
 	modePickProviderStep1 // Step 1: Choose Provider
 	modePickProviderStep2 // Step 2: Choose Auth Method
+	modePickModel         // Step 3: Pick Model from fetched list
+	modePickModelRole     // Step 4: Pick Role for chosen model
 	modeEditProvider
 	modeAddProvider
 	modePickAgentTemplate
@@ -307,21 +312,29 @@ var agentTemplates = []AgentTemplate{
 }
 
 type ConfigModel struct {
-	cfg              *config.Config
-	configPath       string
-	activeTab        tab
-	mode             viewMode
-	cursor           int
-	providerCursor   int
-	authMethodCursor int
-	templateCursor   int
-	searchQuery      string
-	selectedProvider *ProviderOption
-	inputs           []textinput.Model
-	statusMsg        string
-	err              error
-	width            int
-	height           int
+	cfg                   *config.Config
+	configPath            string
+	activeTab             tab
+	mode                  viewMode
+	cursor                int
+	providerCursor        int
+	authMethodCursor      int
+	templateCursor        int
+	searchQuery           string
+	selectedProvider      *ProviderOption
+	selectedAuthMethod    *AuthMethodOption
+	configuredProviderKey string
+	fetchedModels         []llm.ModelInfo
+	checkedModels         map[string]bool // checkbox state per model ID
+	modelCursor           int
+	modelSearchQuery      string
+	selectedModelID       string
+	roleCursor            int
+	inputs                []textinput.Model
+	statusMsg             string
+	err                   error
+	width                 int
+	height                int
 }
 
 func NewConfigModel(cfg *config.Config, configPath string) ConfigModel {
@@ -336,6 +349,20 @@ func NewConfigModel(cfg *config.Config, configPath string) ConfigModel {
 
 func (m ConfigModel) Init() tea.Cmd {
 	return textinput.Blink
+}
+
+func (m ConfigModel) getFilteredModels() []llm.ModelInfo {
+	if strings.TrimSpace(m.modelSearchQuery) == "" {
+		return m.fetchedModels
+	}
+	q := strings.ToLower(strings.TrimSpace(m.modelSearchQuery))
+	var res []llm.ModelInfo
+	for _, mod := range m.fetchedModels {
+		if strings.Contains(strings.ToLower(mod.ID), q) || strings.Contains(strings.ToLower(mod.Desc), q) {
+			res = append(res, mod)
+		}
+	}
+	return res
 }
 
 func (m ConfigModel) getFilteredProviders() []ProviderOption {
@@ -544,12 +571,192 @@ func (m ConfigModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 				// Direct auto-configure and save
 				m.cfg.Providers[providerKey] = p
-				if err := config.SaveFile(m.configPath, m.cfg); err != nil {
-					m.err = err
-				} else {
-					m.statusMsg = fmt.Sprintf("✓ Configured provider '%s' (%s) successfully!", providerKey, method.Label)
+				_ = config.SaveFile(m.configPath, m.cfg)
+				m.selectedAuthMethod = &method
+				m.configuredProviderKey = providerKey
+
+				// Fetch models live
+				client := llm.NewProvider(p.Type, p.BaseURL, p.APIKeyEnv)
+				ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
+				models, err := client.ListModels(ctx)
+				cancel()
+
+				if err == nil && len(models) > 0 {
+					m.fetchedModels = models
+					m.checkedModels = make(map[string]bool)
+					m.modelCursor = 0
+					m.modelSearchQuery = ""
+					m.statusMsg = fmt.Sprintf("✓ Provider '%s' connected! Check models to put on your list.", providerKey)
+					m.mode = modePickModel
+					return m, nil
 				}
+
+				m.statusMsg = fmt.Sprintf("✓ Configured provider '%s' (%s) successfully!", providerKey, method.Label)
 				m.mode = modeList
+				return m, nil
+			}
+
+		case modePickModel: // Step 3: Check / Select models to put on list
+			filtered := m.getFilteredModels()
+			totalItems := len(filtered)
+
+			switch msg.String() {
+			case "esc":
+				m.mode = modeList
+				return m, nil
+			case "up":
+				if m.modelCursor > 0 {
+					m.modelCursor--
+				}
+				return m, nil
+			case "down":
+				if m.modelCursor < totalItems-1 {
+					m.modelCursor++
+				}
+				return m, nil
+			case " ": // Space: Toggle checkbox for highlighted model!
+				if m.checkedModels == nil {
+					m.checkedModels = make(map[string]bool)
+				}
+				if len(filtered) > 0 && m.modelCursor < len(filtered) {
+					id := filtered[m.modelCursor].ID
+					m.checkedModels[id] = !m.checkedModels[id]
+				}
+				return m, nil
+			case "backspace":
+				if len(m.modelSearchQuery) > 0 {
+					m.modelSearchQuery = m.modelSearchQuery[:len(m.modelSearchQuery)-1]
+					m.modelCursor = 0
+				}
+				return m, nil
+			case "enter": // Enter: Confirm all checked models and put them on agent list!
+				var selected []string
+				for id, checked := range m.checkedModels {
+					if checked {
+						selected = append(selected, id)
+					}
+				}
+
+				// If nothing checked with Space, auto-check the currently highlighted model
+				if len(selected) == 0 && len(filtered) > 0 && m.modelCursor < len(filtered) {
+					selected = append(selected, filtered[m.modelCursor].ID)
+				}
+
+				if len(selected) == 0 {
+					m.mode = modeList
+					return m, nil
+				}
+
+				// Put selected models onto agent list
+				addedCount := 0
+				for _, modelID := range selected {
+					role := "worker"
+					toolCalling := true
+					alias := ""
+
+					// If no master exists yet, first selected becomes master
+					if _, hasMaster := m.cfg.Agents["master"]; !hasMaster && addedCount == 0 {
+						alias = "master"
+						role = "master"
+						toolCalling = false
+					} else {
+						// Worker naming
+						clean := strings.ToLower(modelID)
+						if strings.Contains(clean, "sonnet") || strings.Contains(clean, "opus") {
+							alias = "coder-smart"
+						} else if strings.Contains(clean, "haiku") || strings.Contains(clean, "flash") || strings.Contains(clean, "mini") {
+							alias = "coder-fast"
+						} else {
+							alias = "coder-cheap"
+						}
+
+						if _, exists := m.cfg.Agents[alias]; exists {
+							cleanSuffix := strings.ReplaceAll(modelID, "/", "-")
+							cleanSuffix = strings.ReplaceAll(cleanSuffix, ":", "-")
+							alias = fmt.Sprintf("worker-%s", cleanSuffix)
+						}
+					}
+
+					m.cfg.Agents[alias] = config.AgentConfig{
+						Provider:    m.configuredProviderKey,
+						Model:       modelID,
+						Role:        role,
+						ToolCalling: toolCalling,
+					}
+					addedCount++
+				}
+
+				_ = config.SaveFile(m.configPath, m.cfg)
+				m.statusMsg = fmt.Sprintf("✓ Successfully added %d model(s) to your agent list!", addedCount)
+				m.activeTab = tabAgents
+				m.mode = modeList
+				m.cursor = 0
+				return m, nil
+
+			default:
+				if len(msg.String()) == 1 && msg.String() >= "a" && msg.String() <= "z" || (msg.String() >= "0" && msg.String() <= "9") || msg.String() == "-" || msg.String() == "_" || msg.String() == "/" || msg.String() == "." {
+					m.modelSearchQuery += msg.String()
+					m.modelCursor = 0
+					return m, nil
+				}
+			}
+
+		case modePickModelRole: // Step 4: Pick Role (Master or Worker) for selected model
+			switch msg.String() {
+			case "esc":
+				m.mode = modePickModel
+				return m, nil
+			case "up", "k":
+				if m.roleCursor > 0 {
+					m.roleCursor--
+				}
+				return m, nil
+			case "down", "j":
+				if m.roleCursor < 2 { // 0: Master, 1: Worker, 2: Back
+					m.roleCursor++
+				}
+				return m, nil
+			case "enter":
+				if m.roleCursor == 2 {
+					// Back
+					m.mode = modePickModel
+					return m, nil
+				}
+
+				if m.roleCursor == 0 {
+					// Master
+					m.cfg.Agents["master"] = config.AgentConfig{
+						Provider:    m.configuredProviderKey,
+						Model:       m.selectedModelID,
+						Role:        "master",
+						ToolCalling: false,
+					}
+					_ = config.SaveFile(m.configPath, m.cfg)
+					m.statusMsg = fmt.Sprintf("✓ Configured 'master' agent with model '%s'!", m.selectedModelID)
+					m.mode = modePickModel
+					return m, nil
+				}
+
+				// Worker
+				alias := "coder-fast"
+				if _, exists := m.cfg.Agents[alias]; exists {
+					alias = "coder-cheap"
+					if _, exists2 := m.cfg.Agents[alias]; exists2 {
+						cleanModel := strings.ReplaceAll(m.selectedModelID, "/", "-")
+						cleanModel = strings.ReplaceAll(cleanModel, ":", "-")
+						alias = fmt.Sprintf("worker-%s", cleanModel)
+					}
+				}
+
+				m.cfg.Agents[alias] = config.AgentConfig{
+					Provider:    m.configuredProviderKey,
+					Model:       m.selectedModelID,
+					Role:        "worker",
+					ToolCalling: true,
+				}
+				_ = config.SaveFile(m.configPath, m.cfg)
+				m.statusMsg = fmt.Sprintf("✓ Added worker agent '%s' with model '%s'!", alias, m.selectedModelID)
+				m.mode = modePickModel
 				return m, nil
 			}
 
@@ -779,9 +986,27 @@ func (m *ConfigModel) submitForm() (tea.Model, tea.Cmd) {
 
 		if err := config.SaveFile(m.configPath, m.cfg); err != nil {
 			m.err = err
-		} else {
-			m.statusMsg = fmt.Sprintf("✓ Provider '%s' (%s) saved successfully!", name, pType)
+			m.mode = modeList
+			return m, nil
 		}
+
+		m.configuredProviderKey = name
+		client := llm.NewProvider(pType, baseURL, apiEnv)
+		ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
+		models, err := client.ListModels(ctx)
+		cancel()
+
+		if err == nil && len(models) > 0 {
+			m.fetchedModels = models
+			m.checkedModels = make(map[string]bool)
+			m.modelCursor = 0
+			m.modelSearchQuery = ""
+			m.statusMsg = fmt.Sprintf("✓ Provider '%s' connected! Check models to put on your list.", name)
+			m.mode = modePickModel
+			return m, nil
+		}
+
+		m.statusMsg = fmt.Sprintf("✓ Provider '%s' (%s) saved successfully!", name, pType)
 		m.mode = modeList
 
 	case modeAddAgent, modeEditAgent:
@@ -929,6 +1154,124 @@ func (m ConfigModel) View() string {
 		}
 
 		b.WriteString("\n" + hintStyle.Render("↑/↓ to navigate · Enter: confirm · Esc: back") + "\n")
+		return b.String()
+	}
+
+	// ==========================================
+	// STEP 3: PICK MODEL FROM FETCHED PROVIDER MODELS
+	// ==========================================
+	if m.mode == modePickModel {
+		provLabel := m.configuredProviderKey
+		if m.selectedProvider != nil {
+			provLabel = m.selectedProvider.Name
+		}
+
+		b.WriteString(stepDoneBullet.Render("●") + " " + stepDimTitleStyle.Render("Model/auth provider") + "\n")
+		b.WriteString("  " + stepAnswerStyle.Render(provLabel) + "\n\n")
+
+		headerText := fmt.Sprintf("Select models to add to your agent roster (%d available)", len(m.fetchedModels))
+		b.WriteString(stepActiveBullet.Render("●") + " " + stepTitleStyle.Render(headerText) + "\n")
+
+		searchPrompt := "  Search: "
+		if m.modelSearchQuery != "" {
+			searchPrompt += m.modelSearchQuery
+		} else {
+			searchPrompt += hintStyle.Render("(type to filter...)")
+		}
+		b.WriteString(headerStyle.Render(searchPrompt) + "\n\n")
+
+		filtered := m.getFilteredModels()
+		totalItems := len(filtered)
+
+		maxVisible := 12
+		startIdx := 0
+		if m.modelCursor >= maxVisible {
+			startIdx = m.modelCursor - maxVisible + 1
+		}
+		endIdx := startIdx + maxVisible
+		if endIdx > totalItems {
+			endIdx = totalItems
+		}
+
+		for i := startIdx; i < endIdx; i++ {
+			if i >= len(filtered) {
+				break
+			}
+			mod := filtered[i]
+			desc := ""
+			if mod.Desc != "" {
+				desc = " " + descStyle.Render("("+mod.Desc+")")
+			}
+
+			isChecked := m.checkedModels != nil && m.checkedModels[mod.ID]
+			box := "[ ] "
+			if isChecked {
+				box = "[x] "
+			}
+
+			if i == m.modelCursor {
+				boxStyle := selectedBulletStyle
+				if isChecked {
+					boxStyle = selectedBulletStyle
+				}
+				b.WriteString("  " + boxStyle.Render(box) + selectedItemStyle.Render(mod.ID) + desc + "\n")
+			} else {
+				boxStyle := normalBulletStyle
+				if isChecked {
+					boxStyle = selectedBulletStyle
+				}
+				b.WriteString("  " + boxStyle.Render(box) + normalItemStyle.Render(mod.ID) + desc + "\n")
+			}
+		}
+
+		if totalItems > maxVisible {
+			b.WriteString(hintStyle.Render(fmt.Sprintf("  ... and %d more models (type to filter)", totalItems-endIdx)) + "\n")
+		}
+
+		checkedCount := 0
+		for _, v := range m.checkedModels {
+			if v {
+				checkedCount++
+			}
+		}
+
+		statusSummary := fmt.Sprintf("(%d model(s) checked)", checkedCount)
+		b.WriteString("\n" + stepDoneBullet.Render(statusSummary) + " " + hintStyle.Render("[Space] Check/Uncheck · [Enter] Put selected on list · Type: filter · [Esc] Done") + "\n")
+		return b.String()
+	}
+
+	// ==========================================
+	// STEP 4: ASSIGN AGENT ROLE FOR SELECTED MODEL
+	// ==========================================
+	if m.mode == modePickModelRole {
+		provLabel := m.configuredProviderKey
+		if m.selectedProvider != nil {
+			provLabel = m.selectedProvider.Name
+		}
+
+		b.WriteString(stepDoneBullet.Render("●") + " " + stepDimTitleStyle.Render("Model/auth provider") + "\n")
+		b.WriteString("  " + stepAnswerStyle.Render(provLabel) + "\n\n")
+
+		b.WriteString(stepDoneBullet.Render("●") + " " + stepDimTitleStyle.Render("Selected Model") + "\n")
+		b.WriteString("  " + stepAnswerStyle.Render(m.selectedModelID) + "\n\n")
+
+		b.WriteString(stepActiveBullet.Render("●") + " " + stepTitleStyle.Render("Assign Agent Role in Ringmaster:") + "\n")
+
+		roleOptions := []string{
+			"Master Planner (Ringmaster Control Plane · breaks tasks into DAG)",
+			"Worker Coder (Executes code in isolated git worktrees · Tool Calling: true)",
+			"Back to Model List",
+		}
+
+		for i, opt := range roleOptions {
+			if i == m.roleCursor {
+				b.WriteString(selectedBulletStyle.Render("  ● ") + selectedItemStyle.Render(opt) + "\n")
+			} else {
+				b.WriteString(normalBulletStyle.Render("  ○ ") + normalItemStyle.Render(opt) + "\n")
+			}
+		}
+
+		b.WriteString("\n" + hintStyle.Render("↑/↓ to navigate · Enter: confirm & bind agent · Esc: back") + "\n")
 		return b.String()
 	}
 

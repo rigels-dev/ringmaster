@@ -135,3 +135,11 @@ func (c *ClaudeSubscriptionClient) Chat(ctx context.Context, model string, req C
 		},
 	}, nil
 }
+
+func (c *ClaudeSubscriptionClient) ListModels(ctx context.Context) ([]ModelInfo, error) {
+	return []ModelInfo{
+		{ID: "sonnet", Desc: "Claude Sonnet (Master Planner / Lead Architecture)"},
+		{ID: "haiku", Desc: "Claude Haiku (Fast Worker Coder)"},
+		{ID: "opus", Desc: "Claude Opus (Deep Reasoning & Hard Problems)"},
+	}, nil
+}

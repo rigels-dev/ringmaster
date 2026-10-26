@@ -261,3 +261,39 @@ func (c *AnthropicClient) Chat(ctx context.Context, model string, req ChatReques
 
 	return nil, fmt.Errorf("failed after %d retries: %w", maxRetries, lastErr)
 }
+
+func (c *AnthropicClient) ListModels(ctx context.Context) ([]ModelInfo, error) {
+	apiKey, _ := c.getAPIKey()
+	endpoint := fmt.Sprintf("%s/models", c.BaseURL)
+
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	if err == nil {
+		httpReq.Header.Set("anthropic-version", "2023-06-01")
+		if apiKey != "" {
+			httpReq.Header.Set("x-api-key", apiKey)
+		}
+		resp, err := c.HTTPClient.Do(httpReq)
+		if err == nil && resp.StatusCode == http.StatusOK {
+			defer resp.Body.Close()
+			var raw struct {
+				Data []struct {
+					ID string `json:"id"`
+				} `json:"data"`
+			}
+			if err := json.NewDecoder(resp.Body).Decode(&raw); err == nil && len(raw.Data) > 0 {
+				var models []ModelInfo
+				for _, m := range raw.Data {
+					models = append(models, ModelInfo{ID: m.ID})
+				}
+				return models, nil
+			}
+		}
+	}
+
+	return []ModelInfo{
+		{ID: "claude-3-7-sonnet-20250219", Desc: "Claude 3.7 Sonnet (Hybrid Reasoning & Coding)"},
+		{ID: "claude-3-5-sonnet-20241022", Desc: "Claude 3.5 Sonnet v2 (Coding Benchmark Leader)"},
+		{ID: "claude-3-5-haiku-20241022", Desc: "Claude 3.5 Haiku (Fast & Token Efficient)"},
+		{ID: "claude-opus-5-5", Desc: "Claude Opus (Deep Architecture & Planning)"},
+	}, nil
+}
