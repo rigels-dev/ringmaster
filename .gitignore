@@ -20,3 +20,6 @@ ringmaster.toml
 # Test outputs
 coverage.out
 *.test
+node_modules/
+.nuxt/
+.output/
