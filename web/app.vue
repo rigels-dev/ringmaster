@@ -7,11 +7,11 @@
         <span class="text-xl">🎪</span>
         <div>
           <h1 class="font-cinzel font-black tracking-wider text-gear-gold text-sm">RINGMASTER</h1>
-          <p class="text-[9px] text-zinc-400 tracking-tight font-outfit uppercase">Agent Control Plane</p>
+          <p class="text-[9px] text-zinc-400 tracking-tight font-outfit uppercase">Multi-Agent Control Plane</p>
         </div>
       </div>
 
-      <!-- Navigation Links (Chat, Tasks, Providers, Analytics) -->
+      <!-- Navigation Links -->
       <nav class="flex-1 p-3 space-y-1.5 overflow-y-auto">
         <button
           v-for="item in navItems"
@@ -32,7 +32,7 @@
         </button>
       </nav>
 
-      <!-- Active Project Info / Quick Status -->
+      <!-- Active Project Info & Multi-Worker Fleet Status -->
       <div class="p-3 border-t border-steel bg-slate-inner/60">
         <div class="flex items-center justify-between text-[10px] text-zinc-400 mb-1">
           <span>Active Project</span>
@@ -44,14 +44,14 @@
         </div>
         <div class="flex items-center justify-between text-[10px] text-zinc-400">
           <span>Workers Active</span>
-          <span class="text-green-400 font-bold">1 Running</span>
+          <span class="text-green-400 font-bold">{{ activeWorkersCount }} Parallel</span>
         </div>
       </div>
     </aside>
 
     <!-- Main Content Workspace Area -->
     <main class="flex-1 flex flex-col h-full bg-slate-deep overflow-hidden">
-      <!-- 1. CHAT VIEW (Unified Mission Control: Briefing + Worker Streams + Human Review) -->
+      <!-- 1. CHAT VIEW (Mission Control with Dynamic Multi-Worker Selector) -->
       <section v-if="activeView === 'chat'" class="flex-1 flex h-full overflow-hidden">
         <!-- Dialogue Stream -->
         <div class="flex-1 flex flex-col h-full border-r border-steel">
@@ -59,36 +59,35 @@
           <div class="h-14 flex items-center justify-between px-6 border-b border-steel bg-slate-panel">
             <div>
               <div class="flex items-center gap-2">
-                <h2 class="text-sm font-bold text-gear-gold font-cinzel">Mission Control & Agent Channel</h2>
+                <h2 class="text-sm font-bold text-gear-gold font-cinzel">Mission Control & Agent Stream</h2>
                 <span class="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
               </div>
-              <p class="text-[10px] text-zinc-400">Collaborate with Master Planner, receive live worker reports, and steer execution.</p>
+              <p class="text-[10px] text-zinc-400">Collaborate with Master Planner, receive live reports from all workers, and steer execution.</p>
             </div>
-            <div class="flex items-center gap-2">
-              <button 
-                @click="activeView = 'tasks'" 
-                class="px-3 py-1.5 bg-slate-inner hover:bg-slate-panel text-zinc-300 text-xs rounded border border-steel flex items-center gap-1.5 transition"
-              >
-                <span>View Tasks (3)</span>
-                <span>▸</span>
-              </button>
-            </div>
+            
+            <!-- Quick View Tasks Shortcut -->
+            <button 
+              @click="activeView = 'tasks'" 
+              class="px-3 py-1.5 bg-slate-inner hover:bg-slate-panel text-zinc-300 text-xs rounded border border-steel flex items-center gap-1.5 transition"
+            >
+              <span>View Tasks Pipeline ({{ tasks.length }})</span>
+              <span>▸</span>
+            </button>
           </div>
 
-          <!-- Messages Stream -->
+          <!-- Messages Stream (Filterable by Agent) -->
           <div class="flex-1 p-6 overflow-y-auto space-y-4">
             <div 
-              v-for="(msg, i) in messages" 
+              v-for="(msg, i) in filteredMessages" 
               :key="i"
               class="flex flex-col max-w-2xl"
               :class="msg.role === 'user' ? 'ml-auto items-end' : 'mr-auto items-start'"
             >
               <!-- Role / Origin Badge -->
               <div class="flex items-center gap-1.5 mb-1 text-[9px] uppercase tracking-wider">
-                <span v-if="msg.role === 'user'" class="text-zinc-400 font-bold">You (Human Reviewer)</span>
+                <span v-if="msg.role === 'user'" class="text-zinc-400 font-bold">You (Reviewer) ➔ To: {{ msg.targetLabel }}</span>
                 <span v-else-if="msg.role === 'master'" class="text-gear-gold font-bold">🎪 Master Planner</span>
-                <span v-else-if="msg.role === 'worker'" class="text-cyan-energy font-bold">⚡ Worker ({{ msg.workerName }}) · Task {{ msg.taskId }}</span>
-                <span v-else-if="msg.role === 'system'" class="text-zinc-500">System Notification</span>
+                <span v-else-if="msg.role === 'worker'" class="text-cyan-energy font-bold">⚡ Worker: {{ msg.workerId }} · Task {{ msg.taskId }}</span>
                 <span class="text-zinc-600">· {{ msg.time }}</span>
               </div>
 
@@ -124,9 +123,9 @@
                   </button>
                   <button 
                     @click="instructWorker(msg, 'direct')" 
-                    class="px-2.5 py-1 bg-slate-dark hover:bg-slate-panel text-zinc-200 border border-steel rounded text-[10px] font-semibold transition"
+                    class="px-2.5 py-1 bg-slate-dark hover:bg-slate-panel text-cyan-energy border border-steel rounded text-[10px] font-semibold transition"
                   >
-                    💬 Direct Worker
+                    💬 Direct {{ msg.workerId }}
                   </button>
                   <button 
                     @click="instructWorker(msg, 'via_master')" 
@@ -139,30 +138,41 @@
             </div>
           </div>
 
-          <!-- Input Bar with Route Selector (Send to Master or Direct to Worker) -->
+          <!-- Input Bar with Dynamic Multi-Worker Selector -->
           <div class="p-4 border-t border-steel bg-slate-panel">
-            <div class="flex items-center gap-2 mb-2">
-              <span class="text-[10px] text-zinc-400">Target Agent:</span>
+            <div class="flex items-center gap-2 mb-2 overflow-x-auto pb-1">
+              <span class="text-[10px] text-zinc-400 font-semibold whitespace-nowrap">Send Instruction To:</span>
+              
+              <!-- Master Option -->
               <button 
-                @click="chatTarget = 'master'"
-                class="px-2 py-0.5 rounded text-[10px] font-bold transition"
-                :class="chatTarget === 'master' ? 'bg-gear-gold text-slate-deep' : 'bg-slate-inner text-zinc-400 border border-steel'"
+                @click="selectedTarget = 'master'"
+                class="px-2.5 py-1 rounded text-[10px] font-bold transition flex items-center gap-1 whitespace-nowrap"
+                :class="selectedTarget === 'master' ? 'bg-gear-gold text-slate-deep' : 'bg-slate-inner text-zinc-400 border border-steel hover:text-zinc-200'"
               >
-                🎪 Master Planner
+                <span>🎪 Master Planner</span>
               </button>
+
+              <!-- Dynamic Active Worker Options -->
               <button 
-                @click="chatTarget = 'worker'"
-                class="px-2 py-0.5 rounded text-[10px] font-bold transition"
-                :class="chatTarget === 'worker' ? 'bg-cyan-energy text-slate-deep' : 'bg-slate-inner text-zinc-400 border border-steel'"
+                v-for="worker in activeWorkersList"
+                :key="worker.id"
+                @click="selectedTarget = worker.id"
+                class="px-2.5 py-1 rounded text-[10px] font-bold transition flex items-center gap-1.5 whitespace-nowrap"
+                :class="selectedTarget === worker.id ? 'bg-cyan-energy text-slate-deep' : 'bg-slate-inner text-zinc-400 border border-steel hover:text-zinc-200'"
               >
-                ⚡ Active Worker (coder-sonnet)
+                <span class="w-1.5 h-1.5 rounded-full bg-green-400 animate-ping"></span>
+                <span>⚡ {{ worker.name }} (Task {{ worker.taskId }})</span>
               </button>
             </div>
+
+            <!-- Input Form -->
             <form @submit.prevent="sendMessage" class="flex items-center gap-3">
               <input 
                 v-model="inputMsg"
                 type="text" 
-                :placeholder="chatTarget === 'master' ? 'Beri instruksi ke Master Planner (arsitektur, scope, orkestrasi)...' : 'Beri instruksi langsung ke Worker (fix kode, acceptance, debug)...'"
+                :placeholder="selectedTarget === 'master' 
+                  ? 'Kirim instruksi ke Master Planner (misal: ubah arsitektur, tambahkan requirement baru)...' 
+                  : `Kirim instruksi langsung ke worker '${selectedTarget}' di worktree khususnya...`"
                 class="flex-1 bg-slate-inner border border-steel text-parchment text-xs px-4 py-2.5 rounded focus:outline-none focus:border-gear-gold"
               />
               <button 
@@ -176,38 +186,57 @@
           </div>
         </div>
 
-        <!-- Live Context Sidebar (BRIEF & Live Tasks Stream) -->
+        <!-- Right Panel: Multi-Worker Parallel Fleet Monitor & Brief -->
         <div class="w-80 flex flex-col h-full bg-slate-panel/40">
           <div class="h-14 flex items-center justify-between px-4 border-b border-steel bg-slate-panel">
-            <span class="text-xs font-bold text-zinc-300">Project Context</span>
-            <span class="text-[9px] px-2 py-0.5 rounded bg-slate-inner text-gear-gold border border-steel">Live State</span>
+            <span class="text-xs font-bold text-zinc-300">Active Parallel Fleet</span>
+            <span class="text-[9px] px-2 py-0.5 rounded bg-slate-inner text-green-400 border border-steel">
+              {{ activeWorkersList.length }} Worktrees Active
+            </span>
           </div>
 
-          <!-- Collapsible Sections -->
-          <div class="flex-1 p-4 overflow-y-auto space-y-4">
-            <!-- Active Task Monitor Mini-card -->
-            <div class="bg-slate-dark border border-steel rounded p-3">
+          <!-- Dynamic Multi-Worker Cards List -->
+          <div class="flex-1 p-4 overflow-y-auto space-y-3">
+            <div 
+              v-for="worker in activeWorkersList"
+              :key="worker.id"
+              class="bg-slate-dark border border-steel rounded p-3 hover:border-cyan-dim transition cursor-pointer"
+              @click="selectedTarget = worker.id"
+            >
               <div class="flex items-center justify-between mb-1.5">
-                <span class="text-[10px] text-zinc-400">Current Running Task</span>
-                <span class="text-[9px] text-amber-400 font-bold bg-amber-950 px-1.5 py-0.2 rounded">RUNNING</span>
+                <span class="text-[10px] text-zinc-300 font-bold">{{ worker.name }}</span>
+                <span 
+                  class="text-[9px] font-bold px-1.5 py-0.2 rounded uppercase"
+                  :class="worker.status === 'RUNNING' ? 'bg-amber-950 text-amber-400 border border-amber-800' : 'bg-red-950 text-red-400 border border-red-800'"
+                >
+                  {{ worker.status }}
+                </span>
               </div>
-              <p class="text-xs font-bold text-zinc-200">T02: Implement Unit Tests</p>
+              
+              <p class="text-xs font-semibold text-zinc-200">{{ worker.taskId }}: {{ worker.taskTitle }}</p>
+              
+              <!-- Progress bar -->
               <div class="w-full bg-slate-inner h-1.5 rounded mt-2 overflow-hidden">
-                <div class="bg-amber-400 h-full w-2/3 animate-pulse"></div>
+                <div 
+                  class="h-full"
+                  :class="worker.status === 'RUNNING' ? 'bg-amber-400 animate-pulse' : 'bg-red-500'"
+                  :style="{ width: worker.progress + '%' }"
+                ></div>
               </div>
+              
               <div class="flex items-center justify-between text-[9px] text-zinc-400 mt-2">
-                <span>Branch: <code class="text-cyan-energy">rm/T02</code></span>
-                <span>Turn: 4/30</span>
+                <span>Branch: <code class="text-cyan-energy">rm/{{ worker.taskId }}</code></span>
+                <span>Turn: {{ worker.turn }}/30</span>
               </div>
             </div>
 
             <!-- Brief Markdown Document -->
-            <div>
+            <div class="pt-2 border-t border-steel">
               <div class="flex items-center justify-between mb-2">
                 <span class="text-xs font-bold text-zinc-300">BRIEF.md</span>
                 <button @click="activeView = 'tasks'" class="text-[9px] text-gear-gold hover:underline">Full Tasks ▸</button>
               </div>
-              <div class="p-3 bg-slate-inner border border-steel rounded font-mono text-[10px] leading-relaxed text-zinc-400 whitespace-pre-wrap">
+              <div class="p-3 bg-slate-inner border border-steel rounded font-mono text-[10px] leading-relaxed text-zinc-400 whitespace-pre-wrap max-h-48 overflow-y-auto">
 {{ briefPreview }}
               </div>
             </div>
@@ -215,7 +244,7 @@
         </div>
       </section>
 
-      <!-- 2. TASKS VIEW (Replaced 'DAG' with Clean Task Board) -->
+      <!-- 2. TASKS VIEW (Pipeline) -->
       <section v-else-if="activeView === 'tasks'" class="flex-1 flex flex-col p-6 overflow-y-auto">
         <div class="flex items-center justify-between mb-6">
           <div>
@@ -238,7 +267,7 @@
           </div>
         </div>
 
-        <!-- Task Pipeline Cards -->
+        <!-- Task Pipeline Cards Grid -->
         <div class="grid grid-cols-3 gap-4">
           <div 
             v-for="task in tasks" 
@@ -250,7 +279,12 @@
                 <span class="text-xs font-bold text-gear-gold">{{ task.id }}</span>
                 <span 
                   class="text-[9px] px-2 py-0.5 rounded font-bold uppercase"
-                  :class="task.status === 'DONE' ? 'bg-green-950 text-green-400 border border-green-800' : (task.status === 'RUNNING' ? 'bg-amber-950 text-amber-400 border border-amber-800' : 'bg-slate-inner text-zinc-400 border border-steel')"
+                  :class="{
+                    'bg-green-950 text-green-400 border border-green-800': task.status === 'DONE',
+                    'bg-amber-950 text-amber-400 border border-amber-800': task.status === 'RUNNING',
+                    'bg-red-950 text-red-400 border border-red-800': task.status === 'BLOCKED',
+                    'bg-slate-inner text-zinc-400 border border-steel': task.status === 'PENDING'
+                  }"
                 >
                   {{ task.status }}
                 </span>
@@ -273,10 +307,6 @@
           <p class="text-xs text-zinc-400">Manage API keys, Claude CLI subscription tokens, and test connection latency.</p>
         </div>
         <div class="bg-slate-panel border border-steel rounded-lg p-5">
-          <div class="flex items-center justify-between mb-4">
-            <h3 class="text-xs font-bold text-zinc-200">Registered Providers</h3>
-            <button class="px-3 py-1.5 bg-gear-gold text-slate-deep font-bold text-xs rounded">+ Add Provider</button>
-          </div>
           <p class="text-xs text-zinc-400">Integrated with local <code class="text-gear-gold">ringmaster.toml</code>.</p>
         </div>
       </section>
@@ -287,30 +317,16 @@
           <h2 class="text-lg font-bold text-gear-gold font-cinzel">Execution Analytics & Token Usage</h2>
           <p class="text-xs text-zinc-400">Accurate token breakdown per agent, role, and task vs estimates.</p>
         </div>
-        <div class="grid grid-cols-3 gap-4">
-          <div class="bg-slate-panel border border-steel p-4 rounded-lg">
-            <span class="text-[10px] text-zinc-400 uppercase">Total Tokens Consumed</span>
-            <p class="text-xl font-bold text-gear-gold mt-1">42,850</p>
-          </div>
-          <div class="bg-slate-panel border border-steel p-4 rounded-lg">
-            <span class="text-[10px] text-zinc-400 uppercase">Estimated Range</span>
-            <p class="text-xl font-bold text-cyan-energy mt-1">40k – 90k</p>
-          </div>
-          <div class="bg-slate-panel border border-steel p-4 rounded-lg">
-            <span class="text-[10px] text-zinc-400 uppercase">Project Budget Limit</span>
-            <p class="text-xl font-bold text-zinc-300 mt-1">300,000</p>
-          </div>
-        </div>
       </section>
     </main>
   </div>
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 
 const activeView = ref('chat')
-const chatTarget = ref('master')
+const selectedTarget = ref('master')
 
 const navItems = [
   { id: 'chat', label: 'Chat', icon: '💬', badge: '1 Alert', badgeClass: 'bg-amber-950 text-amber-400 border border-amber-800' },
@@ -319,15 +335,40 @@ const navItems = [
   { id: 'analytics', label: 'Analytics', icon: '📈' }
 ]
 
+// Dynamic Parallel Workers List currently operating across git worktrees
+const activeWorkersList = ref([
+  {
+    id: 'coder-sonnet',
+    name: 'coder-sonnet',
+    taskId: 'T02',
+    taskTitle: 'Implement Unit Tests',
+    status: 'RUNNING',
+    progress: 65,
+    turn: 4
+  },
+  {
+    id: 'coder-haiku',
+    name: 'coder-haiku',
+    taskId: 'T03',
+    taskTitle: 'Generate Markdown API Docs',
+    status: 'BLOCKED',
+    progress: 30,
+    turn: 2
+  }
+])
+
+const activeWorkersCount = computed(() => activeWorkersList.value.length)
+
 const messages = ref([
   {
     role: 'master',
-    text: 'Halo Jal! Aku Master Architect Ringmaster. Aku sudah menyusun rencana tugas awal untuk modul kalkulator matematika. Task T01 sudah selesai dan task T02 saat ini sedang dikerjakan oleh Worker.',
+    targetLabel: 'Team',
+    text: 'Halo Jal! Rencana proyek sudah disetujui. Dua worker sekarang sedang bekerja secara paralel di git worktree terisolasi masing-masing.',
     time: '15:30'
   },
   {
     role: 'worker',
-    workerName: 'coder-sonnet',
+    workerId: 'coder-sonnet',
     taskId: 'T01',
     taskBranch: 'rm/T01',
     statusTitle: '✓ TASK T01 COMPLETED & MERGED',
@@ -338,16 +379,20 @@ const messages = ref([
   },
   {
     role: 'worker',
-    workerName: 'coder-sonnet',
-    taskId: 'T02',
-    taskBranch: 'rm/T02',
-    statusTitle: '⚠ WORKER REPORT: UNIT TESTS EDGE CASES BLOCKED',
+    workerId: 'coder-haiku',
+    taskId: 'T03',
+    taskBranch: 'rm/T03',
+    statusTitle: '⚠ WORKER REPORT: MISSING DOCUMENTATION TEMPLATE',
     type: 'error',
-    text: 'Aku menemukan divide-by-zero handling belum didefinisikan dalam brief. Apakah fungsi harus mengembalikan error eksplisit (result, err) atau panic?',
+    text: 'Aku butuh petunjuk apakah dokumentasi API fungsi matematika ingin dibuat dalam bahasa Indonesia atau bahasa Inggris?',
     time: '15:35',
     actionable: true
   }
 ])
+
+const filteredMessages = computed(() => {
+  return messages.value
+})
 
 const inputMsg = ref('')
 
@@ -358,7 +403,7 @@ Membangun modul kalkulasi matematika sederhana di Go dengan unit test lengkap.
 
 ## Scope & Requirements
 - File: math_helper.go
-- Functions: add(a, b), multiply(a, b), divide(a, b)
+- Functions: add(a, b), multiply(a, b)
 - Unit tests: math_helper_test.go
 
 ## Acceptance Criteria
@@ -367,35 +412,39 @@ Membangun modul kalkulasi matematika sederhana di Go dengan unit test lengkap.
 const tasks = ref([
   { id: 'T01', title: 'Setup Repository & Core Math Functions', desc: 'Implement add() and multiply()', worker: 'coder-sonnet', status: 'DONE', retries: '0/2' },
   { id: 'T02', title: 'Implement Comprehensive Unit Tests', desc: 'Add test suite for edge cases', worker: 'coder-sonnet', status: 'RUNNING', retries: '1/2' },
-  { id: 'T03', title: 'Generate Markdown API Documentation', desc: 'Document functions in README', worker: 'coder-sonnet', status: 'PENDING', retries: '0/2' }
+  { id: 'T03', title: 'Generate Markdown API Documentation', desc: 'Document functions in README', worker: 'coder-haiku', status: 'BLOCKED', retries: '0/2' }
 ])
 
 function sendMessage() {
   if (!inputMsg.value.trim()) return
   const text = inputMsg.value
+  const target = selectedTarget.value
+
   messages.value.push({
     role: 'user',
+    targetLabel: target === 'master' ? 'Master Planner' : target,
     text: text,
     time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
   })
   inputMsg.value = ''
 
   setTimeout(() => {
-    if (chatTarget.value === 'master') {
+    if (target === 'master') {
       messages.value.push({
         role: 'master',
-        text: `Instruksi diterima, Jal. Aku akan mengkoordinasikan keputusan ini ke Worker di task T02 dan memperbarui file brief.`,
+        targetLabel: 'You',
+        text: `Instruksi diterima, Jal. Aku akan mengkoordinasikan strategi ini ke worker yang relevan.`,
         time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
       })
     } else {
       messages.value.push({
         role: 'worker',
-        workerName: 'coder-sonnet',
-        taskId: 'T02',
-        taskBranch: 'rm/T02',
-        statusTitle: '⚡ WORKER ACKNOWLEDGED',
+        workerId: target,
+        taskId: target === 'coder-haiku' ? 'T03' : 'T02',
+        taskBranch: target === 'coder-haiku' ? 'rm/T03' : 'rm/T02',
+        statusTitle: '⚡ WORKER ACKNOWLEDGED DIRECT INSTRUCTION',
         type: 'success',
-        text: `Siap! Instruksi "${text}" langsung aku terapkan ke kode dan test suite di worktree rm/T02.`,
+        text: `Siap! Instruksi "${text}" langsung aku eksekusi di worktree sekarang.`,
         time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         actionable: false
       })
@@ -407,20 +456,21 @@ function instructWorker(msg, action) {
   if (action === 'approve') {
     messages.value.push({
       role: 'user',
+      targetLabel: msg.workerId,
       text: `Approved report for ${msg.taskId}. Lanjutkan ke langkah berikutnya.`,
       time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
     })
     msg.actionable = false
   } else if (action === 'direct') {
-    chatTarget.value = 'worker'
-    inputMsg.value = `Untuk task ${msg.taskId}: `
+    selectedTarget.value = msg.workerId
+    inputMsg.value = `Untuk task ${msg.taskId}: Gunakan bahasa Indonesia. `
   } else if (action === 'via_master') {
-    chatTarget.value = 'master'
-    inputMsg.value = `Master, tolong tinjau ulang blocker pada task ${msg.taskId}: `
+    selectedTarget.value = 'master'
+    inputMsg.value = `Master, tolong bantu arahkan ${msg.workerId} di task ${msg.taskId} mengenai template dokumentasi.`
   }
 }
 
 function crackWhip() {
-  alert('💥 Crack! Ringmaster whips workers to accelerate execution!')
+  alert('💥 Crack! Ringmaster whips workers to expedite execution across all active worktrees!')
 }
 </script>
