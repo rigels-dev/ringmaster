@@ -54,6 +54,37 @@
       </div>
     </aside>
 
+    <!-- Global Floating Toast Notification System (Replaces browser alert) -->
+    <div class="fixed bottom-5 right-5 z-50 flex flex-col gap-2 pointer-events-none max-w-sm">
+      <div 
+        v-for="toast in toastList" 
+        :key="toast.id"
+        class="p-4 rounded-xl shadow-2xl border backdrop-blur-md font-mono text-xs pointer-events-auto transition-all animate-bounce"
+        :class="{
+          'bg-slate-dark/95 border-green-500/50 text-parchment shadow-green-500/10': toast.type === 'success',
+          'bg-slate-dark/95 border-red-500/50 text-parchment shadow-red-500/10': toast.type === 'error',
+          'bg-slate-dark/95 border-gear-gold/50 text-parchment shadow-gear-gold/10': toast.type === 'info'
+        }"
+      >
+        <div class="flex items-start gap-3">
+          <span class="text-base" v-if="toast.type === 'success'">✓</span>
+          <span class="text-base" v-else-if="toast.type === 'error'">✗</span>
+          <span class="text-base" v-else>ℹ</span>
+          <div class="flex-1">
+            <h4 class="font-bold text-xs mb-1" :class="toast.type === 'success' ? 'text-green-400' : (toast.type === 'error' ? 'text-red-400' : 'text-gear-gold')">
+              {{ toast.title }}
+            </h4>
+            <p class="text-[11px] text-zinc-300 leading-relaxed whitespace-pre-wrap">{{ toast.message }}</p>
+            <div v-if="toast.meta" class="mt-2 pt-2 border-t border-steel/60 flex items-center justify-between text-[10px] text-zinc-500">
+              <span>Latency: <strong class="text-cyan-energy">{{ toast.meta.latency }}ms</strong></span>
+              <span v-if="toast.meta.tokens">Tokens: <strong class="text-zinc-300">{{ toast.meta.tokens }}</strong></span>
+            </div>
+          </div>
+          <button @click="dismissToast(toast.id)" class="text-zinc-500 hover:text-zinc-300 text-xs">✕</button>
+        </div>
+      </div>
+    </div>
+
     <!-- Main Content Workspace Area -->
     <main class="flex-1 flex flex-col h-full bg-slate-deep overflow-hidden">
       <!-- 1. CHAT VIEW (Blank on init until user starts) -->
@@ -671,6 +702,19 @@ const showAddAgentModal = ref(false)
 const isLoadingModels = ref(false)
 const fetchedModelList = ref([])
 const agentPingStates = ref({})
+const toastList = ref([])
+
+function showToast(title, message, type = 'success', meta = null) {
+  const id = Date.now() + Math.random()
+  toastList.value.push({ id, title, message, type, meta })
+  setTimeout(() => {
+    dismissToast(id)
+  }, 5000)
+}
+
+function dismissToast(id) {
+  toastList.value = toastList.value.filter(t => t.id !== id)
+}
 
 const newAgent = ref({
   id: '',
@@ -810,7 +854,7 @@ const completedTasksCount = computed(() => {
 
 async function saveNewAgent() {
   if (!newAgent.value.id.trim() || !newAgent.value.model.trim()) {
-    alert('Agent alias and model name are required')
+    showToast('Validation Error', 'Agent alias and model name are required', 'error')
     return
   }
   try {
@@ -825,17 +869,17 @@ async function saveNewAgent() {
     })
     const data = await res.json()
     if (data.ok) {
-      alert(data.message)
+      showToast('Agent Registered', `Agent '${newAgent.value.id}' (${newAgent.value.model}) added to fleet.`, 'success')
       showAddAgentModal.value = false
       newAgent.value.id = ''
       newAgent.value.model = ''
       loadProvidersData()
       loadProjectData()
     } else {
-      alert('Error: ' + data.error)
+      showToast('Registration Error', data.error, 'error')
     }
   } catch (err) {
-    alert('Failed to register agent: ' + err.message)
+    showToast('Failed to register agent', err.message, 'error')
   }
 }
 
@@ -848,13 +892,14 @@ async function setAgentRole(id, role) {
     })
     const data = await res.json()
     if (data.ok) {
+      showToast('Role Updated', `Agent '${id}' is now designated as ${role.toUpperCase()}.`, 'info')
       loadProvidersData()
       loadProjectData()
     } else {
-      alert('Error: ' + data.error)
+      showToast('Update Failed', data.error, 'error')
     }
   } catch (err) {
-    alert('Failed to switch role: ' + err.message)
+    showToast('Role Switch Error', err.message, 'error')
   }
 }
 
@@ -868,13 +913,14 @@ async function deleteAgent(id) {
     })
     const data = await res.json()
     if (data.ok) {
+      showToast('Agent Removed', `Agent '${id}' removed from fleet.`, 'info')
       loadProvidersData()
       loadProjectData()
     } else {
-      alert('Error: ' + data.error)
+      showToast('Delete Failed', data.error, 'error')
     }
   } catch (err) {
-    alert('Failed to delete agent: ' + err.message)
+    showToast('Failed to delete agent', err.message, 'error')
   }
 }
 
@@ -910,7 +956,7 @@ async function testPing() {
 async function pingAgent(a) {
   const p = providersData.value.providers?.find(prov => prov.id === a.provider)
   if (!p) {
-    alert(`Provider '${a.provider}' not found in active providers config.`)
+    showToast('Provider Not Found', `Provider '${a.provider}' is not configured in ringmaster.toml`, 'error')
     return
   }
 
@@ -928,19 +974,28 @@ async function pingAgent(a) {
     })
     const data = await res.json()
     if (data.ok) {
-      alert(`✓ Agent Ping SUCCESS for '${a.id}' (${data.latency_ms}ms)!\n${data.message}`)
+      showToast(
+        `Agent '${a.id}' Connected`,
+        `Model ${a.model} successfully responded to chat request.`,
+        'success',
+        { latency: data.latency_ms, tokens: 1 }
+      )
     } else {
-      alert(`✗ Agent Ping FAILED for '${a.id}' (${data.latency_ms || 0}ms):\n${data.error}`)
+      showToast(
+        `Agent '${a.id}' Ping Failed`,
+        data.error || 'Unknown error occurred while contacting model.',
+        'error',
+        { latency: data.latency_ms || 0 }
+      )
     }
   } catch (err) {
-    alert(`✗ Connection error pinging '${a.id}': ` + err.message)
+    showToast(`Connection Error`, err.message, 'error')
   } finally {
     agentPingStates.value[a.id] = { loading: false }
   }
 }
 
 async function pingExisting(p) {
-  alert(`Testing connection to ${p.id}...`)
   try {
     const res = await fetch('/api/ping', {
       method: 'POST',
@@ -949,18 +1004,28 @@ async function pingExisting(p) {
     })
     const data = await res.json()
     if (data.ok) {
-      alert(`✓ Ping for '${p.id}' SUCCESS (${data.latency_ms}ms)!\n${data.message}`)
+      showToast(
+        `Provider '${p.id}' Reachable`,
+        data.message,
+        'success',
+        { latency: data.latency_ms }
+      )
     } else {
-      alert(`✗ Ping for '${p.id}' FAILED (${data.latency_ms || 0}ms):\n${data.error}`)
+      showToast(
+        `Provider '${p.id}' Offline`,
+        data.error,
+        'error',
+        { latency: data.latency_ms || 0 }
+      )
     }
   } catch (err) {
-    alert('✗ Error: ' + err.message)
+    showToast(`Ping Error`, err.message, 'error')
   }
 }
 
 async function saveProvider() {
   if (!newProv.value.id.trim()) {
-    alert('Provider ID is required')
+    showToast('Validation Error', 'Provider ID is required', 'error')
     return
   }
   try {
@@ -974,15 +1039,15 @@ async function saveProvider() {
     })
     const data = await res.json()
     if (data.ok) {
-      alert(data.message)
+      showToast('Provider Saved', data.message, 'success')
       newProv.value = { id: '', type: 'openai', base_url: '', api_key_env: '' }
       pingStatus.value = null
       loadProvidersData()
     } else {
-      alert('Error: ' + data.error)
+      showToast('Save Failed', data.error, 'error')
     }
   } catch (err) {
-    alert('Failed to save provider: ' + err.message)
+    showToast('Failed to save provider', err.message, 'error')
   }
 }
 
@@ -996,10 +1061,11 @@ async function deleteProvider(id) {
     })
     const data = await res.json()
     if (data.ok) {
+      showToast('Provider Deleted', `Provider '${id}' removed from configuration.`, 'info')
       loadProvidersData()
     }
   } catch (err) {
-    alert('Failed to delete: ' + err.message)
+    showToast('Delete Failed', err.message, 'error')
   }
 }
 
