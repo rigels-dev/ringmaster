@@ -215,7 +215,7 @@ func StartWebUI(projectDir string, hasProject bool) error {
 		fmt.Printf("   Project Context: %s\n", projectDir)
 	}
 	fmt.Println("   URL: https://ringmaster.rigels.web.id (or http://localhost:3000)")
-	fmt.Println("   Status: Running. Press Ctrl+C to stop.\n")
+	fmt.Println("   Status: Running. Press Ctrl+C to stop.")
 
 	err := cmd.Run()
 	if ctx.Err() != nil {
