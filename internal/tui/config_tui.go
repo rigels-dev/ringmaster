@@ -102,7 +102,7 @@ var popularProviders = []ProviderOption{
 	{
 		ID:          "anthropic",
 		Name:        "Anthropic",
-		Description: "Claude 3.7 Sonnet, Opus, Haiku",
+		Description: "Claude 5.5 Sonnet, Opus, Haiku",
 		AuthMethods: []AuthMethodOption{
 			{
 				ID:          "claude_cli",
