@@ -16,8 +16,9 @@ func TestClaudeOAuthURLView(t *testing.T) {
 	m1, _ := model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'a'}})
 	// Step 2: press Enter on Anthropic
 	m2, _ := m1.(ConfigModel).Update(tea.KeyMsg{Type: tea.KeyEnter})
-	// Step 3: press Enter on Claude Subscription (Login via Browser URL & Authorized Code)
-	m3, _ := m2.(ConfigModel).Update(tea.KeyMsg{Type: tea.KeyEnter})
+	// Move down to option 1 (Manual Browser OAuth URL & Paste Code)
+	m2_oauth, _ := m2.(ConfigModel).Update(tea.KeyMsg{Type: tea.KeyDown})
+	m3, _ := m2_oauth.(ConfigModel).Update(tea.KeyMsg{Type: tea.KeyEnter})
 	v3 := m3.(ConfigModel).View()
 
 	if !strings.Contains(v3, "Claude Subscription Authorization") {
@@ -42,10 +43,11 @@ func TestClaudeExistingSessionAndVersionedModels(t *testing.T) {
 	m1, _ := model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'a'}})
 	// Step 2: press Enter on Anthropic
 	m2, _ := m1.(ConfigModel).Update(tea.KeyMsg{Type: tea.KeyEnter})
-	// Move down to option 1 (Reuse existing local ~/.claude session)
-	m2_down, _ := m2.(ConfigModel).Update(tea.KeyMsg{Type: tea.KeyDown})
+	// Move down twice to option 2 (Reuse Existing Session)
+	m2_down1, _ := m2.(ConfigModel).Update(tea.KeyMsg{Type: tea.KeyDown})
+	m2_down2, _ := m2_down1.(ConfigModel).Update(tea.KeyMsg{Type: tea.KeyDown})
 	// Press Enter -> directly lists models with FULL VERSIONS!
-	m3, _ := m2_down.(ConfigModel).Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m3, _ := m2_down2.(ConfigModel).Update(tea.KeyMsg{Type: tea.KeyEnter})
 	v3 := m3.(ConfigModel).View()
 
 	// Verify full versions are listed!

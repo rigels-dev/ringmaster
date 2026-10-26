@@ -23,7 +23,7 @@ const (
 	AuthorizeURL = "https://claude.com/cai/oauth/authorize"
 	TokenURL     = "https://platform.claude.com/v1/oauth/token"
 	RedirectURI  = "https://platform.claude.com/oauth/code/callback"
-	Scopes       = "org:create_api_key user:profile user:inference user:sessions:claude_code user:mcp_servers user:file_upload user:plugins"
+	Scopes       = "user:inference"
 )
 
 type AuthStatus struct {

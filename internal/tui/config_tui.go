@@ -2,7 +2,9 @@ package tui
 
 import (
 	"context"
+	"encoding/base64"
 	"fmt"
+	"os/exec"
 	"strings"
 	"time"
 
@@ -110,6 +112,10 @@ const (
 	modeAddAgent
 )
 
+type claudeLoginDoneMsg struct {
+	err error
+}
+
 type AuthMethodOption struct {
 	ID          string
 	Label       string
@@ -134,9 +140,18 @@ var popularProviders = []ProviderOption{
 		Description: "Claude 5.5 Sonnet, Opus, Haiku",
 		AuthMethods: []AuthMethodOption{
 			{
+				ID:          "claude_login_cli",
+				Label:       "Launch Official Claude Login in Terminal (claude auth login)",
+				Description: "Suspends TUI, opens official login in browser, then returns here",
+				Type:        "claude_subscription",
+				BaseURL:     "",
+				DefaultEnv:  "",
+				NeedsInput:  false,
+			},
+			{
 				ID:          "claude_oauth",
-				Label:       "Claude Subscription (Login via Browser URL & Authorized Code)",
-				Description: "Generates auth link to claude.ai/oauth/authorize and exchanges code",
+				Label:       "Manual Browser OAuth URL & Paste Code",
+				Description: "Generates auth link to claude.com and exchanges code",
 				Type:        "claude_subscription",
 				BaseURL:     "",
 				DefaultEnv:  "",
@@ -144,8 +159,8 @@ var popularProviders = []ProviderOption{
 			},
 			{
 				ID:          "claude_cli",
-				Label:       "Anthropic Claude CLI (Reuse existing local ~/.claude session)",
-				Description: "Uses existing Claude Pro/Team session already logged in",
+				Label:       "Reuse Existing Session (Already logged in on this host)",
+				Description: "Checks local ~/.claude credentials and uses them directly",
 				Type:        "claude_subscription",
 				BaseURL:     "",
 				DefaultEnv:  "",
@@ -396,6 +411,36 @@ func (m ConfigModel) getFilteredProviders() []ProviderOption {
 
 func (m ConfigModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
+	case claudeLoginDoneMsg:
+		status := auth.CheckClaudeCLIStatus()
+		if !status.LoggedIn {
+			m.statusMsg = "Claude login was not completed. Please try again."
+			m.mode = modePickProviderStep2
+			return m, nil
+		}
+
+		providerKey := "claude_subscription"
+		p := config.ProviderConfig{
+			Type: "claude_subscription",
+		}
+		m.cfg.Providers[providerKey] = p
+		_ = config.SaveFile(m.configPath, m.cfg)
+		m.configuredProviderKey = providerKey
+
+		// Fetch models
+		client := llm.NewProvider(p.Type, "", "")
+		ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
+		models, _ := client.ListModels(ctx)
+		cancel()
+
+		m.fetchedModels = models
+		m.checkedModels = make(map[string]bool)
+		m.modelCursor = 0
+		m.modelSearchQuery = ""
+		m.statusMsg = fmt.Sprintf("✓ Logged in as %s (%s)! Check models to add to list.", status.Email, status.SubscriptionType)
+		m.mode = modePickModel
+		return m, nil
+
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
@@ -578,6 +623,13 @@ func (m ConfigModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					providerKey = "claude_subscription"
 				}
 
+				if method.ID == "claude_login_cli" {
+					cmd := exec.Command("claude", "auth", "login")
+					return m, tea.ExecProcess(cmd, func(err error) tea.Msg {
+						return claudeLoginDoneMsg{err: err}
+					})
+				}
+
 				if method.ID == "claude_oauth" {
 					authURL, verifier, state, err := auth.GenerateAuthURL()
 					if err != nil {
@@ -635,6 +687,11 @@ func (m ConfigModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			switch msg.String() {
 			case "esc":
 				m.mode = modePickProviderStep2
+				return m, nil
+			case "ctrl+c":
+				// Copy URL using OSC 52
+				fmt.Printf("\x1b]52;c;%s\x07", base64.StdEncoding.EncodeToString([]byte(m.oauthURL)))
+				m.statusMsg = "✓ Copied full authorization URL to clipboard!"
 				return m, nil
 			case "enter":
 				code := strings.TrimSpace(m.oauthInput.Value())
@@ -1264,7 +1321,7 @@ func (m ConfigModel) View() string {
 			b.WriteString("  " + errStyle.Render(m.statusMsg) + "\n\n")
 		}
 
-		b.WriteString(hintStyle.Render("Press [Enter] to submit code · [Esc] to cancel") + "\n")
+		b.WriteString(hintStyle.Render("Ctrl+C: Copy full URL to clipboard · [Enter] Submit code · [Esc] Cancel") + "\n")
 		return b.String()
 	}
 
