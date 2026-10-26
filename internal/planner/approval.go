@@ -9,6 +9,11 @@ import (
 	"ringmaster/internal/storage"
 )
 
+// ReadPlanFile reads and parses plan.json from disk.
+func ReadPlanFile(path string) (*schemas.Plan, error) {
+	return storage.ReadJSON[schemas.Plan](path)
+}
+
 // ApprovedPlan stores the plan and its canonical plan hash.
 type ApprovedPlan struct {
 	PlanHash string        `json:"plan_hash"`
