@@ -861,6 +861,7 @@ function getRequestURL(event, opts = {}) {
 }
 
 const RawBodySymbol = Symbol.for("h3RawBody");
+const ParsedBodySymbol = Symbol.for("h3ParsedBody");
 const PayloadMethods$1 = ["PATCH", "POST", "PUT", "DELETE"];
 function readRawBody(event, encoding = "utf8") {
   assertMethod(event, PayloadMethods$1);
@@ -930,6 +931,26 @@ function readRawBody(event, encoding = "utf8") {
   const result = encoding ? promise.then((buff) => buff.toString(encoding)) : promise;
   return result;
 }
+async function readBody(event, options = {}) {
+  const request = event.node.req;
+  if (hasProp(request, ParsedBodySymbol)) {
+    return request[ParsedBodySymbol];
+  }
+  const contentType = request.headers["content-type"] || "";
+  const body = await readRawBody(event);
+  let parsed;
+  if (contentType === "application/json") {
+    parsed = _parseJSON(body, options.strict ?? true);
+  } else if (contentType.startsWith("application/x-www-form-urlencoded")) {
+    parsed = _parseURLEncodedBody(body);
+  } else if (contentType.startsWith("text/")) {
+    parsed = body;
+  } else {
+    parsed = _parseJSON(body, options.strict ?? false);
+  }
+  request[ParsedBodySymbol] = parsed;
+  return parsed;
+}
 function getRequestWebStream(event) {
   if (!PayloadMethods$1.includes(event.method)) {
     return;
@@ -963,6 +984,35 @@ function getRequestWebStream(event) {
       });
     }
   });
+}
+function _parseJSON(body = "", strict) {
+  if (!body) {
+    return void 0;
+  }
+  try {
+    return destr(body, { strict });
+  } catch {
+    throw createError$1({
+      statusCode: 400,
+      statusMessage: "Bad Request",
+      message: "Invalid JSON body"
+    });
+  }
+}
+function _parseURLEncodedBody(body) {
+  const form = new URLSearchParams(body);
+  const parsedForm = /* @__PURE__ */ Object.create(null);
+  for (const [key, value] of form.entries()) {
+    if (hasProp(parsedForm, key)) {
+      if (!Array.isArray(parsedForm[key])) {
+        parsedForm[key] = [parsedForm[key]];
+      }
+      parsedForm[key].push(value);
+    } else {
+      parsedForm[key] = value;
+    }
+  }
+  return parsedForm;
 }
 
 function handleCacheHeaders(event, opts) {
@@ -4114,7 +4164,7 @@ function _expandFromEnv(value) {
 const _inlineRuntimeConfig = {
   "app": {
     "baseURL": "/",
-    "buildId": "237c2eb2-4559-4513-992e-e546a7e94d13",
+    "buildId": "b3975f9f-9c0a-439a-83fc-dd3851bccc6d",
     "buildAssetsDir": "/_nuxt/",
     "cdnURL": ""
   },
@@ -4663,7 +4713,7 @@ const NUXT_PRERENDER_NO_SSR_ROUTES = ["/index.html","/200.html","/404.html"];
 const NUXT_NO_SCRIPTS_PATTERNS = [];
 const NUXT_PAGE_PATTERNS = [];
 const NUXT_SSR_STREAMING = false;
-const appHead = {"meta":[{"name":"viewport","content":"width=device-width, initial-scale=1"},{"charset":"utf-8"}],"link":[{"rel":"stylesheet","href":"https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700;900&family=IBM+Plex+Mono:ital,wght@0,300;0,400;0,600;1,400&family=Outfit:wght@300;400;600;800&display=swap"}],"style":[],"script":[],"noscript":[],"title":"Ringmaster — Orchestration Control Board"};
+const appHead = {"meta":[{"name":"viewport","content":"width=device-width, initial-scale=1"},{"charset":"utf-8"}],"link":[{"rel":"icon","type":"image/svg+xml","href":"/icons/ringmaster-icon-transparent.svg"},{"rel":"stylesheet","href":"https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700;900&family=IBM+Plex+Mono:ital,wght@0,300;0,400;0,600;1,400&family=Outfit:wght@300;400;600;800&display=swap"}],"style":[],"script":[],"noscript":[],"title":"Ringmaster — Multi-Agent Control Plane"};
 const appRootTag = "div";
 const appRootAttrs = {"id":"__nuxt"};
 const appTeleportTag = "div";
@@ -4896,65 +4946,86 @@ const assets = {
   "/_nuxt/A0gGSl76.js": {
     "type": "text/javascript; charset=utf-8",
     "etag": "\"a74-+KDoIgcKGOtmyyk7SM6oqk3YW0o\"",
-    "mtime": "2026-10-26T07:14:53.748Z",
+    "mtime": "2026-10-26T08:32:27.694Z",
     "size": 2676,
     "path": "../public/_nuxt/A0gGSl76.js"
   },
   "/_nuxt/B18eEdXr.js": {
     "type": "text/javascript; charset=utf-8",
     "etag": "\"fbd-nGw2IEJX+t6nY7HR6eCzM+vEMVE\"",
-    "mtime": "2026-10-26T07:14:53.749Z",
+    "mtime": "2026-10-26T08:32:27.694Z",
     "size": 4029,
     "path": "../public/_nuxt/B18eEdXr.js"
   },
   "/_nuxt/BDNMzG2s.js": {
     "type": "text/javascript; charset=utf-8",
     "etag": "\"54-MasMfSk/A98C3Gn9uIOxtFxkWNw\"",
-    "mtime": "2026-10-26T07:14:53.749Z",
+    "mtime": "2026-10-26T08:32:27.694Z",
     "size": 84,
     "path": "../public/_nuxt/BDNMzG2s.js"
   },
-  "/_nuxt/CZbYLhbc.js": {
+  "/_nuxt/GFhJ4Hsf.js": {
     "type": "text/javascript; charset=utf-8",
-    "etag": "\"25764-VMB2fXwk4zaeCTOPDBfNa73FZGo\"",
-    "mtime": "2026-10-26T07:14:53.750Z",
-    "size": 153444,
-    "path": "../public/_nuxt/CZbYLhbc.js"
+    "etag": "\"29b3b-3S6SrOxoULMoWLsqeJThsPgDmjk\"",
+    "mtime": "2026-10-26T08:32:27.694Z",
+    "size": 170811,
+    "path": "../public/_nuxt/GFhJ4Hsf.js"
   },
-  "/_nuxt/entry.BqYhtrkr.css": {
+  "/_nuxt/entry.BBB0KCnG.css": {
     "type": "text/css; charset=utf-8",
-    "etag": "\"25c6-nTjIwa3U9dYRLQCqa5q9jyzzz/k\"",
-    "mtime": "2026-10-26T07:14:53.751Z",
-    "size": 9670,
-    "path": "../public/_nuxt/entry.BqYhtrkr.css"
+    "etag": "\"38de-JdKwG21MgDCxY8pJhhCwt+VkZnY\"",
+    "mtime": "2026-10-26T08:32:27.695Z",
+    "size": 14558,
+    "path": "../public/_nuxt/entry.BBB0KCnG.css"
   },
   "/_nuxt/error-404.D_zGJsVb.css": {
     "type": "text/css; charset=utf-8",
     "etag": "\"a8d-GV6UJLy0XlW22+F3aXefu9H2hOo\"",
-    "mtime": "2026-10-26T07:14:53.751Z",
+    "mtime": "2026-10-26T08:32:27.695Z",
     "size": 2701,
     "path": "../public/_nuxt/error-404.D_zGJsVb.css"
   },
   "/_nuxt/error-500.Bw4Q3Qtx.css": {
     "type": "text/css; charset=utf-8",
     "etag": "\"79f-aczzmI+MWSD9zLe2rjpQ+7aLIUQ\"",
-    "mtime": "2026-10-26T07:14:53.752Z",
+    "mtime": "2026-10-26T08:32:27.695Z",
     "size": 1951,
     "path": "../public/_nuxt/error-500.Bw4Q3Qtx.css"
   },
+  "/icons/ringmaster-icon-clean-vector.svg": {
+    "type": "image/svg+xml",
+    "etag": "\"24d6-yweu/xTXpln5EKT4yYzbQknUPiA\"",
+    "mtime": "2026-10-26T08:32:27.701Z",
+    "size": 9430,
+    "path": "../public/icons/ringmaster-icon-clean-vector.svg"
+  },
+  "/icons/ringmaster-icon-traced-exact.svg": {
+    "type": "image/svg+xml",
+    "etag": "\"462c3-SaOcROmWDU9lwk6fKle1Hf1xRSY\"",
+    "mtime": "2026-10-26T08:32:27.701Z",
+    "size": 287427,
+    "path": "../public/icons/ringmaster-icon-traced-exact.svg"
+  },
   "/_nuxt/builds/latest.json": {
     "type": "application/json",
-    "etag": "\"47-OvHWuFbFXxdyroBOOWyaJPXVTBs\"",
-    "mtime": "2026-10-26T07:14:53.722Z",
+    "etag": "\"47-cUkFPkkXS8I9liYaEtzbOiIvqVE\"",
+    "mtime": "2026-10-26T08:32:27.683Z",
     "size": 71,
     "path": "../public/_nuxt/builds/latest.json"
   },
-  "/_nuxt/builds/meta/237c2eb2-4559-4513-992e-e546a7e94d13.json": {
+  "/_nuxt/builds/meta/b3975f9f-9c0a-439a-83fc-dd3851bccc6d.json": {
     "type": "application/json",
-    "etag": "\"58-Ea/I3/2mNRJmUyOXWZZ6p/QvqLg\"",
-    "mtime": "2026-10-26T07:14:53.705Z",
+    "etag": "\"58-E99qTx/HlFs2vHOiuP6rCRmVfJY\"",
+    "mtime": "2026-10-26T08:32:27.677Z",
     "size": 88,
-    "path": "../public/_nuxt/builds/meta/237c2eb2-4559-4513-992e-e546a7e94d13.json"
+    "path": "../public/_nuxt/builds/meta/b3975f9f-9c0a-439a-83fc-dd3851bccc6d.json"
+  },
+  "/icons/ringmaster-icon-transparent.svg": {
+    "type": "image/svg+xml",
+    "etag": "\"248a-4Jp/Br0xMV15ahMJ4ww7jdRFRQ0\"",
+    "mtime": "2026-10-26T08:32:27.701Z",
+    "size": 9354,
+    "path": "../public/icons/ringmaster-icon-transparent.svg"
   }
 };
 
@@ -5181,10 +5252,18 @@ function assertAssetData(event, data) {
 
 const _SxA8c9 = defineEventHandler(() => {});
 
+const _lazy_T3M0Gu = () => import('../routes/api/ping.post.mjs');
+const _lazy_sKopKY = () => import('../routes/api/project.get.mjs');
+const _lazy_d4zSI8 = () => import('../routes/api/providers.get.mjs');
+const _lazy_0bYJAs = () => import('../routes/api/providers.post.mjs');
 const _lazy_BhnRQx = () => import('../routes/renderer.mjs').then(function (n) { return n.r; });
 
 const handlers = [
   { route: '', handler: _hzMH5V, lazy: false, middleware: true, method: undefined },
+  { route: '/api/ping', handler: _lazy_T3M0Gu, lazy: true, middleware: false, method: "post" },
+  { route: '/api/project', handler: _lazy_sKopKY, lazy: true, middleware: false, method: "get" },
+  { route: '/api/providers', handler: _lazy_d4zSI8, lazy: true, middleware: false, method: "get" },
+  { route: '/api/providers', handler: _lazy_0bYJAs, lazy: true, middleware: false, method: "post" },
   { route: '/__nuxt_error', handler: _lazy_BhnRQx, lazy: true, middleware: false, method: undefined },
   { route: '/__nuxt_island/**', handler: _SxA8c9, lazy: false, middleware: false, method: undefined },
   { route: '/**', handler: _lazy_BhnRQx, lazy: true, middleware: false, method: undefined }
@@ -5643,5 +5722,5 @@ trapUnhandledNodeErrors();
 setupGracefulShutdown(listener, nitroApp);
 const nodeServer = {};
 
-export { $fetch as $, setResponseHeader as A, isEqual as B, stringifyParsedURL as C, stringifyQuery as D, parseQuery as E, withQuery as F, sanitizeStatusCode as G, parseURL as H, decodePath as I, isScriptProtocol as J, hasProtocol as K, withTrailingSlash as L, withoutTrailingSlash as M, NUXT_PRERENDER_NO_SSR_ROUTES as N, nodeServer as O, appRootTag as a, appRootAttrs as b, appSpaLoaderTag as c, appSpaLoaderAttrs as d, createError$1 as e, useNitroApp as f, getRouteRules as g, createHead as h, unheadOptions as i, joinRelativeURL as j, appId as k, getQuery as l, appHead as m, destr as n, NUXT_SSR_STREAMING as o, appTeleportAttrs as p, NUXT_NO_SCRIPTS_PATTERNS as q, renderSSRHeadOptions as r, relative as s, joinURL as t, useRuntimeConfig as u, appTeleportTag as v, writeEarlyHints as w, NUXT_PAGE_PATTERNS as x, defineRenderHandler as y, toRequestEvent as z };
+export { $fetch as $, defineRenderHandler as A, toRequestEvent as B, setResponseHeader as C, isEqual as D, stringifyParsedURL as E, stringifyQuery as F, parseQuery as G, withQuery as H, sanitizeStatusCode as I, parseURL as J, decodePath as K, isScriptProtocol as L, hasProtocol as M, NUXT_PRERENDER_NO_SSR_ROUTES as N, withTrailingSlash as O, withoutTrailingSlash as P, nodeServer as Q, appRootTag as a, appRootAttrs as b, appSpaLoaderTag as c, defineEventHandler as d, appSpaLoaderAttrs as e, createError$1 as f, useNitroApp as g, getRouteRules as h, createHead as i, joinRelativeURL as j, unheadOptions as k, appId as l, getQuery as m, appHead as n, destr as o, NUXT_SSR_STREAMING as p, renderSSRHeadOptions as q, readBody as r, appTeleportAttrs as s, NUXT_NO_SCRIPTS_PATTERNS as t, useRuntimeConfig as u, relative as v, writeEarlyHints as w, joinURL as x, appTeleportTag as y, NUXT_PAGE_PATTERNS as z };
 //# sourceMappingURL=nitro.mjs.map

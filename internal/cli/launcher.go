@@ -212,6 +212,7 @@ func StartWebUI(projectDir string, hasProject bool) error {
 		"NITRO_PORT=12053",
 		"HOST=127.0.0.1",
 		"NITRO_HOST=127.0.0.1",
+		fmt.Sprintf("RINGMASTER_PROJECT_DIR=%s", projectDir),
 	)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
