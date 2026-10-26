@@ -207,6 +207,12 @@ func StartWebUI(projectDir string, hasProject bool) error {
 
 	cmd := exec.CommandContext(ctx, "node", serverScript)
 	cmd.Dir = filepath.Dir(serverScript)
+	cmd.Env = append(os.Environ(),
+		"PORT=12053",
+		"NITRO_PORT=12053",
+		"HOST=127.0.0.1",
+		"NITRO_HOST=127.0.0.1",
+	)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 
@@ -214,7 +220,8 @@ func StartWebUI(projectDir string, hasProject bool) error {
 	if hasProject {
 		fmt.Printf("   Project Context: %s\n", projectDir)
 	}
-	fmt.Println("   URL: https://ringmaster.rigels.web.id (or http://localhost:3000)")
+	fmt.Println("   URL: https://ringmaster.rigels.web.id (or http://localhost:12053)")
+	fmt.Println("   Port: 12053 (Custom Dedicated Ringmaster Port)")
 	fmt.Println("   Status: Running. Press Ctrl+C to stop.")
 
 	err := cmd.Run()
