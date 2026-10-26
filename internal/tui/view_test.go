@@ -108,24 +108,6 @@ func TestDeleteProviderConfirmation(t *testing.T) {
 	}
 }
 
-func TestClaudeOAuthURLView(t *testing.T) {
-	cfg := config.DefaultConfig()
-	model := NewConfigModel(cfg, "ringmaster.toml")
-
-	m1, _ := model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'a'}})
-	m2, _ := m1.(ConfigModel).Update(tea.KeyMsg{Type: tea.KeyEnter})
-	m2_oauth, _ := m2.(ConfigModel).Update(tea.KeyMsg{Type: tea.KeyDown})
-	m3, _ := m2_oauth.(ConfigModel).Update(tea.KeyMsg{Type: tea.KeyEnter})
-	v3 := m3.(ConfigModel).View()
-
-	if !strings.Contains(v3, "Claude Subscription Authorization") {
-		t.Errorf("expected Claude Subscription Authorization view, got:\n%s", v3)
-	}
-	if !strings.Contains(v3, "https://claude.com/cai/oauth/authorize") {
-		t.Errorf("expected generated authorize URL, got:\n%s", v3)
-	}
-}
-
 func TestClaudeExistingSessionAndVersionedModels(t *testing.T) {
 	cfg := config.DefaultConfig()
 	model := NewConfigModel(cfg, "ringmaster.toml")
@@ -133,8 +115,7 @@ func TestClaudeExistingSessionAndVersionedModels(t *testing.T) {
 	m1, _ := model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'a'}})
 	m2, _ := m1.(ConfigModel).Update(tea.KeyMsg{Type: tea.KeyEnter})
 	m2_down1, _ := m2.(ConfigModel).Update(tea.KeyMsg{Type: tea.KeyDown})
-	m2_down2, _ := m2_down1.(ConfigModel).Update(tea.KeyMsg{Type: tea.KeyDown})
-	m3, _ := m2_down2.(ConfigModel).Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m3, _ := m2_down1.(ConfigModel).Update(tea.KeyMsg{Type: tea.KeyEnter})
 
 	m4, _ := m3.(ConfigModel).Update(tea.KeyMsg{Type: tea.KeySpace})
 	m5, _ := m4.(ConfigModel).Update(tea.KeyMsg{Type: tea.KeyDown})

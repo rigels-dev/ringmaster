@@ -15,8 +15,7 @@ func TestAtomicWizardProviderDiscardOnEsc(t *testing.T) {
 	// Step 2: Choose Claude CLI / Existing session
 	m2, _ := m1.(ConfigModel).Update(tea.KeyMsg{Type: tea.KeyEnter})
 	m2_down1, _ := m2.(ConfigModel).Update(tea.KeyMsg{Type: tea.KeyDown})
-	m2_down2, _ := m2_down1.(ConfigModel).Update(tea.KeyMsg{Type: tea.KeyDown})
-	m3, _ := m2_down2.(ConfigModel).Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m3, _ := m2_down1.(ConfigModel).Update(tea.KeyMsg{Type: tea.KeyEnter})
 
 	// Now in Step 3 (Pick Models)
 	if m3.(ConfigModel).mode != modePickModel {

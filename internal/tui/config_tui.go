@@ -178,15 +178,6 @@ var popularProviders = []ProviderOption{
 				NeedsInput:  false,
 			},
 			{
-				ID:          "claude_oauth",
-				Label:       "Manual Browser OAuth URL & Paste Code",
-				Description: "Generates auth link to claude.com and exchanges code",
-				Type:        "claude_subscription",
-				BaseURL:     "",
-				DefaultEnv:  "",
-				NeedsInput:  false,
-			},
-			{
 				ID:          "claude_cli",
 				Label:       "Reuse Existing Session (Already logged in on this host)",
 				Description: "Checks local ~/.claude credentials and uses them directly",
