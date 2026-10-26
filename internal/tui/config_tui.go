@@ -25,12 +25,12 @@ var (
 			Padding(0, 2)
 
 	inactiveTabStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.AdaptiveColor{Light: "#64748B", Dark: "#8493A0"}).
+			Foreground(lipgloss.AdaptiveColor{Light: "#475569", Dark: "#8493A0"}).
 			Background(lipgloss.AdaptiveColor{Light: "#E2E8F0", Dark: "#1B2229"}).
 			Padding(0, 2)
 
 	headerStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.AdaptiveColor{Light: "#1E293B", Dark: "#DEAA3B"}).
+			Foreground(lipgloss.AdaptiveColor{Light: "#0F172A", Dark: "#DEAA3B"}).
 			Bold(true)
 
 	stepDoneBullet = lipgloss.NewStyle().
@@ -46,7 +46,7 @@ var (
 			Bold(true)
 
 	stepDimTitleStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.AdaptiveColor{Light: "#64748B", Dark: "#94A3B8"}).
+			Foreground(lipgloss.AdaptiveColor{Light: "#475569", Dark: "#94A3B8"}).
 			Bold(true)
 
 	stepAnswerStyle = lipgloss.NewStyle().
@@ -58,21 +58,21 @@ var (
 				Bold(true)
 
 	normalBulletStyle = lipgloss.NewStyle().
-				Foreground(lipgloss.AdaptiveColor{Light: "#94A3B8", Dark: "#64748B"})
+				Foreground(lipgloss.AdaptiveColor{Light: "#64748B", Dark: "#94A3B8"})
 
 	selectedItemStyle = lipgloss.NewStyle().
-				Foreground(lipgloss.AdaptiveColor{Light: "#0369A1", Dark: "#38BDF8"}).
+				Foreground(lipgloss.AdaptiveColor{Light: "#0284C7", Dark: "#38BDF8"}).
 				Bold(true)
 
 	normalItemStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.AdaptiveColor{Light: "#334155", Dark: "#E2E8F0"})
+			Foreground(lipgloss.AdaptiveColor{Light: "#1E293B", Dark: "#E2E8F0"})
 
 	descStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.AdaptiveColor{Light: "#64748B", Dark: "#94A3B8"}).
+			Foreground(lipgloss.AdaptiveColor{Light: "#475569", Dark: "#94A3B8"}).
 			Italic(true)
 
 	hintStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.AdaptiveColor{Light: "#64748B", Dark: "#94A3B8"}).
+			Foreground(lipgloss.AdaptiveColor{Light: "#475569", Dark: "#94A3B8"}).
 			Italic(true)
 
 	statusStyle = lipgloss.NewStyle().
@@ -870,19 +870,19 @@ func (m ConfigModel) View() string {
 	// STEP 1: CHOOSE MODEL / AUTH PROVIDER
 	// ==========================================
 	if m.mode == modePickProviderStep1 {
-		b.WriteString(stepActiveBullet.Render("● ") + stepTitleStyle.Render("Model/auth provider\n"))
+		b.WriteString(stepActiveBullet.Render("●") + " " + stepTitleStyle.Render("Model/auth provider") + "\n")
 
 		searchPrompt := "  Search: "
 		if m.searchQuery != "" {
 			searchPrompt += m.searchQuery
 		} else {
-			searchPrompt += hintStyle.Render("(type to filter...)")
+			searchPrompt += "(type to filter...)"
 		}
 		b.WriteString(headerStyle.Render(searchPrompt) + "\n\n")
 
 		filtered := m.getFilteredProviders()
 		if len(filtered) == 0 {
-			b.WriteString(hintStyle.Render("  No matching providers found.\n\n"))
+			b.WriteString(hintStyle.Render("  No matching providers found.") + "\n\n")
 		} else {
 			for i, p := range filtered {
 				if i == m.providerCursor {
@@ -902,12 +902,12 @@ func (m ConfigModel) View() string {
 	// ==========================================
 	if m.mode == modePickProviderStep2 && m.selectedProvider != nil {
 		// Completed step 1 header
-		b.WriteString(stepDoneBullet.Render("● ") + stepDimTitleStyle.Render("Model/auth provider\n"))
-		b.WriteString(stepAnswerStyle.Render("  " + m.selectedProvider.Name) + "\n\n")
+		b.WriteString(stepDoneBullet.Render("●") + " " + stepDimTitleStyle.Render("Model/auth provider") + "\n")
+		b.WriteString("  " + stepAnswerStyle.Render(m.selectedProvider.Name) + "\n\n")
 
 		// Active step 2 header
-		headerText := fmt.Sprintf("%s auth method\n", m.selectedProvider.Name)
-		b.WriteString(stepActiveBullet.Render("● ") + stepTitleStyle.Render(headerText))
+		headerText := fmt.Sprintf("%s auth method", m.selectedProvider.Name)
+		b.WriteString(stepActiveBullet.Render("●") + " " + stepTitleStyle.Render(headerText) + "\n")
 
 		totalOptions := len(m.selectedProvider.AuthMethods) + 1
 		for i := 0; i < totalOptions; i++ {
@@ -932,23 +932,25 @@ func (m ConfigModel) View() string {
 		return b.String()
 	}
 
+	// AGENT TEMPLATE PICKER
 	if m.mode == modePickAgentTemplate {
-		b.WriteString(stepActiveBullet.Render("● ") + stepTitleStyle.Render("Choose Agent Role / Template\n\n"))
+		b.WriteString(stepActiveBullet.Render("●") + " " + stepTitleStyle.Render("Choose Agent Role / Template") + "\n\n")
 
 		for i, tmpl := range agentTemplates {
 			numBadge := fmt.Sprintf("[%d] ", i+1)
 			if i == m.templateCursor {
 				b.WriteString(selectedBulletStyle.Render("  ● ") + selectedItemStyle.Render(numBadge+tmpl.Title) + "\n")
-				b.WriteString("      " + hintStyle.Render(tmpl.Description) + "\n")
+				b.WriteString("      " + descStyle.Render(tmpl.Description) + "\n")
 			} else {
-				b.WriteString(normalItemStyle.Render("  ○ "+numBadge+tmpl.Title) + "\n")
-				b.WriteString("      " + hintStyle.Render(tmpl.Description) + "\n")
+				b.WriteString(normalBulletStyle.Render("  ○ ") + normalItemStyle.Render(numBadge+tmpl.Title) + "\n")
+				b.WriteString("      " + descStyle.Render(tmpl.Description) + "\n")
 			}
 		}
 		b.WriteString("\n" + hintStyle.Render("Press [1-4] or ↑/↓ and Enter to confirm · Esc: cancel") + "\n")
 		return b.String()
 	}
 
+	// FORM VIEW
 	if m.mode == modeAddProvider || m.mode == modeEditProvider || m.mode == modeAddAgent || m.mode == modeEditAgent {
 		title := "Add Provider"
 		if m.mode == modeEditProvider {
@@ -959,29 +961,28 @@ func (m ConfigModel) View() string {
 			title = "Edit Agent"
 		}
 
-		b.WriteString(headerStyle.Render(fmt.Sprintf("★ %s\n", strings.ToUpper(title))))
-		b.WriteString(hintStyle.Render("Press [Tab] or [↓] to switch fields, [Enter] on last field to submit, [Esc] to cancel.\n\n"))
+		b.WriteString(headerStyle.Render("★ " + strings.ToUpper(title)) + "\n")
+		b.WriteString(hintStyle.Render("Press [Tab] or [↓] to switch fields, [Enter] on last field to submit, [Esc] to cancel.") + "\n\n")
 
 		for i := range m.inputs {
-			b.WriteString(m.inputs[i].View())
-			b.WriteString("\n")
+			b.WriteString(m.inputs[i].View() + "\n")
 		}
 
 		b.WriteString("\n")
 		if m.statusMsg != "" {
-			b.WriteString(statusStyle.Render(m.statusMsg))
-			b.WriteString("\n")
+			b.WriteString(statusStyle.Render(m.statusMsg) + "\n")
 		}
 		return b.String()
 	}
 
+	// LIST VIEW: PROVIDERS
 	if m.activeTab == tabProviders {
 		names := m.getProviderNames()
 		if len(names) == 0 {
-			b.WriteString(hintStyle.Render("No providers registered yet. Press [a] to choose a provider.\n"))
+			b.WriteString(hintStyle.Render("No providers registered yet. Press [a] to choose a provider.") + "\n")
 		} else {
 			b.WriteString(fmt.Sprintf("%-18s %-16s %-32s %-20s\n", headerStyle.Render("PROVIDER NAME"), headerStyle.Render("TYPE"), headerStyle.Render("BASE URL"), headerStyle.Render("API KEY ENV")))
-			b.WriteString(lipgloss.NewStyle().Foreground(lipgloss.Color("#2E3842")).Render("──────────────────────────────────────────────────────────────────────────────────────────\n"))
+			b.WriteString(lipgloss.NewStyle().Foreground(lipgloss.Color("#2E3842")).Render("──────────────────────────────────────────────────────────────────────────────────────────") + "\n")
 
 			for i, name := range names {
 				p := m.cfg.Providers[name]
@@ -1002,17 +1003,17 @@ func (m ConfigModel) View() string {
 				}
 
 				row := fmt.Sprintf("%s%-16s %-16s %-32s %-20s", prefix, name, pType, displayURL, p.APIKeyEnv)
-				b.WriteString(lineStyle.Render(row))
-				b.WriteString("\n")
+				b.WriteString(lineStyle.Render(row) + "\n")
 			}
 		}
 	} else {
+		// LIST VIEW: AGENTS
 		aliases := m.getAgentAliases()
 		if len(aliases) == 0 {
-			b.WriteString(hintStyle.Render("No agents configured yet. Press [a] to add an agent.\n"))
+			b.WriteString(hintStyle.Render("No agents configured yet. Press [a] to add an agent.") + "\n")
 		} else {
 			b.WriteString(fmt.Sprintf("%-16s %-16s %-24s %-10s %-12s\n", headerStyle.Render("ALIAS"), headerStyle.Render("PROVIDER"), headerStyle.Render("MODEL"), headerStyle.Render("ROLE"), headerStyle.Render("TOOL CALL")))
-			b.WriteString(lipgloss.NewStyle().Foreground(lipgloss.Color("#2E3842")).Render("──────────────────────────────────────────────────────────────────────────────────────────\n"))
+			b.WriteString(lipgloss.NewStyle().Foreground(lipgloss.Color("#2E3842")).Render("──────────────────────────────────────────────────────────────────────────────────────────") + "\n")
 
 			for i, alias := range aliases {
 				a := m.cfg.Agents[alias]
@@ -1029,21 +1030,18 @@ func (m ConfigModel) View() string {
 				}
 
 				row := fmt.Sprintf("%s%-14s %-16s %-24s %-10s %-12s", prefix, alias, a.Provider, a.Model, a.Role, tc)
-				b.WriteString(lineStyle.Render(row))
-				b.WriteString("\n")
+				b.WriteString(lineStyle.Render(row) + "\n")
 			}
 		}
 	}
 
 	b.WriteString("\n")
 	if m.statusMsg != "" {
-		b.WriteString(statusStyle.Render(m.statusMsg))
-		b.WriteString("\n\n")
+		b.WriteString(statusStyle.Render(m.statusMsg) + "\n\n")
 	}
 
 	help := hintStyle.Render("[a] Add · [e/Enter] Edit · [d] Delete · [s] Save · [Tab] Switch Tab · [q] Quit")
-	b.WriteString(help)
-	b.WriteString("\n")
+	b.WriteString(help + "\n")
 
 	return b.String()
 }
