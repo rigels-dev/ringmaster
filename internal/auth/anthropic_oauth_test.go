@@ -18,6 +18,9 @@ func TestGenerateAuthURL(t *testing.T) {
 	if !strings.HasPrefix(urlStr, AuthorizeURL) {
 		t.Errorf("expected URL to start with %s, got: %s", AuthorizeURL, urlStr)
 	}
+	if !strings.Contains(urlStr, "redirect_uri=http%3A%2F%2Flocalhost%3A53692%2Fcallback") {
+		t.Errorf("expected redirect_uri=http://localhost:53692/callback in URL, got: %s", urlStr)
+	}
 	if !strings.Contains(urlStr, "code_challenge=") {
 		t.Errorf("expected code_challenge in URL, got: %s", urlStr)
 	}
@@ -26,20 +29,25 @@ func TestGenerateAuthURL(t *testing.T) {
 	}
 }
 
-func TestParseAuthCodeInput(t *testing.T) {
+func TestParseAuthCode(t *testing.T) {
 	cases := []struct {
-		input    string
-		expected string
+		input         string
+		expectedCode  string
+		expectedState string
 	}{
-		{"rawcode123", "rawcode123"},
-		{"code#state", "code"},
-		{"https://console.anthropic.com/oauth/code/callback?code=abc123xyz&state=test", "abc123xyz"},
+		{"rawcode123", "rawcode123", ""},
+		{"code123#state456", "code123", "state456"},
+		{"http://localhost:53692/callback?code=abc123xyz&state=my_state", "abc123xyz", "my_state"},
+		{"code=query_code&state=query_state", "query_code", "query_state"},
 	}
 
 	for _, c := range cases {
-		res := ParseAuthCodeInput(c.input)
-		if res != c.expected {
-			t.Errorf("for input %s, expected %s, got %s", c.input, c.expected, res)
+		code, state := ParseAuthCode(c.input)
+		if code != c.expectedCode {
+			t.Errorf("for input %s, expected code %s, got %s", c.input, c.expectedCode, code)
+		}
+		if state != c.expectedState {
+			t.Errorf("for input %s, expected state %s, got %s", c.input, c.expectedState, state)
 		}
 	}
 }

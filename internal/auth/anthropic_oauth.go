@@ -22,7 +22,7 @@ const (
 	ClientID     = "9d1c250a-e61b-44d9-88ed-5944d1962f5e"
 	AuthorizeURL = "https://claude.ai/oauth/authorize"
 	TokenURL     = "https://platform.claude.com/v1/oauth/token"
-	RedirectURI  = "https://console.anthropic.com/oauth/code/callback"
+	RedirectURI  = "http://localhost:53692/callback"
 	Scopes       = "org:create_api_key user:profile user:inference user:sessions:claude_code user:mcp_servers user:file_upload"
 )
 
@@ -78,21 +78,52 @@ func GenerateAuthURL() (authURL, verifier, state string, err error) {
 	return fmt.Sprintf("%s?%s", AuthorizeURL, q.Encode()), verifier, state, nil
 }
 
-func ParseAuthCodeInput(raw string) string {
+func ParseAuthCode(raw string) (code, state string) {
 	raw = strings.TrimSpace(raw)
-	if strings.Contains(raw, "code=") {
+	if raw == "" {
+		return "", ""
+	}
+
+	// Try URL parsing
+	if strings.HasPrefix(raw, "http://") || strings.HasPrefix(raw, "https://") {
 		u, err := url.Parse(raw)
 		if err == nil {
-			if c := u.Query().Get("code"); c != "" {
-				return c
+			c := u.Query().Get("code")
+			s := u.Query().Get("state")
+			if c != "" {
+				return c, s
 			}
 		}
 	}
+
+	// Handle code#state
 	if strings.Contains(raw, "#") {
-		parts := strings.Split(raw, "#")
-		return strings.TrimSpace(parts[0])
+		parts := strings.SplitN(raw, "#", 2)
+		return strings.TrimSpace(parts[0]), strings.TrimSpace(parts[1])
 	}
-	return raw
+
+	// Handle query string without scheme (e.g. code=...&state=...)
+	if strings.Contains(raw, "code=") {
+		parts := strings.Split(raw, "&")
+		var extractedCode, extractedState string
+		for _, p := range parts {
+			kv := strings.SplitN(p, "=", 2)
+			if len(kv) == 2 {
+				k := strings.TrimSpace(kv[0])
+				v := strings.TrimSpace(kv[1])
+				if k == "code" {
+					extractedCode = v
+				} else if k == "state" {
+					extractedState = v
+				}
+			}
+		}
+		if extractedCode != "" {
+			return extractedCode, extractedState
+		}
+	}
+
+	return raw, ""
 }
 
 type TokenResponse struct {
@@ -102,16 +133,19 @@ type TokenResponse struct {
 	TokenType    string `json:"token_type"`
 }
 
-func ExchangeAuthCode(ctx context.Context, code, verifier, state string) (*TokenResponse, error) {
-	cleanCode := ParseAuthCodeInput(code)
-	if cleanCode == "" {
+func ExchangeAuthCode(ctx context.Context, inputCode, verifier, defaultState string) (*TokenResponse, error) {
+	code, state := ParseAuthCode(inputCode)
+	if code == "" {
 		return nil, fmt.Errorf("authorization code is empty")
+	}
+	if state == "" {
+		state = defaultState
 	}
 
 	payload := map[string]string{
 		"grant_type":    "authorization_code",
 		"client_id":     ClientID,
-		"code":          cleanCode,
+		"code":          code,
 		"state":         state,
 		"redirect_uri":  RedirectURI,
 		"code_verifier": verifier,
