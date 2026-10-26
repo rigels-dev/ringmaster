@@ -480,8 +480,17 @@ func (m ConfigModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, nil
 			case "down", "j":
 				maxLen := m.currentListLen()
-				if m.cursor < maxLen-1 {
+				if maxLen > 0 && m.cursor < maxLen-1 {
 					m.cursor++
+				}
+				return m, nil
+			case "left", "h", "home":
+				m.cursor = 0
+				return m, nil
+			case "right", "l", "end":
+				maxLen := m.currentListLen()
+				if maxLen > 0 {
+					m.cursor = maxLen - 1
 				}
 				return m, nil
 			case "a":
@@ -599,6 +608,14 @@ func (m ConfigModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			case "down":
 				if m.providerCursor < len(filtered)-1 {
 					m.providerCursor++
+				}
+				return m, nil
+			case "left", "home":
+				m.providerCursor = 0
+				return m, nil
+			case "right", "end":
+				if len(filtered) > 0 {
+					m.providerCursor = len(filtered) - 1
 				}
 				return m, nil
 			case "backspace":
@@ -804,6 +821,14 @@ func (m ConfigModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			case "down":
 				if m.modelCursor < totalItems-1 {
 					m.modelCursor++
+				}
+				return m, nil
+			case "left", "home":
+				m.modelCursor = 0
+				return m, nil
+			case "right", "end":
+				if totalItems > 0 {
+					m.modelCursor = totalItems - 1
 				}
 				return m, nil
 			case " ": // Space: Toggle checkbox for highlighted model!
@@ -1731,9 +1756,9 @@ func (m ConfigModel) View() string {
 
 	var helpText string
 	if m.activeTab == tabAgents {
-		helpText = "[m] Set Master · [w] Set Worker · [e/Enter] Edit · [d] Delete · [s] Save · [Tab] Switch · [q] Quit"
+		helpText = "[↑/↓] Move · [←] Top · [→] Bottom · [m] Set Master · [w] Set Worker · [e] Edit · [d] Del · [Tab] Switch · [q] Quit"
 	} else {
-		helpText = "[a] Add Provider · [e/Enter] Edit · [d] Delete · [s] Save · [Tab] Switch Tab · [q] Quit"
+		helpText = "[↑/↓] Move · [←] Top · [→] Bottom · [a] Add · [e] Edit · [d] Del · [s] Save · [Tab] Switch · [q] Quit"
 	}
 	help := hintStyle.Render(helpText)
 	b.WriteString(help + "\n")

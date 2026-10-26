@@ -8,6 +8,48 @@ import (
 	"testing"
 )
 
+func TestNavigationNoLoopAndLeftRight(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.Agents["agent1"] = config.AgentConfig{Provider: "p", Model: "m1", Role: "worker"}
+	cfg.Agents["agent2"] = config.AgentConfig{Provider: "p", Model: "m2", Role: "worker"}
+	cfg.Agents["agent3"] = config.AgentConfig{Provider: "p", Model: "m3", Role: "worker"}
+
+	model := NewConfigModel(cfg, "ringmaster.toml")
+	// Switch to tabAgents
+	m, _ := model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'2'}})
+
+	// Currently at cursor 0
+	if m.(ConfigModel).cursor != 0 {
+		t.Fatalf("expected cursor 0, got %d", m.(ConfigModel).cursor)
+	}
+
+	// Press UP when at top -> Should STAY at 0 (no loop to bottom!)
+	m, _ = m.(ConfigModel).Update(tea.KeyMsg{Type: tea.KeyUp})
+	if m.(ConfigModel).cursor != 0 {
+		t.Errorf("expected cursor to stay at 0, got %d", m.(ConfigModel).cursor)
+	}
+
+	// Press RIGHT -> Jump to bottom (cursor 2)
+	m, _ = m.(ConfigModel).Update(tea.KeyMsg{Type: tea.KeyRight})
+	if m.(ConfigModel).cursor != 2 {
+		t.Errorf("expected cursor 2 (bottom), got %d", m.(ConfigModel).cursor)
+	}
+
+	// Press DOWN when at bottom -> Should STAY at 2 (no loop to top!)
+	m, _ = m.(ConfigModel).Update(tea.KeyMsg{Type: tea.KeyDown})
+	if m.(ConfigModel).cursor != 2 {
+		t.Errorf("expected cursor to stay at 2, got %d", m.(ConfigModel).cursor)
+	}
+
+	// Press LEFT -> Jump to top (cursor 0)
+	m, _ = m.(ConfigModel).Update(tea.KeyMsg{Type: tea.KeyLeft})
+	if m.(ConfigModel).cursor != 0 {
+		t.Errorf("expected cursor 0 (top), got %d", m.(ConfigModel).cursor)
+	}
+
+	fmt.Println("--- Navigation Test Passed (No loop, Left=Top, Right=Bottom)! ---")
+}
+
 func TestDeleteProviderConfirmation(t *testing.T) {
 	cfg := config.DefaultConfig()
 	cfg.Providers["test_prov"] = config.ProviderConfig{Type: "openai", BaseURL: "http://localhost:8080"}
@@ -16,7 +58,6 @@ func TestDeleteProviderConfirmation(t *testing.T) {
 
 	model := NewConfigModel(cfg, "ringmaster.toml")
 
-	// Press 'd' to trigger delete confirmation
 	m1, _ := model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'d'}})
 	v1 := m1.(ConfigModel).View()
 
@@ -27,16 +68,11 @@ func TestDeleteProviderConfirmation(t *testing.T) {
 		t.Errorf("expected warning about 2 dependent agents, got:\n%s", v1)
 	}
 
-	fmt.Println("--- Delete Confirmation Prompt View: ---")
-	fmt.Println(v1)
-
-	// Press 'n' -> cancel
 	mCancel, _ := m1.(ConfigModel).Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'n'}})
 	if len(mCancel.(ConfigModel).cfg.Providers) != 1 {
 		t.Errorf("expected provider not deleted on cancel")
 	}
 
-	// Press 'd' again and press 'y' -> confirm delete
 	m2, _ := mCancel.(ConfigModel).Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'d'}})
 	mConfirm, _ := m2.(ConfigModel).Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'y'}})
 
@@ -46,8 +82,6 @@ func TestDeleteProviderConfirmation(t *testing.T) {
 	if len(mConfirm.(ConfigModel).cfg.Agents) != 0 {
 		t.Errorf("expected all 2 bound agents to be deleted as well, got: %d", len(mConfirm.(ConfigModel).cfg.Agents))
 	}
-
-	fmt.Println("--- Delete Confirmed: Provider and Bound Agents Successfully Deleted! ---")
 }
 
 func TestClaudeOAuthURLView(t *testing.T) {
@@ -66,8 +100,6 @@ func TestClaudeOAuthURLView(t *testing.T) {
 	if !strings.Contains(v3, "https://claude.com/cai/oauth/authorize") {
 		t.Errorf("expected generated authorize URL, got:\n%s", v3)
 	}
-
-	fmt.Println("--- Claude OAuth View Test Passed! ---")
 }
 
 func TestClaudeExistingSessionAndVersionedModels(t *testing.T) {
@@ -80,12 +112,10 @@ func TestClaudeExistingSessionAndVersionedModels(t *testing.T) {
 	m2_down2, _ := m2_down1.(ConfigModel).Update(tea.KeyMsg{Type: tea.KeyDown})
 	m3, _ := m2_down2.(ConfigModel).Update(tea.KeyMsg{Type: tea.KeyEnter})
 
-	// Check models with Space
 	m4, _ := m3.(ConfigModel).Update(tea.KeyMsg{Type: tea.KeySpace})
 	m5, _ := m4.(ConfigModel).Update(tea.KeyMsg{Type: tea.KeyDown})
 	m6, _ := m5.(ConfigModel).Update(tea.KeyMsg{Type: tea.KeySpace})
 
-	// Press Enter to confirm and add to agent list -> returns directly to modeList!
 	m7, _ := m6.(ConfigModel).Update(tea.KeyMsg{Type: tea.KeyEnter})
 	v7 := m7.(ConfigModel).View()
 
@@ -93,13 +123,10 @@ func TestClaudeExistingSessionAndVersionedModels(t *testing.T) {
 		t.Errorf("expected agents in list view, got:\n%s", v7)
 	}
 
-	// Press 'm' to set highlighted agent as Master!
 	m8, _ := m7.(ConfigModel).Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'m'}})
 	v8 := m8.(ConfigModel).View()
 
 	if !strings.Contains(v8, "is now the MASTER Planner") {
 		t.Errorf("expected master change notification, got:\n%s", v8)
 	}
-
-	fmt.Println("--- Final Screen After Pressing [m] to Set Master: ---")
 }
