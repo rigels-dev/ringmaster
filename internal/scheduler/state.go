@@ -56,11 +56,28 @@ func NewStateManager(projectRoot, planHash string) (*StateManager, error) {
 	return sm, nil
 }
 
-// GetState returns a snapshot copy of current project state.
+// GetState returns a deep copy snapshot of current project state.
 func (sm *StateManager) GetState() schemas.ProjectState {
 	sm.mu.Lock()
 	defer sm.mu.Unlock()
-	return *sm.state
+
+	copyState := *sm.state
+	copyState.TaskStates = make(map[string]schemas.TaskState, len(sm.state.TaskStates))
+	for k, v := range sm.state.TaskStates {
+		copyState.TaskStates[k] = v
+	}
+
+	copyState.UsageByAgent = make(map[string]schemas.Usage, len(sm.state.UsageByAgent))
+	for k, v := range sm.state.UsageByAgent {
+		copyState.UsageByAgent[k] = v
+	}
+
+	copyState.UsageByTask = make(map[string]schemas.Usage, len(sm.state.UsageByTask))
+	for k, v := range sm.state.UsageByTask {
+		copyState.UsageByTask[k] = v
+	}
+
+	return copyState
 }
 
 // UpdateTaskState updates a single task's execution state and persists atomically.

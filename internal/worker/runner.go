@@ -77,6 +77,11 @@ func RunAttempt(
 	toolSet := NewToolSet(worktree, sandboxCfg.Allow)
 	tools := toolSet.Definitions()
 
+	humanAnswersSection := ""
+	if task.HumanAnswers != "" {
+		humanAnswersSection = fmt.Sprintf("\n# HUMAN ANSWERS & FEEDBACK:\n%s\n", task.HumanAnswers)
+	}
+
 	systemPrompt := fmt.Sprintf(`You are an autonomous AI software engineer working for Ringmaster.
 Your role is to implement task '%s' within your isolated workspace.
 
@@ -88,7 +93,7 @@ ID: %s
 Title: %s
 Description:
 %s
-
+%s
 # ACCEPTANCE CRITERIA:
 - %s
 
@@ -112,7 +117,7 @@ Brief description of what was done.
 
 ## Verification
 Test command and results.
-`, task.ID, briefContent, task.ID, task.Title, task.Description, strings.Join(task.Acceptance, "\n- "), task.ID, attemptNum)
+`, task.ID, briefContent, task.ID, task.Title, task.Description, humanAnswersSection, strings.Join(task.Acceptance, "\n- "), task.ID, attemptNum)
 
 	messages := []llm.Message{
 		{Role: "system", Content: systemPrompt},

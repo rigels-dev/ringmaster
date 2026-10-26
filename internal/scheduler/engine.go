@@ -332,6 +332,15 @@ func (e *Engine) updateSkippedTasks(state *schemas.ProjectState, taskMap map[str
 	}
 }
 
+// GetState returns current project state from StateManager.
+func (e *Engine) GetState() schemas.ProjectState {
+	return e.stateMgr.GetState()
+}
+
+// UpdateTaskState updates a single task state directly (used by CLI or human answer).
+func (e *Engine) UpdateTaskState(taskID string, fn func(*schemas.TaskState)) error {
+	return e.stateMgr.UpdateTaskState(taskID, fn)
+}
 func (e *Engine) failTask(taskID, errMsg string) {
 	now := time.Now().UTC()
 	_ = e.stateMgr.UpdateTaskState(taskID, func(ts *schemas.TaskState) {
