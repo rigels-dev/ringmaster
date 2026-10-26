@@ -4,7 +4,7 @@
     <aside class="w-60 flex flex-col bg-slate-dark border-r border-steel z-20">
       <!-- Brand Header -->
       <div class="h-14 flex items-center gap-3 px-4 border-b border-steel bg-slate-deep">
-        <span class="text-xl">🎪</span>
+        <img src="/icons/ringmaster-icon-transparent.svg" alt="Ringmaster Icon" class="w-7 h-7 object-contain drop-shadow-[0_0_8px_rgba(222,170,59,0.5)]" />
         <div>
           <h1 class="font-cinzel font-black tracking-wider text-gear-gold text-sm">RINGMASTER</h1>
           <p class="text-[9px] text-zinc-400 tracking-tight font-outfit uppercase">Multi-Agent Control Plane</p>

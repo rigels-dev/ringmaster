@@ -8,8 +8,9 @@ export default defineNuxtConfig({
   ],
   app: {
     head: {
-      title: 'Ringmaster — Orchestration Control Board',
+      title: 'Ringmaster — Multi-Agent Control Plane',
       link: [
+        { rel: 'icon', type: 'image/svg+xml', href: '/icons/ringmaster-icon-transparent.svg' },
         { rel: 'stylesheet', href: 'https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700;900&family=IBM+Plex+Mono:ital,wght@0,300;0,400;0,600;1,400&family=Outfit:wght@300;400;600;800&display=swap' }
       ]
     }
