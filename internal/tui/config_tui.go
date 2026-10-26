@@ -13,54 +13,76 @@ import (
 var (
 	titleStyle = lipgloss.NewStyle().
 			Bold(true).
-			Foreground(lipgloss.Color("#DEAA3B")).
+			Foreground(lipgloss.AdaptiveColor{Light: "#9A3412", Dark: "#DEAA3B"}).
 			Padding(0, 1).
 			Border(lipgloss.RoundedBorder()).
-			BorderForeground(lipgloss.Color("#29F2EC"))
+			BorderForeground(lipgloss.AdaptiveColor{Light: "#0284C7", Dark: "#29F2EC"})
 
 	activeTabStyle = lipgloss.NewStyle().
 			Bold(true).
-			Foreground(lipgloss.Color("#192026")).
-			Background(lipgloss.Color("#29F2EC")).
+			Foreground(lipgloss.Color("#FFFFFF")).
+			Background(lipgloss.AdaptiveColor{Light: "#0284C7", Dark: "#0EA5E9"}).
 			Padding(0, 2)
 
 	inactiveTabStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#8493A0")).
-			Background(lipgloss.Color("#1B2229")).
+			Foreground(lipgloss.AdaptiveColor{Light: "#64748B", Dark: "#8493A0"}).
+			Background(lipgloss.AdaptiveColor{Light: "#E2E8F0", Dark: "#1B2229"}).
 			Padding(0, 2)
 
 	headerStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#DEAA3B")).
+			Foreground(lipgloss.AdaptiveColor{Light: "#1E293B", Dark: "#DEAA3B"}).
 			Bold(true)
 
-	stepHeaderStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#E05436")).
+	stepDoneBullet = lipgloss.NewStyle().
+			Foreground(lipgloss.AdaptiveColor{Light: "#16A34A", Dark: "#22C55E"}).
+			Bold(true)
+
+	stepActiveBullet = lipgloss.NewStyle().
+			Foreground(lipgloss.AdaptiveColor{Light: "#0284C7", Dark: "#38BDF8"}).
+			Bold(true)
+
+	stepTitleStyle = lipgloss.NewStyle().
+			Foreground(lipgloss.AdaptiveColor{Light: "#0F172A", Dark: "#F8FAFC"}).
+			Bold(true)
+
+	stepDimTitleStyle = lipgloss.NewStyle().
+			Foreground(lipgloss.AdaptiveColor{Light: "#64748B", Dark: "#94A3B8"}).
+			Bold(true)
+
+	stepAnswerStyle = lipgloss.NewStyle().
+			Foreground(lipgloss.AdaptiveColor{Light: "#0284C7", Dark: "#29F2EC"}).
 			Bold(true)
 
 	selectedBulletStyle = lipgloss.NewStyle().
-				Foreground(lipgloss.Color("#5BF28D")).
+				Foreground(lipgloss.AdaptiveColor{Light: "#16A34A", Dark: "#22C55E"}).
 				Bold(true)
 
+	normalBulletStyle = lipgloss.NewStyle().
+				Foreground(lipgloss.AdaptiveColor{Light: "#94A3B8", Dark: "#64748B"})
+
 	selectedItemStyle = lipgloss.NewStyle().
-				Foreground(lipgloss.Color("#29F2EC")).
+				Foreground(lipgloss.AdaptiveColor{Light: "#0369A1", Dark: "#38BDF8"}).
 				Bold(true)
 
 	normalItemStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#EFE4CE"))
+			Foreground(lipgloss.AdaptiveColor{Light: "#334155", Dark: "#E2E8F0"})
+
+	descStyle = lipgloss.NewStyle().
+			Foreground(lipgloss.AdaptiveColor{Light: "#64748B", Dark: "#94A3B8"}).
+			Italic(true)
 
 	hintStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#51606D")).
+			Foreground(lipgloss.AdaptiveColor{Light: "#64748B", Dark: "#94A3B8"}).
 			Italic(true)
 
 	statusStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#5BF28D")).
+			Foreground(lipgloss.AdaptiveColor{Light: "#15803D", Dark: "#5BF28D"}).
 			Bold(true)
 
 	errStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#E05436")).
+			Foreground(lipgloss.AdaptiveColor{Light: "#B91C1C", Dark: "#E05436"}).
 			Bold(true)
 )
-
 type tab int
 
 const (
@@ -848,8 +870,8 @@ func (m ConfigModel) View() string {
 	// STEP 1: CHOOSE MODEL / AUTH PROVIDER
 	// ==========================================
 	if m.mode == modePickProviderStep1 {
-		b.WriteString(stepHeaderStyle.Render("● Model/auth provider\n"))
-		
+		b.WriteString(stepActiveBullet.Render("● ") + stepTitleStyle.Render("Model/auth provider\n"))
+
 		searchPrompt := "  Search: "
 		if m.searchQuery != "" {
 			searchPrompt += m.searchQuery
@@ -864,9 +886,9 @@ func (m ConfigModel) View() string {
 		} else {
 			for i, p := range filtered {
 				if i == m.providerCursor {
-					b.WriteString(selectedBulletStyle.Render("  ● ") + selectedItemStyle.Render(p.Name) + " " + hintStyle.Render("("+p.Description+")") + "\n")
+					b.WriteString(selectedBulletStyle.Render("  ● ") + selectedItemStyle.Render(p.Name) + " " + descStyle.Render("("+p.Description+")") + "\n")
 				} else {
-					b.WriteString(normalItemStyle.Render("  ○ " + p.Name) + " " + hintStyle.Render("("+p.Description+")") + "\n")
+					b.WriteString(normalBulletStyle.Render("  ○ ") + normalItemStyle.Render(p.Name) + " " + descStyle.Render("("+p.Description+")") + "\n")
 				}
 			}
 		}
@@ -879,11 +901,13 @@ func (m ConfigModel) View() string {
 	// STEP 2: CHOOSE AUTH METHOD FOR SELECTED PROVIDER
 	// ==========================================
 	if m.mode == modePickProviderStep2 && m.selectedProvider != nil {
-		b.WriteString(hintStyle.Render("● Model/auth provider\n"))
-		b.WriteString(normalItemStyle.Render("  " + m.selectedProvider.Name + "\n\n"))
+		// Completed step 1 header
+		b.WriteString(stepDoneBullet.Render("● ") + stepDimTitleStyle.Render("Model/auth provider\n"))
+		b.WriteString(stepAnswerStyle.Render("  " + m.selectedProvider.Name) + "\n\n")
 
-		headerText := fmt.Sprintf("● %s auth method\n", m.selectedProvider.Name)
-		b.WriteString(stepHeaderStyle.Render(headerText))
+		// Active step 2 header
+		headerText := fmt.Sprintf("%s auth method\n", m.selectedProvider.Name)
+		b.WriteString(stepActiveBullet.Render("● ") + stepTitleStyle.Render(headerText))
 
 		totalOptions := len(m.selectedProvider.AuthMethods) + 1
 		for i := 0; i < totalOptions; i++ {
@@ -892,14 +916,14 @@ func (m ConfigModel) View() string {
 				if i == m.authMethodCursor {
 					b.WriteString(selectedBulletStyle.Render("  ● ") + selectedItemStyle.Render(mth.Label) + "\n")
 				} else {
-					b.WriteString(normalItemStyle.Render("  ○ " + mth.Label) + "\n")
+					b.WriteString(normalBulletStyle.Render("  ○ ") + normalItemStyle.Render(mth.Label) + "\n")
 				}
 			} else {
 				// Back button
 				if i == m.authMethodCursor {
 					b.WriteString(selectedBulletStyle.Render("  ● ") + selectedItemStyle.Render("Back") + "\n")
 				} else {
-					b.WriteString(normalItemStyle.Render("  ○ Back") + "\n")
+					b.WriteString(normalBulletStyle.Render("  ○ ") + normalItemStyle.Render("Back") + "\n")
 				}
 			}
 		}
@@ -909,7 +933,7 @@ func (m ConfigModel) View() string {
 	}
 
 	if m.mode == modePickAgentTemplate {
-		b.WriteString(stepHeaderStyle.Render("● Choose Agent Role / Template\n\n"))
+		b.WriteString(stepActiveBullet.Render("● ") + stepTitleStyle.Render("Choose Agent Role / Template\n\n"))
 
 		for i, tmpl := range agentTemplates {
 			numBadge := fmt.Sprintf("[%d] ", i+1)
