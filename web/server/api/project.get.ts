@@ -76,8 +76,30 @@ export default defineEventHandler((event) => {
     try {
       const content = fs.readFileSync(filePath, 'utf-8')
       const masterMatch = content.match(/default_master\s*=\s*['"]([^'"]+)['"]/)
-      if (masterMatch && masterMatch[1]) {
-        master = masterMatch[1]
+      if (masterMatch && masterMatch[1] && masterMatch[1].trim() !== '') {
+        const potentialMaster = masterMatch[1].trim()
+        // Check if this potentialMaster actually has role = 'master' in [agents]
+        const agentBlockRegex = new RegExp(`\\[agents\\.${potentialMaster.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\$&')}\\]([\\s\\S]*?)(?=\\n\\[|$)`)
+        const agentBlock = content.match(agentBlockRegex)
+        if (agentBlock && agentBlock[1].includes("role = 'master'")) {
+          master = potentialMaster
+        } else {
+          // If default_master has role = 'worker', search for any other agent with role = 'master'
+          const allAgents = content.matchAll(/\[agents\.([^\]]+)\]([\s\S]*?)(?=\n\[|$)/g)
+          let foundMaster = false
+          for (const a of allAgents) {
+            if (a[2].includes("role = 'master'")) {
+              master = a[1].trim()
+              foundMaster = true
+              break
+            }
+          }
+          if (!foundMaster) {
+            master = 'none'
+          }
+        }
+      } else {
+        master = 'none'
       }
       
       const agentMatches = content.matchAll(/\[agents\.([^\]]+)\]/g)

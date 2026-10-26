@@ -210,16 +210,29 @@
 
           <!-- Input Bar with Dynamic Target Selector -->
           <div class="p-4 border-t border-steel bg-slate-panel">
+            <!-- Warning if no Master Planner is configured -->
+            <div v-if="!hasMasterPlanner" class="mb-3 p-3 bg-amber-950/60 border border-amber-800 rounded flex items-center justify-between text-xs">
+              <div class="flex items-center gap-2 text-amber-300">
+                <span>⚠</span>
+                <span>No Master Planner configured. Project briefing chat is disabled.</span>
+              </div>
+              <button @click="activeView = 'providers'" class="px-2.5 py-1 bg-gear-gold text-slate-deep font-bold rounded text-[10px]">
+                Assign Master in Providers ▸
+              </button>
+            </div>
+
             <div class="flex items-center gap-2 mb-2 overflow-x-auto pb-1">
               <span class="text-[10px] text-zinc-400 font-semibold whitespace-nowrap">Target Agent:</span>
               
               <!-- Master Option -->
               <button 
                 @click="selectedTarget = 'master'"
-                class="px-2.5 py-1 rounded text-[10px] font-bold transition flex items-center gap-1 whitespace-nowrap"
+                :disabled="!hasMasterPlanner"
+                class="px-2.5 py-1 rounded text-[10px] font-bold transition flex items-center gap-1 whitespace-nowrap disabled:opacity-40 disabled:cursor-not-allowed"
                 :class="selectedTarget === 'master' ? 'bg-gear-gold text-slate-deep' : 'bg-slate-inner text-zinc-400 border border-steel hover:text-zinc-200'"
               >
                 <span>🎪 Master Planner</span>
+                <span v-if="!hasMasterPlanner" class="text-[8px] text-amber-300">(None)</span>
               </button>
 
               <!-- Dynamic Active Worker Options -->
@@ -239,15 +252,17 @@
             <form @submit.prevent="sendMessage" class="flex items-center gap-3">
               <input 
                 v-model="inputMsg"
+                :disabled="selectedTarget === 'master' && !hasMasterPlanner"
                 type="text" 
                 :placeholder="selectedTarget === 'master' 
-                  ? 'Message Master Planner (e.g. features to implement in ' + (project.name || 'project') + ')...' 
+                  ? (hasMasterPlanner ? 'Message Master Planner (e.g. features to implement in ' + (project.name || 'project') + ')...' : 'Chat disabled: Set an agent as Master Planner in Providers menu first.')
                   : `Direct instruction to worker '${selectedTarget}'...`"
-                class="flex-1 bg-slate-inner border border-steel text-parchment text-xs px-4 py-2.5 rounded focus:outline-none focus:border-gear-gold"
+                class="flex-1 bg-slate-inner border border-steel text-parchment text-xs px-4 py-2.5 rounded focus:outline-none focus:border-gear-gold disabled:opacity-40 disabled:cursor-not-allowed"
               />
               <button 
                 type="submit" 
-                class="px-5 py-2.5 bg-cyan-dim hover:bg-cyan-energy text-slate-deep font-bold text-xs rounded transition flex items-center gap-2"
+                :disabled="selectedTarget === 'master' && !hasMasterPlanner"
+                class="px-5 py-2.5 bg-cyan-dim hover:bg-cyan-energy text-slate-deep font-bold text-xs rounded transition flex items-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 <span>Send</span>
                 <span>↑</span>
@@ -796,6 +811,10 @@ const navItems = [
   { id: 'providers', label: 'Providers', icon: '🤖' },
   { id: 'analytics', label: 'Analytics', icon: '📈' }
 ]
+
+const hasMasterPlanner = computed(() => {
+  return project.value.master && project.value.master !== 'none' && project.value.master !== ''
+})
 
 const messages = ref([])
 

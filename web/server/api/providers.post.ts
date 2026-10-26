@@ -92,6 +92,11 @@ export default defineEventHandler(async (event) => {
       if (role === 'master') {
         content = content.replace(/default_master\s*=\s*['"][^'"]*['"]/, `default_master = '${id}'`)
       } else if (role === 'worker') {
+        // If this agent was previously the default_master, clear default_master
+        const currentDmMatch = content.match(/default_master\s*=\s*['"]([^'"]+)['"]/)
+        if (currentDmMatch && currentDmMatch[1] === id) {
+          content = content.replace(/default_master\s*=\s*['"][^'"]*['"]/, `default_master = ''`)
+        }
         content = content.replace(/default_worker\s*=\s*['"][^'"]*['"]/, `default_worker = '${id}'`)
       }
 

@@ -51,7 +51,19 @@ export default defineEventHandler(() => {
       }
 
       const dmMatch = content.match(/default_master\s*=\s*['"]([^'"]+)['"]/)
-      if (dmMatch) defaultMaster = dmMatch[1]
+      if (dmMatch && dmMatch[1].trim() !== '') {
+        const potentialDm = dmMatch[1].trim()
+        const targetAgent = agents.find(a => a.id === potentialDm)
+        if (targetAgent && targetAgent.role === 'master') {
+          defaultMaster = potentialDm
+        } else {
+          const masterAgent = agents.find(a => a.role === 'master')
+          defaultMaster = masterAgent ? masterAgent.id : ''
+        }
+      } else {
+        const masterAgent = agents.find(a => a.role === 'master')
+        defaultMaster = masterAgent ? masterAgent.id : ''
+      }
       const dwMatch = content.match(/default_worker\s*=\s*['"]([^'"]+)['"]/)
       if (dwMatch) defaultWorker = dwMatch[1]
 
