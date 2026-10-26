@@ -368,13 +368,23 @@
 
               <div>
                 <label class="block text-[10px] text-zinc-400 mb-1">API Key (Env Var name or Direct Key)</label>
-                <input 
-                  v-model="newProv.api_key_env" 
-                  :disabled="newProv.type === 'claude_subscription'"
-                  type="text" 
-                  :placeholder="newProv.type === 'claude_subscription' ? '(Not needed - uses ~/.claude/ credentials)' : 'e.g. sk-xxx or OPENAI_API_KEY'" 
-                  class="w-full bg-slate-inner border border-steel text-parchment text-xs px-3 py-2 rounded focus:outline-none focus:border-gear-gold disabled:opacity-40 disabled:cursor-not-allowed"
-                />
+                <div class="relative flex items-center">
+                  <input 
+                    v-model="newProv.api_key_env" 
+                    :disabled="newProv.type === 'claude_subscription'"
+                    :type="showApiKey ? 'text' : 'password'" 
+                    :placeholder="newProv.type === 'claude_subscription' ? '(Not needed - uses ~/.claude/ credentials)' : 'e.g. sk-xxx or OPENAI_API_KEY'" 
+                    class="w-full bg-slate-inner border border-steel text-parchment text-xs px-3 py-2 pr-9 rounded focus:outline-none focus:border-gear-gold disabled:opacity-40 disabled:cursor-not-allowed tracking-widest font-mono"
+                  />
+                  <button 
+                    type="button" 
+                    @click="showApiKey = !showApiKey"
+                    class="absolute right-2.5 text-xs text-zinc-500 hover:text-zinc-300 transition"
+                    title="Toggle key visibility"
+                  >
+                    {{ showApiKey ? '👁️' : '🔒' }}
+                  </button>
+                </div>
               </div>
             </div>
 
@@ -421,7 +431,7 @@
                     <td class="py-2.5 font-bold text-gear-gold">{{ p.id }}</td>
                     <td class="py-2.5 text-zinc-300">{{ p.type }}</td>
                     <td class="py-2.5 text-zinc-400 text-[10px] max-w-[160px] truncate">{{ p.base_url || '(local CLI session)' }}</td>
-                    <td class="py-2.5 text-zinc-400 font-mono text-[10px]">{{ p.api_key_env || '—' }}</td>
+                    <td class="py-2.5 text-zinc-400 font-mono text-[10px] tracking-wider">{{ maskApiKey(p.api_key_env) }}</td>
                     <td class="py-2.5 text-right space-x-2">
                       <button @click="pingExisting(p)" class="px-2 py-0.5 rounded text-[10px] bg-slate-inner text-cyan-energy hover:border-cyan-dim border border-steel">
                         ⚡ Ping
@@ -500,6 +510,15 @@ const newProv = ref({
 
 const pingStatus = ref(null)
 const isPinging = ref(false)
+const showApiKey = ref(false)
+
+function maskApiKey(val) {
+  if (!val) return '—'
+  if (val.startsWith('sk-') || val.length > 15) {
+    return '••••••••••••••••••••'
+  }
+  return val
+}
 
 const navItems = [
   { id: 'chat', label: 'Chat', icon: '💬', badge: '1 Alert', badgeClass: 'bg-amber-950 text-amber-400 border border-amber-800' },
