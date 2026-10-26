@@ -1,7 +1,7 @@
 import { defineProdDiagnostics } from 'nostics';
 import { ansiFormatter } from 'nostics/formatters/ansi';
 import { createApp, provide, onErrorCaptured, onServerPrefetch, unref, createVNode, resolveDynamicComponent, shallowReactive, reactive, effectScope, hasInjectionContext, getCurrentInstance, inject, defineAsyncComponent, mergeProps, ref, computed, getCurrentScope, toRef, defineComponent, h, isReadonly, createElementBlock, shallowRef, cloneVNode, toRaw, useSSRContext, isRef, isShallow, isReactive, resolveComponent, watchEffect, onScopeDispose, toValue } from 'vue';
-import { f as createError, $ as $fetch, D as isEqual, E as stringifyParsedURL, F as stringifyQuery, x as joinURL, G as parseQuery, H as withQuery, I as sanitizeStatusCode, J as parseURL, K as decodePath, L as isScriptProtocol, M as hasProtocol, O as withTrailingSlash, P as withoutTrailingSlash } from '../nitro/nitro.mjs';
+import { f as createError, $ as $fetch, E as isEqual, F as stringifyParsedURL, G as stringifyQuery, y as joinURL, H as parseQuery, I as withQuery, J as sanitizeStatusCode, K as parseURL, L as decodePath, M as isScriptProtocol, O as hasProtocol, P as withTrailingSlash, Q as withoutTrailingSlash } from '../nitro/nitro.mjs';
 import { p as publicAssetsURL, b as baseURL } from '../routes/renderer.mjs';
 import { walkResolver } from 'unhead/utils';
 import { createPinia, setActivePinia, shouldHydrate } from 'pinia';
@@ -1472,6 +1472,8 @@ var virtual_nuxt_node_modules_2F_cache_2Fnuxt_2F_nuxt_2Fplugins_server_default =
 ];
 // \0virtual:public?%2Ficons%2Fringmaster-icon-transparent.svg
 var _virtual_public__2Ficons_2Fringmaster_icon_transparent_default = publicAssetsURL("/icons/ringmaster-icon-transparent.svg");
+// \0virtual:public?%2Ficons%2Fringmaster-animated.svg
+var _virtual_public__2Ficons_2Fringmaster_animated_default = publicAssetsURL("/icons/ringmaster-animated.svg");
 // app.vue
 var _sfc_main$2 = {
 	__name: "app",
@@ -1505,6 +1507,8 @@ var _sfc_main$2 = {
 		const isPinging = ref(false);
 		const showApiKey = ref(false);
 		const showAddAgentModal = ref(false);
+		const isLoadingModels = ref(false);
+		const fetchedModelList = ref([]);
 		const newAgent = ref({
 			id: "",
 			provider: "",
@@ -1593,7 +1597,10 @@ var _sfc_main$2 = {
 				_push(`<section class="flex-1 flex h-full overflow-hidden"><div class="flex-1 flex flex-col h-full border-r border-steel"><div class="h-14 flex items-center justify-between px-6 border-b border-steel bg-slate-panel"><div><div class="flex items-center gap-2"><h2 class="text-sm font-bold text-gear-gold font-cinzel">Mission Control &amp; Agent Stream</h2><span class="${ssrRenderClass([project.value.isBlank ? "bg-amber-400" : "bg-green-500 animate-pulse", "w-2 h-2 rounded-full"])}"></span></div><p class="text-[10px] text-zinc-400">${ssrInterpolate(project.value.isBlank ? "Diskusikan ide proyek dengan Master Planner untuk mematangkan BRIEF.md." : "Live mission control dan komunikasi dengan multi-agent fleet.")}</p></div>`);
 				if (!project.value.isBlank) _push(`<button class="px-3 py-1.5 bg-slate-inner hover:bg-slate-panel text-zinc-300 text-xs rounded border border-steel flex items-center gap-1.5 transition"><span>View Tasks Pipeline (${ssrInterpolate(tasks.value.length)})</span><span>▸</span></button>`);
 				else _push(`<!---->`);
-				_push(`</div><div class="flex-1 p-6 overflow-y-auto space-y-4"><!--[-->`);
+				_push(`</div><div class="flex-1 p-6 overflow-y-auto space-y-4">`);
+				if (messages.value.length <= 1) _push(`<div class="flex flex-col items-center justify-center py-6 text-center select-none"><img${ssrRenderAttr("src", _virtual_public__2Ficons_2Fringmaster_animated_default)} alt="Ringmaster Kinematics" class="w-44 h-44 object-contain drop-shadow-[0_0_25px_rgba(222,170,59,0.35)] mb-3"><h3 class="font-cinzel text-base font-bold text-gear-gold tracking-wide">The Stage is Ready</h3><p class="text-xs text-zinc-400 max-w-md mt-1">Diskusikan kebutuhan proyek dengan Master Planner untuk mulai merancang arsitektur dan mengorkestrasi agen pekerja.</p></div>`);
+				else _push(`<!---->`);
+				_push(`<!--[-->`);
 				ssrRenderList(messages.value, (msg, i) => {
 					_push(`<div class="${ssrRenderClass([msg.role === "user" ? "ml-auto items-end" : "mr-auto items-start", "flex flex-col max-w-2xl"])}"><div class="flex items-center gap-1.5 mb-1 text-[9px] uppercase tracking-wider">`);
 					if (msg.role === "user") _push(`<span class="text-zinc-400 font-bold">You (Reviewer) ➔ To: ${ssrInterpolate(msg.targetLabel)}</span>`);
@@ -1631,7 +1638,7 @@ var _sfc_main$2 = {
 				if (tasks.value.length > 0) _push(`<button class="px-4 py-2 bg-coat-bright hover:bg-coat-crimson text-white font-bold text-xs rounded shadow flex items-center gap-2 transition"><span>⚡ CRACK WHIP (TAME WORKERS)</span></button>`);
 				else _push(`<!---->`);
 				_push(`</div></div>`);
-				if (tasks.value.length === 0) _push(`<div class="flex-1 flex flex-col items-center justify-center p-12 bg-slate-panel/30 border border-dashed border-steel rounded-lg text-center"><span class="text-4xl mb-3">📋</span><h3 class="text-sm font-bold text-gear-gold mb-1">Belum Ada Task yang Terdaftar</h3><p class="text-xs text-zinc-400 max-w-md mb-4"> Proyek ini baru di-init. Buka menu Chat untuk berdiskusi dengan Master Planner atau jalankan <code class="text-gear-gold">ringmaster plan</code> di terminal untuk membuat DAG task. </p><button class="px-4 py-2 bg-gear-gold text-slate-deep font-bold text-xs rounded"> Mulai Diskusi di Chat ▸ </button></div>`);
+				if (tasks.value.length === 0) _push(`<div class="flex-1 flex flex-col items-center justify-center p-12 bg-slate-panel/30 border border-dashed border-steel rounded-lg text-center"><img${ssrRenderAttr("src", _virtual_public__2Ficons_2Fringmaster_animated_default)} alt="Ringmaster Kinematics" class="w-36 h-36 object-contain drop-shadow-[0_0_20px_rgba(61,245,240,0.35)] mb-4"><h3 class="text-sm font-bold text-gear-gold mb-1">Belum Ada Task yang Terdaftar</h3><p class="text-xs text-zinc-400 max-w-md mb-4"> Proyek ini baru di-init. Buka menu Chat untuk berdiskusi dengan Master Planner atau jalankan <code class="text-gear-gold">ringmaster plan</code> di terminal untuk membuat DAG task. </p><button class="px-4 py-2 bg-gear-gold text-slate-deep font-bold text-xs rounded"> Mulai Diskusi di Chat ▸ </button></div>`);
 				else {
 					_push(`<div class="grid grid-cols-3 gap-4"><!--[-->`);
 					ssrRenderList(tasks.value, (task) => {
@@ -1662,7 +1669,21 @@ var _sfc_main$2 = {
 					ssrRenderList(providersData.value.providers, (p) => {
 						_push(`<option${ssrRenderAttr("value", p.id)}${ssrIncludeBooleanAttr(Array.isArray(newAgent.value.provider) ? ssrLooseContain(newAgent.value.provider, p.id) : ssrLooseEqual(newAgent.value.provider, p.id)) ? " selected" : ""}>${ssrInterpolate(p.id)} (${ssrInterpolate(p.type)})</option>`);
 					});
-					_push(`<!--]--></select></div><div><label class="block text-[9px] text-zinc-400 mb-1">Model Name</label><input${ssrRenderAttr("value", newAgent.value.model)} type="text" placeholder="e.g. ag/gemini-3.8-flash, gpt-4o" class="w-full bg-slate-panel border border-steel text-xs px-2.5 py-1.5 rounded text-parchment focus:outline-none focus:border-gear-gold"></div><div><label class="block text-[9px] text-zinc-400 mb-1">Role</label><select class="w-full bg-slate-panel border border-steel text-xs px-2.5 py-1.5 rounded text-parchment focus:outline-none focus:border-gear-gold"><option value="worker"${ssrIncludeBooleanAttr(Array.isArray(newAgent.value.role) ? ssrLooseContain(newAgent.value.role, "worker") : ssrLooseEqual(newAgent.value.role, "worker")) ? " selected" : ""}>Worker (Coder, Tool Calling)</option><option value="master"${ssrIncludeBooleanAttr(Array.isArray(newAgent.value.role) ? ssrLooseContain(newAgent.value.role, "master") : ssrLooseEqual(newAgent.value.role, "master")) ? " selected" : ""}>Master Planner (Architect)</option></select></div></div><div class="flex items-center justify-end gap-2 pt-2"><button class="px-3 py-1 bg-slate-panel hover:bg-slate-dark text-zinc-400 text-xs rounded border border-steel">Cancel</button><button class="px-4 py-1 bg-gear-gold hover:bg-gear-glow text-slate-deep font-bold text-xs rounded">Save Agent</button></div></div>`);
+					_push(`<!--]--></select></div><div><label class="block text-[9px] text-zinc-400 mb-1"> Model Name `);
+					if (isLoadingModels.value) _push(`<span class="text-cyan-energy text-[8px] animate-pulse">Loading models...</span>`);
+					else _push(`<!---->`);
+					_push(`</label>`);
+					if (fetchedModelList.value.length > 0) {
+						_push(`<div><select class="w-full bg-slate-panel border border-steel text-xs px-2.5 py-1.5 rounded text-parchment focus:outline-none focus:border-gear-gold"><option value="" disabled${ssrIncludeBooleanAttr(Array.isArray(newAgent.value.model) ? ssrLooseContain(newAgent.value.model, "") : ssrLooseEqual(newAgent.value.model, "")) ? " selected" : ""}>-- Select a fetched model --</option><!--[-->`);
+						ssrRenderList(fetchedModelList.value, (m) => {
+							_push(`<option${ssrRenderAttr("value", m.id)}${ssrIncludeBooleanAttr(Array.isArray(newAgent.value.model) ? ssrLooseContain(newAgent.value.model, m.id) : ssrLooseEqual(newAgent.value.model, m.id)) ? " selected" : ""}>${ssrInterpolate(m.name || m.id)}</option>`);
+						});
+						_push(`<!--]--></select></div>`);
+					} else _push(`<div><input${ssrRenderAttr("value", newAgent.value.model)} type="text" placeholder="e.g. ag/gemini-3.8-flash, gpt-4o" class="w-full bg-slate-panel border border-steel text-xs px-2.5 py-1.5 rounded text-parchment focus:outline-none focus:border-gear-gold"></div>`);
+					_push(`</div><div><label class="block text-[9px] text-zinc-400 mb-1">Role</label><select class="w-full bg-slate-panel border border-steel text-xs px-2.5 py-1.5 rounded text-parchment focus:outline-none focus:border-gear-gold"><option value="worker"${ssrIncludeBooleanAttr(Array.isArray(newAgent.value.role) ? ssrLooseContain(newAgent.value.role, "worker") : ssrLooseEqual(newAgent.value.role, "worker")) ? " selected" : ""}>Worker (Coder, Tool Calling)</option><option value="master"${ssrIncludeBooleanAttr(Array.isArray(newAgent.value.role) ? ssrLooseContain(newAgent.value.role, "master") : ssrLooseEqual(newAgent.value.role, "master")) ? " selected" : ""}>Master Planner (Architect)</option></select></div></div><div class="flex items-center justify-between pt-2"><span class="text-[9px] text-zinc-500">`);
+					if (fetchedModelList.value.length > 0) _push(`<span class="text-green-400">✓ ${ssrInterpolate(fetchedModelList.value.length)} models loaded from provider</span>`);
+					else _push(`<span>Select provider to automatically pull available models list</span>`);
+					_push(`</span><div class="flex items-center gap-2"><button class="px-3 py-1 bg-slate-panel hover:bg-slate-dark text-zinc-400 text-xs rounded border border-steel">Cancel</button><button class="px-4 py-1 bg-gear-gold hover:bg-gear-glow text-slate-deep font-bold text-xs rounded">Save Agent</button></div></div></div>`);
 				} else _push(`<!---->`);
 				_push(`<div class="overflow-x-auto"><table class="w-full text-left text-xs"><thead><tr class="border-b border-steel text-[10px] text-zinc-400 uppercase"><th class="pb-2">Agent Alias</th><th class="pb-2">Model</th><th class="pb-2">Provider</th><th class="pb-2">Current Role</th><th class="pb-2">Tool Calling</th><th class="pb-2 text-right">Switch Role / Action</th></tr></thead><tbody class="divide-y divide-steel/50"><!--[-->`);
 				ssrRenderList(providersData.value.agents, (a) => {

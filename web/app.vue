@@ -84,6 +84,13 @@
 
           <!-- Messages Stream -->
           <div class="flex-1 p-6 overflow-y-auto space-y-4">
+            <!-- Welcome Hero Animated SVG when chat is clean/blank -->
+            <div v-if="messages.length <= 1" class="flex flex-col items-center justify-center py-6 text-center select-none">
+              <img src="/icons/ringmaster-animated.svg" alt="Ringmaster Kinematics" class="w-44 h-44 object-contain drop-shadow-[0_0_25px_rgba(222,170,59,0.35)] mb-3" />
+              <h3 class="font-cinzel text-base font-bold text-gear-gold tracking-wide">The Stage is Ready</h3>
+              <p class="text-xs text-zinc-400 max-w-md mt-1">Diskusikan kebutuhan proyek dengan Master Planner untuk mulai merancang arsitektur dan mengorkestrasi agen pekerja.</p>
+            </div>
+
             <div 
               v-for="(msg, i) in messages" 
               :key="i"
@@ -271,7 +278,7 @@
 
         <!-- If Blank Project -->
         <div v-if="tasks.length === 0" class="flex-1 flex flex-col items-center justify-center p-12 bg-slate-panel/30 border border-dashed border-steel rounded-lg text-center">
-          <span class="text-4xl mb-3">📋</span>
+          <img src="/icons/ringmaster-animated.svg" alt="Ringmaster Kinematics" class="w-36 h-36 object-contain drop-shadow-[0_0_20px_rgba(61,245,240,0.35)] mb-4" />
           <h3 class="text-sm font-bold text-gear-gold mb-1">Belum Ada Task yang Terdaftar</h3>
           <p class="text-xs text-zinc-400 max-w-md mb-4">
             Proyek ini baru di-init. Buka menu Chat untuk berdiskusi dengan Master Planner atau jalankan <code class="text-gear-gold">ringmaster plan</code> di terminal untuk membuat DAG task.
@@ -476,13 +483,25 @@
               </div>
               <div>
                 <label class="block text-[9px] text-zinc-400 mb-1">Provider</label>
-                <select v-model="newAgent.provider" class="w-full bg-slate-panel border border-steel text-xs px-2.5 py-1.5 rounded text-parchment focus:outline-none focus:border-gear-gold">
+                <select v-model="newAgent.provider" @change="fetchProviderModels" class="w-full bg-slate-panel border border-steel text-xs px-2.5 py-1.5 rounded text-parchment focus:outline-none focus:border-gear-gold">
                   <option v-for="p in providersData.providers" :key="p.id" :value="p.id">{{ p.id }} ({{ p.type }})</option>
                 </select>
               </div>
               <div>
-                <label class="block text-[9px] text-zinc-400 mb-1">Model Name</label>
-                <input v-model="newAgent.model" type="text" placeholder="e.g. ag/gemini-3.8-flash, gpt-4o" class="w-full bg-slate-panel border border-steel text-xs px-2.5 py-1.5 rounded text-parchment focus:outline-none focus:border-gear-gold" />
+                <label class="block text-[9px] text-zinc-400 mb-1">
+                  Model Name 
+                  <span v-if="isLoadingModels" class="text-cyan-energy text-[8px] animate-pulse">Loading models...</span>
+                </label>
+                <!-- If models fetched from provider, show dropdown select, else fallback to text input -->
+                <div v-if="fetchedModelList.length > 0">
+                  <select v-model="newAgent.model" class="w-full bg-slate-panel border border-steel text-xs px-2.5 py-1.5 rounded text-parchment focus:outline-none focus:border-gear-gold">
+                    <option value="" disabled>-- Select a fetched model --</option>
+                    <option v-for="m in fetchedModelList" :key="m.id" :value="m.id">{{ m.name || m.id }}</option>
+                  </select>
+                </div>
+                <div v-else>
+                  <input v-model="newAgent.model" type="text" placeholder="e.g. ag/gemini-3.8-flash, gpt-4o" class="w-full bg-slate-panel border border-steel text-xs px-2.5 py-1.5 rounded text-parchment focus:outline-none focus:border-gear-gold" />
+                </div>
               </div>
               <div>
                 <label class="block text-[9px] text-zinc-400 mb-1">Role</label>
@@ -492,9 +511,15 @@
                 </select>
               </div>
             </div>
-            <div class="flex items-center justify-end gap-2 pt-2">
-              <button @click="showAddAgentModal = false" class="px-3 py-1 bg-slate-panel hover:bg-slate-dark text-zinc-400 text-xs rounded border border-steel">Cancel</button>
-              <button @click="saveNewAgent" class="px-4 py-1 bg-gear-gold hover:bg-gear-glow text-slate-deep font-bold text-xs rounded">Save Agent</button>
+            <div class="flex items-center justify-between pt-2">
+              <span class="text-[9px] text-zinc-500">
+                <span v-if="fetchedModelList.length > 0" class="text-green-400">✓ {{ fetchedModelList.length }} models loaded from provider</span>
+                <span v-else>Select provider to automatically pull available models list</span>
+              </span>
+              <div class="flex items-center gap-2">
+                <button @click="showAddAgentModal = false" class="px-3 py-1 bg-slate-panel hover:bg-slate-dark text-zinc-400 text-xs rounded border border-steel">Cancel</button>
+                <button @click="saveNewAgent" class="px-4 py-1 bg-gear-gold hover:bg-gear-glow text-slate-deep font-bold text-xs rounded">Save Agent</button>
+              </div>
             </div>
           </div>
 
@@ -633,6 +658,8 @@ const pingStatus = ref(null)
 const isPinging = ref(false)
 const showApiKey = ref(false)
 const showAddAgentModal = ref(false)
+const isLoadingModels = ref(false)
+const fetchedModelList = ref([])
 
 const newAgent = ref({
   id: '',
@@ -640,6 +667,26 @@ const newAgent = ref({
   model: '',
   role: 'worker'
 })
+
+async function fetchProviderModels() {
+  if (!newAgent.value.provider) return
+  isLoadingModels.value = true
+  fetchedModelList.value = []
+  try {
+    const res = await fetch(`/api/models?provider=${encodeURIComponent(newAgent.value.provider)}`)
+    const data = await res.json()
+    if (data.ok && Array.isArray(data.models)) {
+      fetchedModelList.value = data.models
+      if (data.models.length > 0) {
+        newAgent.value.model = data.models[0].id
+      }
+    }
+  } catch (err) {
+    console.error('Failed to fetch provider models:', err)
+  } finally {
+    isLoadingModels.value = false
+  }
+}
 
 function maskApiKey(val) {
   if (!val) return '—'
@@ -686,6 +733,7 @@ async function loadProvidersData() {
       providersData.value = data
       if (data.providers && data.providers.length > 0 && !newAgent.value.provider) {
         newAgent.value.provider = data.providers[0].id
+        fetchProviderModels()
       }
     }
   } catch {}
