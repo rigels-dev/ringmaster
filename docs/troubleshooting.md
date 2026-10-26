@@ -1,60 +1,63 @@
 # Ringmaster — Troubleshooting & Operations Guide
 
-Panduan penanganan status, bottleneck, dan intervensi operasional saat menjalankan orkestrasi Ringmaster.
+Operational guide for resolving task statuses, bottlenecks, and manual human interventions during Ringmaster orchestration.
 
 ---
 
-## 1. Status Task `BLOCKED`
+## 1. Task Status: `BLOCKED`
 
-### Penyebab:
-Worker membutuhkan informasi tambahan atau keputusan yang tidak dapat diambil secara mandiri (misal: kredensial environment khusus, konfigurasi port, atau izin arsitektur).
+### Cause:
+A worker agent requires human input, missing credentials, architecture decisions, or permissions that it cannot resolve autonomously.
 
-### Solusi & Tindakan:
-1. Jalankan `ringmaster status` untuk membaca rincian blocker:
+### Solution:
+1. Check detailed blockers via `status`:
    ```bash
    ringmaster status <project_name>
    ```
-2. Berikan jawaban atau kredensial yang diminta melalui command `answer`:
+2. Provide the unblocking answer:
    ```bash
    ringmaster answer <task_id> --text "Database host is postgresql://user:pass@localhost:5432/db"
    ```
-3. Lanjutkan orkestrasi:
+3. Resume execution:
    ```bash
    ringmaster resume <project_name>
    ```
 
 ---
 
-## 2. Status Task `NEEDS_REVIEW`
+## 2. Task Status: `NEEDS_REVIEW`
 
-### Penyebab:
-- Terjadi **Merge Conflict** saat mencoba menggabungkan cabang task ke `main`.
-- Worker gagal memenuhi acceptance criteria setelah batas `max_retries` terlampaui.
+### Cause:
+- A **Merge Conflict** was detected when attempting to merge the task worktree branch (`rm/Txx`) into `main`.
+- A worker exhausted its `max_retries` without satisfying acceptance criteria.
 
-### Solusi & Tindakan:
-1. Periksa laporan hasil worker di file:
+### Solution:
+1. Inspect the worker report output:
    ```bash
-   cat projects/<project_name>/outputs/<task_id>.md
+   cat <project_name>/outputs/<task_id>.md
    ```
-2. Jika karena **Merge Conflict**:
-   - Cabang `main` tetap bersih (Ringmaster otomatis menjalankan `git merge --abort`).
-   - Masuk ke direktori repo dan selesaikan conflict secara manual, atau perbarui acceptance criteria.
-3. Reset task ke pending atau update branch, lalu jalankan `ringmaster resume`.
+2. If due to a **Merge Conflict**:
+   - The `main` branch remains clean (`git merge --abort` is executed automatically).
+   - Resolve conflicts in your repo or adjust task dependencies, then resume.
+3. Resume execution:
+   ```bash
+   ringmaster resume <project_name>
+   ```
 
 ---
 
-## 3. Project Berstatus `PAUSED`
+## 3. Project Status: `PAUSED`
 
-### Penyebab:
-Total konsumsi token telah mencapai atau melebihi batas `budget.max_tokens_per_project` yang ditentukan di `ringmaster.toml`.
+### Cause:
+Cumulative token consumption reached or exceeded the configured project budget (`budget.max_tokens_per_project` in `ringmaster.toml`).
 
-### Solusi & Tindakan:
-1. Buka file `ringmaster.toml` dan naikkan batas budget:
+### Solution:
+1. Increase the token budget in `ringmaster.toml`:
    ```toml
    [budget]
-   max_tokens_per_project = 3000000 # Naikkan sesuai kebutuhan
+   max_tokens_per_project = 3000000
    ```
-2. Lanjutkan eksekusi:
+2. Resume execution:
    ```bash
    ringmaster resume <project_name>
    ```
@@ -63,8 +66,13 @@ Total konsumsi token telah mencapai atau melebihi batas `budget.max_tokens_per_p
 
 ## 4. Plan Hash Mismatch ("Plan has been modified since approval")
 
-### Penyebab:
-File `plan.json` atau file task diubah secara manual setelah approval diberikan.
+### Cause:
+The `plan.json` or task specification files were edited after approval was granted.
 
-### Solusi:
-Jalankan kembali command `ringmaster plan <project_name>` untuk meninjau perubahan dan berikan persetujuan ulang (`y`).
+### Solution:
+Re-run the planning command to inspect diffs and grant approval:
+```bash
+ringmaster plan <project_name>
+```
+Press `y` to approve the updated plan.
+

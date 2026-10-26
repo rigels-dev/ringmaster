@@ -88,15 +88,15 @@ created_at = %q
 		briefContent := fmt.Sprintf(`# BRIEF: %s
 
 ## Objective
-Tulis deskripsi tujuan dan ruang lingkup project ini di sini.
+Write a concise description of the project goal and scope here.
 
 ## Requirements
 - Requirement 1
 - Requirement 2
 
 ## Acceptance Criteria
-- [ ] Kriteria keberhasilan 1
-- [ ] Kriteria keberhasilan 2
+- [ ] Criteria 1
+- [ ] Criteria 2
 `, name)
 		if err := os.WriteFile(briefPath, []byte(briefContent), 0644); err != nil {
 			return fmt.Errorf("failed to write %s: %w", briefPath, err)

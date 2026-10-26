@@ -124,7 +124,7 @@
                 <span class="w-2 h-2 rounded-full" :class="project.isBlank ? 'bg-amber-400' : 'bg-green-500 animate-pulse'"></span>
               </div>
               <p class="text-[10px] text-zinc-400">
-                {{ project.isBlank ? 'Diskusikan ide proyek dengan Master Planner untuk mematangkan BRIEF.md.' : 'Live mission control dan komunikasi dengan multi-agent fleet.' }}
+                {{ project.isBlank ? 'Discuss project scope with Master Planner to draft your BRIEF.md.' : 'Live mission control and multi-agent fleet communications.' }}
               </p>
             </div>
             
@@ -144,7 +144,7 @@
             <div v-if="messages.length <= 1" class="flex flex-col items-center justify-center py-6 text-center select-none">
               <img src="/icons/ringmaster-animated.svg" alt="Ringmaster Kinematics" class="w-44 h-44 object-contain drop-shadow-[0_0_25px_rgba(222,170,59,0.35)] mb-3" />
               <h3 class="font-cinzel text-base font-bold text-gear-gold tracking-wide">The Stage is Ready</h3>
-              <p class="text-xs text-zinc-400 max-w-md mt-1">Diskusikan kebutuhan proyek dengan Master Planner untuk mulai merancang arsitektur dan mengorkestrasi agen pekerja.</p>
+              <p class="text-xs text-zinc-400 max-w-md mt-1">Discuss project requirements with Master Planner to architect tasks and orchestrate worker agents.</p>
             </div>
 
             <div 
@@ -241,8 +241,8 @@
                 v-model="inputMsg"
                 type="text" 
                 :placeholder="selectedTarget === 'master' 
-                  ? 'Kirim pesan ke Master Planner (misal: fitur apa yang ingin dibuat di ' + (project.name || 'project') + ')...' 
-                  : `Kirim instruksi langsung ke worker '${selectedTarget}'...`"
+                  ? 'Message Master Planner (e.g. features to implement in ' + (project.name || 'project') + ')...' 
+                  : `Direct instruction to worker '${selectedTarget}'...`"
                 class="flex-1 bg-slate-inner border border-steel text-parchment text-xs px-4 py-2.5 rounded focus:outline-none focus:border-gear-gold"
               />
               <button 
@@ -290,8 +290,8 @@
             </div>
 
             <div v-else class="p-3 bg-slate-dark/60 border border-steel/60 rounded text-center">
-              <p class="text-[11px] text-zinc-400">Belum ada task berjalan.</p>
-              <p class="text-[9px] text-zinc-500 mt-1">Diskusikan requirement di chat untuk menyusun task.</p>
+              <p class="text-[11px] text-zinc-400">No active running tasks yet.</p>
+              <p class="text-[9px] text-zinc-500 mt-1">Discuss requirements in Chat to generate the task pipeline.</p>
             </div>
 
             <!-- BRIEF.md Preview -->
@@ -301,7 +301,7 @@
                 <span class="text-[9px] text-zinc-500">{{ project.brief ? 'Found' : 'Empty' }}</span>
               </div>
               <div class="p-3 bg-slate-inner border border-steel rounded font-mono text-[10px] leading-relaxed text-zinc-400 whitespace-pre-wrap max-h-56 overflow-y-auto">
-{{ project.brief || '(BRIEF.md belum diisi. Kirim pesan ke Master Planner untuk menyusunnya otomatis.)' }}
+{{ project.brief || '(BRIEF.md is empty. Send a message to Master Planner to generate it automatically.)' }}
               </div>
             </div>
           </div>
@@ -335,12 +335,12 @@
         <!-- If Blank Project -->
         <div v-if="tasks.length === 0" class="flex-1 flex flex-col items-center justify-center p-12 bg-slate-panel/30 border border-dashed border-steel rounded-lg text-center">
           <img src="/icons/ringmaster-animated.svg" alt="Ringmaster Kinematics" class="w-36 h-36 object-contain drop-shadow-[0_0_20px_rgba(61,245,240,0.35)] mb-4" />
-          <h3 class="text-sm font-bold text-gear-gold mb-1">Belum Ada Task yang Terdaftar</h3>
+          <h3 class="text-sm font-bold text-gear-gold mb-1">No Tasks Registered Yet</h3>
           <p class="text-xs text-zinc-400 max-w-md mb-4">
-            Proyek ini baru di-init. Buka menu Chat untuk berdiskusi dengan Master Planner atau jalankan <code class="text-gear-gold">ringmaster plan</code> di terminal untuk membuat DAG task.
+            This project has just been initialized. Head over to Chat to collaborate with Master Planner or run <code class="text-gear-gold">ringmaster plan</code> in your terminal to create the DAG task workflow.
           </p>
           <button @click="activeView = 'chat'" class="px-4 py-2 bg-gear-gold text-slate-deep font-bold text-xs rounded">
-            Mulai Diskusi di Chat ▸
+            Start Collaboration in Chat ▸
           </button>
         </div>
 
@@ -506,7 +506,7 @@
                     </td>
                   </tr>
                   <tr v-if="!providersData.providers || providersData.providers.length === 0">
-                    <td colspan="5" class="py-6 text-center text-zinc-500 italic">Belum ada provider yang disimpan.</td>
+                    <td colspan="5" class="py-6 text-center text-zinc-500 italic">No providers saved yet. Register one on the left!</td>
                   </tr>
                 </tbody>
               </table>
@@ -519,7 +519,7 @@
           <div class="flex items-center justify-between mb-4 pb-3 border-b border-steel">
             <div>
               <h3 class="text-xs font-bold text-gear-gold uppercase tracking-wider">2. Model Fleet & Role Assignments</h3>
-              <p class="text-[10px] text-zinc-400 mt-0.5">Tentukan model mana yang menjadi Master Planner (Arsitek) dan Worker (Coder/Executor).</p>
+              <p class="text-[10px] text-zinc-400 mt-0.5">Designate models as Master Planner (Architect) or Worker (Coder/Executor).</p>
             </div>
             <button 
               @click="showAddAgentModal = true" 
@@ -655,7 +655,7 @@
                   </td>
                 </tr>
                 <tr v-if="!providersData.agents || providersData.agents.length === 0">
-                  <td colspan="6" class="py-6 text-center text-zinc-500 italic">Belum ada agent yang terdaftar. Daftarkan model di atas!</td>
+                  <td colspan="6" class="py-6 text-center text-zinc-500 italic">No agents registered in fleet yet. Add a model above!</td>
                 </tr>
               </tbody>
             </table>
@@ -811,7 +811,7 @@ async function loadProjectData() {
         {
           role: 'master',
           targetLabel: 'You',
-          text: `Halo Jal! Proyek '${data.name}' telah terhubung. Saat ini belum ada task yang disusun. Silakan tulis ide atau deskripsi fitur yang ingin kamu buat di bawah, nanti aku bantu susunkan dokumen BRIEF.md dan DAG task-nya.`,
+          text: `Welcome! Project '${data.name}' is connected. There are currently no tasks configured. Share your project requirements or feature ideas below, and I will help architect the specification and task workflow.`,
           time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
         }
       ]
@@ -1139,7 +1139,7 @@ function sendMessage() {
     messages.value.push({
       role: 'master',
       targetLabel: 'You',
-      text: `Instruksi diterima, Jal. Aku mencatat kebutuhan: "${text}". Dokumen BRIEF.md akan aku perbarui.`,
+      text: `Instruction received. I have recorded requirements for "${text}". Updating project BRIEF.md specification now.`,
       time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
     })
   }, 600)
