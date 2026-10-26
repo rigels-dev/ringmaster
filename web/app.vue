@@ -367,12 +367,12 @@
               </div>
 
               <div>
-                <label class="block text-[10px] text-zinc-400 mb-1">API Key Env Var</label>
+                <label class="block text-[10px] text-zinc-400 mb-1">API Key (Env Var name or Direct Key)</label>
                 <input 
                   v-model="newProv.api_key_env" 
                   :disabled="newProv.type === 'claude_subscription'"
                   type="text" 
-                  :placeholder="newProv.type === 'claude_subscription' ? '(Not needed - uses ~/.claude/ credentials)' : 'OPENAI_API_KEY'" 
+                  :placeholder="newProv.type === 'claude_subscription' ? '(Not needed - uses ~/.claude/ credentials)' : 'e.g. sk-xxx or OPENAI_API_KEY'" 
                   class="w-full bg-slate-inner border border-steel text-parchment text-xs px-3 py-2 rounded focus:outline-none focus:border-gear-gold disabled:opacity-40 disabled:cursor-not-allowed"
                 />
               </div>
@@ -390,7 +390,7 @@
                 :disabled="isPinging"
                 class="flex-1 py-2 bg-slate-inner hover:bg-slate-dark text-cyan-energy border border-cyan-dim/40 rounded text-xs font-bold transition disabled:opacity-50"
               >
-                {{ isPinging ? '⏳ Testing...' : '⚡ Test Connection / Ping' }}
+                {{ isPinging ? '⏳ Testing...' : '⚡ Test Connection' }}
               </button>
               <button 
                 @click="saveProvider" 

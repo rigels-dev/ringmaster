@@ -22,12 +22,12 @@ export default defineEventHandler(async (event) => {
     }
   }
 
-  const apiKey = api_key_env ? process.env[api_key_env] : ''
-  if (!apiKey && api_key_env) {
-    return {
-      ok: false,
-      latency_ms: Date.now() - start,
-      error: `Environment variable '${api_key_env}' is not set on server host`
+  let apiKey = ''
+  if (api_key_env) {
+    if (api_key_env.startsWith('sk-') || api_key_env.length > 20) {
+      apiKey = api_key_env
+    } else {
+      apiKey = process.env[api_key_env] || api_key_env
     }
   }
 
