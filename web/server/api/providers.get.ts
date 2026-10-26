@@ -16,11 +16,11 @@ export default defineEventHandler(() => {
     try {
       const content = fs.readFileSync(targetToml, 'utf-8')
       
-      // Basic TOML parser for providers & agents
-      const provRegex = /\[providers\.([a-zA-Z0-9_\-]+)\]([\s\S]*?)(?=\n\[|$)/g
+      // Robust Regex for provider & agent names allowing dots, slashes, hyphens, underscores
+      const provRegex = /\[providers\.([^\]]+)\]([\s\S]*?)(?=\n\[|$)/g
       let match: RegExpExecArray | null
       while ((match = provRegex.exec(content)) !== null) {
-        const id = match[1]
+        const id = match[1].trim()
         const block = match[2]
         const typeMatch = block.match(/type\s*=\s*['"]([^'"]+)['"]/)
         const urlMatch = block.match(/base_url\s*=\s*['"]([^'"]+)['"]/)
@@ -33,9 +33,9 @@ export default defineEventHandler(() => {
         })
       }
 
-      const agentRegex = /\[agents\.([a-zA-Z0-9_\-]+)\]([\s\S]*?)(?=\n\[|$)/g
+      const agentRegex = /\[agents\.([^\]]+)\]([\s\S]*?)(?=\n\[|$)/g
       while ((match = agentRegex.exec(content)) !== null) {
-        const id = match[1]
+        const id = match[1].trim()
         const block = match[2]
         const provMatch = block.match(/provider\s*=\s*['"]([^'"]+)['"]/)
         const modelMatch = block.match(/model\s*=\s*['"]([^'"]+)['"]/)

@@ -1,6 +1,10 @@
 import fs from 'node:fs'
 import path from 'node:path'
 
+function escapeRegex(str: string) {
+  return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
 export default defineEventHandler(async (event) => {
   const body = await readBody(event)
   const projectDir = process.env.RINGMASTER_PROJECT_DIR || process.cwd()
@@ -53,7 +57,7 @@ export default defineEventHandler(async (event) => {
       const tc = tool_calling ? 'true' : 'false'
       const newBlock = `[agents.${id}]\nprovider = '${provider || ''}'\nmodel = '${model}'\nrole = '${role || 'worker'}'\ntool_calling = ${tc}\n`
 
-      const blockRegex = new RegExp(`\\[agents\\.${id}\\][\\s\\S]*?(?=\\n\\[|$)`)
+      const blockRegex = new RegExp(`\\[agents\\.${escapeRegex(id)}\\][\\s\\S]*?(?=\\n\\[|$)`)
       if (blockRegex.test(content)) {
         content = content.replace(blockRegex, newBlock.trim())
       } else {
@@ -74,7 +78,7 @@ export default defineEventHandler(async (event) => {
 
     if (action === 'set_role') {
       const { id, role } = body
-      const blockRegex = new RegExp(`(\\[agents\\.${id}\\][\\s\\S]*?)(role\\s*=\\s*['"][^'"]*['"])([\\s\\S]*?)(?=\\n\\[|$)`)
+      const blockRegex = new RegExp(`(\\[agents\\.${escapeRegex(id)}\\][\\s\\S]*?)(role\\s*=\\s*['"][^'"]*['"])([\\s\\S]*?)(?=\\n\\[|$)`)
       if (blockRegex.test(content)) {
         content = content.replace(blockRegex, (match, p1, p2, p3) => {
           const newRole = `role = '${role}'`
@@ -97,7 +101,7 @@ export default defineEventHandler(async (event) => {
 
     if (action === 'delete_agent') {
       const { id } = body
-      const blockRegex = new RegExp(`\\[agents\\.${id}\\][\\s\\S]*?(?=\\n\\[|$)`, 'g')
+      const blockRegex = new RegExp(`\\[agents\\.${escapeRegex(id)}\\][\\s\\S]*?(?=\\n\\[|$)`, 'g')
       content = content.replace(blockRegex, '')
       fs.writeFileSync(targetToml, content, 'utf-8')
       return { ok: true, message: `Agent '${id}' deleted` }

@@ -1,6 +1,10 @@
 import fs from 'node:fs'
 import path from 'node:path'
 
+function escapeRegex(str: string) {
+  return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
 export default defineEventHandler(async (event) => {
   const query = getQuery(event)
   const providerId = query.provider as string
@@ -26,7 +30,7 @@ export default defineEventHandler(async (event) => {
   }
 
   // Extract provider block
-  const blockRegex = new RegExp(`\\[providers\\.${providerId}\\]([\\s\\S]*?)(?=\\n\\[|$)`)
+  const blockRegex = new RegExp(`\\[providers\\.${escapeRegex(providerId)}\\]([\\s\\S]*?)(?=\\n\\[|$)`)
   const match = content.match(blockRegex)
   if (!match) {
     return { ok: false, error: `Provider '${providerId}' not found in config` }
@@ -41,8 +45,8 @@ export default defineEventHandler(async (event) => {
   const baseURL = urlMatch ? urlMatch[1] : ''
   const apiEnv = envMatch ? envMatch[1] : ''
 
-  // 1. Claude Subscription (Local Session)
-  if (pType === 'claude_subscription' || pType === 'claude_sub') {
+  // 1. Claude Subscription (Local Session) or Anthropic
+  if (pType === 'claude_subscription' || pType === 'claude_sub' || pType === 'anthropic') {
     return {
       ok: true,
       provider: providerId,
@@ -51,22 +55,10 @@ export default defineEventHandler(async (event) => {
         { id: 'claude-3-7-sonnet-20250219', name: 'Claude 3.7 Sonnet (Latest Hybrid / Thinking)' },
         { id: 'claude-3-5-sonnet-20241022', name: 'Claude 3.5 Sonnet' },
         { id: 'claude-3-5-haiku-20241022', name: 'Claude 3.5 Haiku (Fast)' },
-        { id: 'claude-3-opus-20240229', name: 'Claude 3 Opus (Complex Architecture)' }
-      ]
-    }
-  }
-
-  // 2. Anthropic API
-  if (pType === 'anthropic') {
-    return {
-      ok: true,
-      provider: providerId,
-      type: pType,
-      models: [
-        { id: 'claude-3-7-sonnet-20250219', name: 'claude-3-7-sonnet-20250219' },
-        { id: 'claude-3-5-sonnet-20241022', name: 'claude-3-5-sonnet-20241022' },
-        { id: 'claude-3-5-haiku-20241022', name: 'claude-3-5-haiku-20241022' },
-        { id: 'claude-3-opus-20240229', name: 'claude-3-opus-20240229' }
+        { id: 'claude-3-opus-20240229', name: 'Claude 3 Opus (Complex Architecture)' },
+        { id: 'claude-opus-5-5', name: 'Claude Opus 5.5' },
+        { id: 'claude-sonnet-5-5', name: 'Claude Sonnet 5.5' },
+        { id: 'claude-haiku-5-5', name: 'Claude Haiku 5.5' }
       ]
     }
   }
