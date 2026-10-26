@@ -20,10 +20,10 @@ import (
 
 const (
 	ClientID     = "9d1c250a-e61b-44d9-88ed-5944d1962f5e"
-	AuthorizeURL = "https://claude.ai/oauth/authorize"
+	AuthorizeURL = "https://claude.com/cai/oauth/authorize"
 	TokenURL     = "https://platform.claude.com/v1/oauth/token"
-	RedirectURI  = "http://localhost:53692/callback"
-	Scopes       = "org:create_api_key user:profile user:inference user:sessions:claude_code user:mcp_servers user:file_upload"
+	RedirectURI  = "https://platform.claude.com/oauth/code/callback"
+	Scopes       = "org:create_api_key user:profile user:inference user:sessions:claude_code user:mcp_servers user:file_upload user:plugins"
 )
 
 type AuthStatus struct {

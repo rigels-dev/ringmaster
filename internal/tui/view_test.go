@@ -23,7 +23,7 @@ func TestClaudeOAuthURLView(t *testing.T) {
 	if !strings.Contains(v3, "Claude Subscription Authorization") {
 		t.Errorf("expected Claude Subscription Authorization view, got:\n%s", v3)
 	}
-	if !strings.Contains(v3, "https://claude.ai/oauth/authorize") {
+	if !strings.Contains(v3, "https://claude.com/cai/oauth/authorize") {
 		t.Errorf("expected generated authorize URL, got:\n%s", v3)
 	}
 	if !strings.Contains(v3, "Auth Code:") {

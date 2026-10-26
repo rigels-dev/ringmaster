@@ -18,8 +18,8 @@ func TestGenerateAuthURL(t *testing.T) {
 	if !strings.HasPrefix(urlStr, AuthorizeURL) {
 		t.Errorf("expected URL to start with %s, got: %s", AuthorizeURL, urlStr)
 	}
-	if !strings.Contains(urlStr, "redirect_uri=http%3A%2F%2Flocalhost%3A53692%2Fcallback") {
-		t.Errorf("expected redirect_uri=http://localhost:53692/callback in URL, got: %s", urlStr)
+	if !strings.Contains(urlStr, "redirect_uri=https%3A%2F%2Fplatform.claude.com%2Foauth%2Fcode%2Fcallback") {
+		t.Errorf("expected redirect_uri in URL, got: %s", urlStr)
 	}
 	if !strings.Contains(urlStr, "code_challenge=") {
 		t.Errorf("expected code_challenge in URL, got: %s", urlStr)
