@@ -114,9 +114,14 @@ export default defineEventHandler((event) => {
 
   // Read root fleet first (where providers & agents are configured)
   parseFleet(rootToml)
-  // If local project toml has specific overrides, apply them
-  if (projectToml !== rootToml) {
-    parseFleet(projectToml)
+  // If local project toml has specific overrides, apply them ONLY if it defines default_master or agents
+  if (projectToml !== rootToml && fs.existsSync(projectToml)) {
+    try {
+      const localContent = fs.readFileSync(projectToml, 'utf-8')
+      if (localContent.includes('default_master') || localContent.includes('[agents')) {
+        parseFleet(projectToml)
+      }
+    } catch {}
   }
 
   const isInitialized = fs.existsSync(briefPath) || fs.existsSync(projectToml)
