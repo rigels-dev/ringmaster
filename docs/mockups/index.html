@@ -1232,15 +1232,23 @@
           <div class="form-grid">
             <div class="form-group">
               <label>Provider Name</label>
-              <input type="text" id="newProvName" placeholder="e.g. ollama_local, openrouter, 9router">
+              <input type="text" id="newProvName" placeholder="e.g. claude_subscription, claude, openai">
             </div>
             <div class="form-group">
-              <label>Base URL</label>
-              <input type="text" id="newProvURL" placeholder="e.g. http://localhost:11434/v1">
+              <label>Provider Type</label>
+              <select id="newProvType" style="background: var(--bg-inner); border: 1px solid var(--border-steel); color: #ccd7e2; padding: 6px 10px; border-radius: 4px; font-size: 11px;">
+                <option value="openai">OpenAI Compatible (OpenAI, 9router, Ollama, OpenRouter)</option>
+                <option value="anthropic">Claude API (Anthropic Messages API)</option>
+                <option value="claude_subscription">Claude Subscription (Claude Pro / Team OAuth)</option>
+              </select>
             </div>
-            <div class="form-group" style="grid-column: span 2;">
-              <label>API Key Env Var (Optional for local)</label>
-              <input type="text" id="newProvEnv" placeholder="e.g. OPENROUTER_API_KEY">
+            <div class="form-group">
+              <label>Base URL (Optional for Claude Subscription)</label>
+              <input type="text" id="newProvURL" placeholder="e.g. https://api.anthropic.com/v1 or http://localhost:11434/v1">
+            </div>
+            <div class="form-group">
+              <label>API Key Env Var (Optional for local / subscription)</label>
+              <input type="text" id="newProvEnv" placeholder="e.g. ANTHROPIC_API_KEY, OPENAI_API_KEY">
             </div>
           </div>
           <button class="cfg-btn-top" style="align-self: flex-start;" onclick="addNewProvider()">+ Add Provider</button>
@@ -1932,9 +1940,19 @@
       }
 
       for (const [pname, p] of Object.entries(currentConfig.providers || {})) {
+        const pType = p.type || 'openai';
+        const displayURL = (pType.includes('claude_sub')) ? 'local (claude-cli / subscription)' : (p.base_url || 'https://api.openai.com/v1');
+        const badgeColor = (pType.includes('claude_sub')) ? 'var(--cyan-energy)' : (pType === 'anthropic' ? '#ff9900' : 'var(--gear-gold)');
+
         const row = document.createElement('div');
-        row.style = 'background: #11161b; padding: 5px 8px; border: 1px solid var(--border-steel); font-size: 9px; display: flex; justify-content: space-between; border-radius: 3px;';
-        row.innerHTML = `<span style="color: var(--gear-gold); font-weight: 600;">${pname}</span><span style="color: var(--text-muted);">${p.base_url}</span>`;
+        row.style = 'background: #11161b; padding: 5px 8px; border: 1px solid var(--border-steel); font-size: 9px; display: flex; justify-content: space-between; align-items: center; border-radius: 3px;';
+        row.innerHTML = `
+          <div>
+            <span style="color: ${badgeColor}; font-weight: 600;">${pname}</span>
+            <span style="font-size: 8px; color: var(--text-dim); margin-left: 4px;">[${pType}]</span>
+          </div>
+          <span style="color: var(--text-muted); font-size: 8px;">${displayURL}</span>
+        `;
         provContainer.appendChild(row);
       }
     }
@@ -1948,10 +1966,13 @@
       provSelect.innerHTML = '';
 
       for (const [name, p] of Object.entries(currentConfig.providers || {})) {
+        const pType = p.type || 'openai';
+        const displayURL = (pType.includes('claude_sub')) ? 'local (claude-cli / subscription)' : (p.base_url || 'https://api.openai.com/v1');
         const tr = document.createElement('tr');
         tr.innerHTML = `
           <td style="font-weight: 600; color: var(--gear-gold);">${name}</td>
-          <td>${p.base_url}</td>
+          <td><span class="panel-badge">${pType}</span></td>
+          <td>${displayURL}</td>
           <td><code>${p.api_key_env || '—'}</code></td>
           <td><button class="cfg-btn-del" onclick="deleteProvider('${name}')">Delete</button></td>
         `;
@@ -1959,7 +1980,7 @@
 
         const opt = document.createElement('option');
         opt.value = name;
-        opt.textContent = name;
+        opt.textContent = `${name} (${pType})`;
         provSelect.appendChild(opt);
       }
 
@@ -1979,12 +2000,19 @@
 
     function addNewProvider() {
       const name = document.getElementById('newProvName').value.trim();
-      const url = document.getElementById('newProvURL').value.trim();
+      const type = document.getElementById('newProvType').value;
+      let url = document.getElementById('newProvURL').value.trim();
       const env = document.getElementById('newProvEnv').value.trim();
 
-      if (!name || !url) return alert('Name and Base URL are required');
+      if (!name) return alert('Provider Name is required');
+      if (type !== 'claude_subscription' && !url) {
+        if (type === 'anthropic') url = 'https://api.anthropic.com/v1';
+        else if (name === 'openai') url = 'https://api.openai.com/v1';
+        else return alert('Base URL is required for standard OpenAI/Anthropic providers');
+      }
+
       if (!currentConfig.providers) currentConfig.providers = {};
-      currentConfig.providers[name] = { base_url: url, api_key_env: env };
+      currentConfig.providers[name] = { type: type, base_url: url, api_key_env: env };
 
       document.getElementById('newProvName').value = '';
       document.getElementById('newProvURL').value = '';

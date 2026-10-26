@@ -46,16 +46,17 @@ var agentsListCmd = &cobra.Command{
 			Foreground(lipgloss.Color("#E05436"))
 
 		fmt.Println("\nRegistered Agents in Ringmaster:")
-		fmt.Printf("%-18s %-15s %-32s %-24s %-10s %-12s\n",
+		fmt.Printf("%-18s %-15s %-12s %-30s %-24s %-10s %-12s\n",
 			headerStyle.Render("ALIAS"),
 			headerStyle.Render("PROVIDER"),
-			headerStyle.Render("BASE URL"),
+			headerStyle.Render("TYPE"),
+			headerStyle.Render("ENDPOINT / BASE URL"),
 			headerStyle.Render("MODEL"),
 			headerStyle.Render("ROLE"),
 			headerStyle.Render("TOOL CALLING"),
 		)
 		fmt.Println(lipgloss.NewStyle().Foreground(lipgloss.Color("#3E4C59")).Render(
-			"-------------------------------------------------------------------------------------------------------------------",
+			"----------------------------------------------------------------------------------------------------------------------------------",
 		))
 
 		var aliases []string
@@ -78,10 +79,21 @@ var agentsListCmd = &cobra.Command{
 				toolCallingStr = "yes"
 			}
 
-			fmt.Printf("%-18s %-15s %-32s %-24s %-10s %-12s\n",
+			pType := p.Type
+			if pType == "" {
+				pType = "openai"
+			}
+
+			baseURLDisplay := p.BaseURL
+			if pType == "claude_subscription" || pType == "claude_sub" {
+				baseURLDisplay = "local (claude-cli / oauth)"
+			}
+
+			fmt.Printf("%-18s %-15s %-12s %-30s %-24s %-10s %-12s\n",
 				cellStyle.Render(alias),
 				cellStyle.Render(a.Provider),
-				cellStyle.Render(p.BaseURL),
+				cellStyle.Render(pType),
+				cellStyle.Render(baseURLDisplay),
 				cellStyle.Render(a.Model),
 				roleRendered,
 				cellStyle.Render(toolCallingStr),
@@ -89,6 +101,48 @@ var agentsListCmd = &cobra.Command{
 		}
 		fmt.Println()
 		_ = reg
+		return nil
+	},
+}
+
+var agentsPingCmd = &cobra.Command{
+	Use:   "ping <alias>",
+	Short: "Ping an agent to test connectivity and response latency",
+	Args:  cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		if cfg == nil {
+			return fmt.Errorf("configuration not loaded. Please create ringmaster.toml or pass --config")
+		}
+
+		alias := args[0]
+		reg := registry.NewRegistry(cfg)
+		provider, agentCfg, err := reg.GetProviderForAgent(alias)
+		if err != nil {
+			return err
+		}
+
+		fmt.Printf("Pinging agent '%s' (%s via %s)...\n", alias, agentCfg.Model, agentCfg.Provider)
+		start := time.Now()
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+
+		resp, err := provider.Chat(ctx, agentCfg.Model, llm.ChatRequest{
+			Messages: []llm.Message{
+				{Role: "user", Content: "Respond with exactly the single word 'PONG'."},
+			},
+		})
+		latency := time.Since(start)
+
+		if err != nil {
+			fmt.Printf("✗ Ping failed (%s): %v\n", latency.Round(time.Millisecond), err)
+			return err
+		}
+
+		fmt.Printf("✓ Ping succeeded (%s)!\n", latency.Round(time.Millisecond))
+		fmt.Printf("  Response: %s\n", resp.Content)
+		if resp.Usage.TotalTokens > 0 {
+			fmt.Printf("  Tokens: %d in, %d out (%d total)\n", resp.Usage.PromptTokens, resp.Usage.CompletionTokens, resp.Usage.TotalTokens)
+		}
 		return nil
 	},
 }
@@ -187,5 +241,6 @@ var agentsCheckCmd = &cobra.Command{
 func init() {
 	agentsCmd.AddCommand(agentsListCmd)
 	agentsCmd.AddCommand(agentsCheckCmd)
+	agentsCmd.AddCommand(agentsPingCmd)
 	RootCmd.AddCommand(agentsCmd)
 }

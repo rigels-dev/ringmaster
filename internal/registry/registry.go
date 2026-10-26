@@ -14,7 +14,7 @@ type Registry struct {
 func NewRegistry(cfg *config.Config) *Registry {
 	providers := make(map[string]llm.Provider)
 	for name, p := range cfg.Providers {
-		providers[name] = llm.NewClient(p.BaseURL, p.APIKeyEnv)
+		providers[name] = llm.NewProvider(p.Type, p.BaseURL, p.APIKeyEnv)
 	}
 
 	return &Registry{

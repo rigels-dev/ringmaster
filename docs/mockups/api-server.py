@@ -98,7 +98,10 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
         out = []
         for name, p in providers.items():
             out.append(f"[providers.{name}]")
-            out.append(f'base_url = "{p.get("base_url", "")}"')
+            if p.get("type"):
+                out.append(f'type = "{p.get("type")}"')
+            if p.get("base_url"):
+                out.append(f'base_url = "{p.get("base_url", "")}"')
             if p.get("api_key_env"):
                 out.append(f'api_key_env = "{p.get("api_key_env", "")}"')
             out.append("")

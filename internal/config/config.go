@@ -9,8 +9,9 @@ import (
 )
 
 type ProviderConfig struct {
-	BaseURL   string `toml:"base_url"`
-	APIKeyEnv string `toml:"api_key_env"`
+	Type      string `toml:"type,omitempty"` // "openai" (default), "anthropic", "claude_subscription"
+	BaseURL   string `toml:"base_url,omitempty"`
+	APIKeyEnv string `toml:"api_key_env,omitempty"`
 }
 
 type AgentConfig struct {
@@ -86,8 +87,28 @@ func Validate(cfg *Config) error {
 	}
 
 	for pName, p := range cfg.Providers {
+		pType := p.Type
+		if pType == "" {
+			pType = "openai"
+		}
+		if pType != "openai" && pType != "anthropic" && pType != "claude_subscription" && pType != "claude_sub" {
+			return fmt.Errorf("validation error [providers.%s.type]: invalid provider type '%s', must be 'openai', 'anthropic', or 'claude_subscription'", pName, p.Type)
+		}
+
+		if pType == "claude_subscription" || pType == "claude_sub" {
+			continue // Claude subscription uses local claude credentials, no baseURL required
+		}
+
 		if p.BaseURL == "" {
-			return fmt.Errorf("validation error [providers.%s.base_url]: base_url cannot be empty", pName)
+			if pType == "anthropic" {
+				p.BaseURL = "https://api.anthropic.com/v1"
+				cfg.Providers[pName] = p
+			} else if pName == "openai" {
+				p.BaseURL = "https://api.openai.com/v1"
+				cfg.Providers[pName] = p
+			} else {
+				return fmt.Errorf("validation error [providers.%s.base_url]: base_url cannot be empty", pName)
+			}
 		}
 	}
 

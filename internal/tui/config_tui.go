@@ -228,22 +228,31 @@ func (m ConfigModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m *ConfigModel) initProviderInputs(name string, p config.ProviderConfig) {
-	m.inputs = make([]textinput.Model, 3)
+	m.inputs = make([]textinput.Model, 4)
 
 	m.inputs[0] = textinput.New()
-	m.inputs[0].Placeholder = "e.g. ollama_local, openrouter, 9router"
+	m.inputs[0].Placeholder = "e.g. claude_subscription, claude, openai, 9router"
 	m.inputs[0].SetValue(name)
 	m.inputs[0].Prompt = "Provider Name: "
 
 	m.inputs[1] = textinput.New()
-	m.inputs[1].Placeholder = "e.g. http://localhost:11434/v1"
-	m.inputs[1].SetValue(p.BaseURL)
-	m.inputs[1].Prompt = "Base URL:      "
+	pType := p.Type
+	if pType == "" {
+		pType = "openai"
+	}
+	m.inputs[1].Placeholder = "openai | anthropic | claude_subscription"
+	m.inputs[1].SetValue(pType)
+	m.inputs[1].Prompt = "Type:          "
 
 	m.inputs[2] = textinput.New()
-	m.inputs[2].Placeholder = "e.g. OPENROUTER_API_KEY (optional for local)"
-	m.inputs[2].SetValue(p.APIKeyEnv)
-	m.inputs[2].Prompt = "API Key Env:   "
+	m.inputs[2].Placeholder = "e.g. http://localhost:11434/v1 (optional for claude_sub)"
+	m.inputs[2].SetValue(p.BaseURL)
+	m.inputs[2].Prompt = "Base URL:      "
+
+	m.inputs[3] = textinput.New()
+	m.inputs[3].Placeholder = "e.g. OPENROUTER_API_KEY (optional for local/claude_sub)"
+	m.inputs[3].SetValue(p.APIKeyEnv)
+	m.inputs[3].Prompt = "API Key Env:   "
 
 	m.inputs[0].Focus()
 }
@@ -332,15 +341,31 @@ func (m *ConfigModel) submitForm() (tea.Model, tea.Cmd) {
 	switch m.mode {
 	case modeAddProvider, modeEditProvider:
 		name := strings.TrimSpace(m.inputs[0].Value())
-		baseURL := strings.TrimSpace(m.inputs[1].Value())
-		apiEnv := strings.TrimSpace(m.inputs[2].Value())
+		pType := strings.TrimSpace(m.inputs[1].Value())
+		baseURL := strings.TrimSpace(m.inputs[2].Value())
+		apiEnv := strings.TrimSpace(m.inputs[3].Value())
 
-		if name == "" || baseURL == "" {
-			m.statusMsg = "Provider name and Base URL are required!"
+		if pType == "" {
+			pType = "openai"
+		}
+
+		if name == "" {
+			m.statusMsg = "Provider name is required!"
 			return m, nil
+		}
+		if pType != "claude_subscription" && pType != "claude_sub" && baseURL == "" {
+			if pType == "anthropic" {
+				baseURL = "https://api.anthropic.com/v1"
+			} else if name == "openai" {
+				baseURL = "https://api.openai.com/v1"
+			} else {
+				m.statusMsg = "Base URL is required for standard OpenAI/Anthropic providers!"
+				return m, nil
+			}
 		}
 
 		m.cfg.Providers[name] = config.ProviderConfig{
+			Type:      pType,
 			BaseURL:   baseURL,
 			APIKeyEnv: apiEnv,
 		}
@@ -348,7 +373,7 @@ func (m *ConfigModel) submitForm() (tea.Model, tea.Cmd) {
 		if err := config.SaveFile(m.configPath, m.cfg); err != nil {
 			m.err = err
 		} else {
-			m.statusMsg = fmt.Sprintf("✓ Provider '%s' saved successfully!", name)
+			m.statusMsg = fmt.Sprintf("✓ Provider '%s' (%s) saved successfully!", name, pType)
 		}
 		m.mode = modeList
 
@@ -460,8 +485,8 @@ func (m ConfigModel) View() string {
 			b.WriteString(hintStyle.Render("No providers registered yet. Press [a] to add one."))
 			b.WriteString("\n")
 		} else {
-			b.WriteString(fmt.Sprintf("%-20s %-36s %-20s\n", headerStyle.Render("PROVIDER NAME"), headerStyle.Render("BASE URL"), headerStyle.Render("API KEY ENV")))
-			b.WriteString(lipgloss.NewStyle().Foreground(lipgloss.Color("#2E3842")).Render("──────────────────────────────────────────────────────────────────────────\n"))
+			b.WriteString(fmt.Sprintf("%-18s %-16s %-32s %-20s\n", headerStyle.Render("PROVIDER NAME"), headerStyle.Render("TYPE"), headerStyle.Render("BASE URL"), headerStyle.Render("API KEY ENV")))
+			b.WriteString(lipgloss.NewStyle().Foreground(lipgloss.Color("#2E3842")).Render("──────────────────────────────────────────────────────────────────────────────────────────\n"))
 
 			for i, name := range names {
 				p := m.cfg.Providers[name]
@@ -472,7 +497,16 @@ func (m ConfigModel) View() string {
 					lineStyle = selectedItemStyle
 				}
 
-				row := fmt.Sprintf("%s%-18s %-36s %-20s", prefix, name, p.BaseURL, p.APIKeyEnv)
+				pType := p.Type
+				if pType == "" {
+					pType = "openai"
+				}
+				displayURL := p.BaseURL
+				if pType == "claude_subscription" || pType == "claude_sub" {
+					displayURL = "local (claude-cli / subscription)"
+				}
+
+				row := fmt.Sprintf("%s%-16s %-16s %-32s %-20s", prefix, name, pType, displayURL, p.APIKeyEnv)
 				b.WriteString(lineStyle.Render(row))
 				b.WriteString("\n")
 			}

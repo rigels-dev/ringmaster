@@ -80,6 +80,17 @@ func NewClient(baseURL, apiKeyEnv string) *OpenAICompatibleClient {
 	}
 }
 
+func NewProvider(providerType, baseURL, apiKeyEnv string) Provider {
+	switch strings.ToLower(providerType) {
+	case "anthropic":
+		return NewAnthropicClient(baseURL, apiKeyEnv)
+	case "claude_subscription", "claude_sub", "claude-subscription":
+		return NewClaudeSubscriptionClient()
+	default:
+		return NewClient(baseURL, apiKeyEnv)
+	}
+}
+
 func (c *OpenAICompatibleClient) getAPIKey() (string, error) {
 	if c.APIKeyEnv == "" {
 		return "", nil
