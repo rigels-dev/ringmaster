@@ -294,6 +294,9 @@ func (c *AnthropicClient) ListModels(ctx context.Context) ([]ModelInfo, error) {
 		{ID: "claude-3-7-sonnet-20250219", Desc: "Claude 3.7 Sonnet (Hybrid Reasoning & Coding)"},
 		{ID: "claude-3-5-sonnet-20241022", Desc: "Claude 3.5 Sonnet v2 (Coding Benchmark Leader)"},
 		{ID: "claude-3-5-haiku-20241022", Desc: "Claude 3.5 Haiku (Fast & Token Efficient)"},
-		{ID: "claude-opus-5-5", Desc: "Claude Opus (Deep Architecture & Planning)"},
+		{ID: "claude-opus-5-5", Desc: "Claude Opus 5.5 (Deep Architecture & Planning)"},
+		{ID: "claude-sonnet-5-5", Desc: "Claude Sonnet 5.5 (Next-Gen Balanced Model)"},
+		{ID: "claude-haiku-5-5", Desc: "Claude Haiku 5.5 (Ultra-Fast Worker)"},
+		{ID: "claude-3-opus-20240229", Desc: "Claude 3 Opus (Complex Logic & Synthesis)"},
 	}, nil
 }

@@ -9,6 +9,7 @@ import (
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"ringmaster/internal/auth"
 	"ringmaster/internal/config"
 	"ringmaster/internal/llm"
 )
@@ -99,6 +100,7 @@ const (
 	modeList viewMode = iota
 	modePickProviderStep1 // Step 1: Choose Provider
 	modePickProviderStep2 // Step 2: Choose Auth Method
+	modeClaudeOAuth       // Interactive OAuth URL + Code paste
 	modePickModel         // Step 3: Pick Model from fetched list
 	modePickModelRole     // Step 4: Pick Role for chosen model
 	modeEditProvider
@@ -132,9 +134,18 @@ var popularProviders = []ProviderOption{
 		Description: "Claude 5.5 Sonnet, Opus, Haiku",
 		AuthMethods: []AuthMethodOption{
 			{
+				ID:          "claude_oauth",
+				Label:       "Claude Subscription (Login via Browser URL & Authorized Code)",
+				Description: "Generates auth link to claude.ai/oauth/authorize and exchanges code",
+				Type:        "claude_subscription",
+				BaseURL:     "",
+				DefaultEnv:  "",
+				NeedsInput:  false,
+			},
+			{
 				ID:          "claude_cli",
-				Label:       "Anthropic Claude CLI (Reuse a local Claude CLI login on this host)",
-				Description: "Uses local ~/.claude subscription / Pro / Team (Zero API key)",
+				Label:       "Anthropic Claude CLI (Reuse existing local ~/.claude session)",
+				Description: "Uses existing Claude Pro/Team session already logged in",
 				Type:        "claude_subscription",
 				BaseURL:     "",
 				DefaultEnv:  "",
@@ -142,8 +153,8 @@ var popularProviders = []ProviderOption{
 			},
 			{
 				ID:          "api_key",
-				Label:       "Anthropic API key",
-				Description: "Direct Anthropic Messages API (ANTHROPIC_API_KEY)",
+				Label:       "Anthropic API key (ANTHROPIC_API_KEY)",
+				Description: "Direct Anthropic Messages API (api.anthropic.com/v1)",
 				Type:        "anthropic",
 				BaseURL:     "https://api.anthropic.com/v1",
 				DefaultEnv:  "ANTHROPIC_API_KEY",
@@ -330,6 +341,10 @@ type ConfigModel struct {
 	modelSearchQuery      string
 	selectedModelID       string
 	roleCursor            int
+	oauthURL              string
+	oauthVerifier         string
+	oauthState            string
+	oauthInput            textinput.Model
 	inputs                []textinput.Model
 	statusMsg             string
 	err                   error
@@ -563,6 +578,26 @@ func (m ConfigModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					providerKey = "claude_subscription"
 				}
 
+				if method.ID == "claude_oauth" {
+					authURL, verifier, state, err := auth.GenerateAuthURL()
+					if err != nil {
+						m.statusMsg = fmt.Sprintf("Error generating auth URL: %v", err)
+						return m, nil
+					}
+					m.oauthURL = authURL
+					m.oauthVerifier = verifier
+					m.oauthState = state
+
+					ti := textinput.New()
+					ti.Placeholder = "Paste authorization code or callback URL here..."
+					ti.Prompt = "Auth Code: "
+					ti.Width = 60
+					ti.Focus()
+					m.oauthInput = ti
+					m.mode = modeClaudeOAuth
+					return m, textinput.Blink
+				}
+
 				if method.NeedsInput {
 					m.initProviderInputs(providerKey, p)
 					m.mode = modeAddProvider
@@ -594,6 +629,57 @@ func (m ConfigModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.statusMsg = fmt.Sprintf("✓ Configured provider '%s' (%s) successfully!", providerKey, method.Label)
 				m.mode = modeList
 				return m, nil
+			}
+
+		case modeClaudeOAuth: // Interactive OAuth flow
+			switch msg.String() {
+			case "esc":
+				m.mode = modePickProviderStep2
+				return m, nil
+			case "enter":
+				code := strings.TrimSpace(m.oauthInput.Value())
+				if code == "" {
+					m.statusMsg = "Please enter or paste the authorization code!"
+					return m, nil
+				}
+
+				ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+				tokens, err := auth.ExchangeAuthCode(ctx, code, m.oauthVerifier, m.oauthState)
+				cancel()
+
+				if err != nil {
+					m.statusMsg = fmt.Sprintf("Authorization exchange failed: %v", err)
+					return m, nil
+				}
+
+				// Save credentials locally
+				_ = auth.SaveClaudeCredentials(tokens)
+
+				providerKey := "claude_subscription"
+				p := config.ProviderConfig{
+					Type: "claude_subscription",
+				}
+				m.cfg.Providers[providerKey] = p
+				_ = config.SaveFile(m.configPath, m.cfg)
+				m.configuredProviderKey = providerKey
+
+				// Fetch models
+				client := llm.NewProvider(p.Type, "", "")
+				ctx2, cancel2 := context.WithTimeout(context.Background(), 8*time.Second)
+				models, _ := client.ListModels(ctx2)
+				cancel2()
+
+				m.fetchedModels = models
+				m.checkedModels = make(map[string]bool)
+				m.modelCursor = 0
+				m.modelSearchQuery = ""
+				m.statusMsg = "✓ Claude Subscription authorized successfully! Check models to add to list."
+				m.mode = modePickModel
+				return m, nil
+			default:
+				var cmd tea.Cmd
+				m.oauthInput, cmd = m.oauthInput.Update(msg)
+				return m, cmd
 			}
 
 		case modePickModel: // Step 3: Check / Select models to put on list
@@ -1154,6 +1240,31 @@ func (m ConfigModel) View() string {
 		}
 
 		b.WriteString("\n" + hintStyle.Render("↑/↓ to navigate · Enter: confirm · Esc: back") + "\n")
+		return b.String()
+	}
+
+	// ==========================================
+	// CLAUDE OAUTH INTERACTIVE FLOW
+	// ==========================================
+	if m.mode == modeClaudeOAuth {
+		b.WriteString(stepDoneBullet.Render("●") + " " + stepDimTitleStyle.Render("Model/auth provider") + "\n")
+		b.WriteString("  " + stepAnswerStyle.Render("Anthropic") + "\n\n")
+
+		b.WriteString(stepActiveBullet.Render("●") + " " + stepTitleStyle.Render("Claude Subscription Authorization") + "\n\n")
+
+		b.WriteString("  1. " + normalItemStyle.Render("Open this authorization URL in your browser:") + "\n")
+		b.WriteString("     " + selectedItemStyle.Render(m.oauthURL) + "\n\n")
+
+		b.WriteString("  2. " + normalItemStyle.Render("Log in to Claude Pro/Team and approve access.") + "\n")
+		b.WriteString("  3. " + normalItemStyle.Render("Copy the authorized code or the full redirect URL, and paste it below:") + "\n\n")
+
+		b.WriteString("  " + m.oauthInput.View() + "\n\n")
+
+		if m.statusMsg != "" {
+			b.WriteString("  " + errStyle.Render(m.statusMsg) + "\n\n")
+		}
+
+		b.WriteString(hintStyle.Render("Press [Enter] to submit code · [Esc] to cancel") + "\n")
 		return b.String()
 	}
 

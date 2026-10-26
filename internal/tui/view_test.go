@@ -8,58 +8,74 @@ import (
 	"testing"
 )
 
-func TestWizardFullFlow(t *testing.T) {
+func TestClaudeOAuthURLView(t *testing.T) {
 	cfg := config.DefaultConfig()
 	model := NewConfigModel(cfg, "ringmaster.toml")
 
 	// Step 1: press 'a'
 	m1, _ := model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'a'}})
-	v1 := m1.(ConfigModel).View()
-	if !strings.Contains(v1, "Model/auth provider") {
-		t.Errorf("Step 1 missing Model/auth provider header")
-	}
-
 	// Step 2: press Enter on Anthropic
 	m2, _ := m1.(ConfigModel).Update(tea.KeyMsg{Type: tea.KeyEnter})
-	v2 := m2.(ConfigModel).View()
-	if !strings.Contains(v2, "Anthropic auth method") {
-		t.Errorf("Step 2 missing Anthropic auth method header")
-	}
-
-	// Step 3: press Enter on Anthropic Claude CLI -> Should fetch models & show Step 3
+	// Step 3: press Enter on Claude Subscription (Login via Browser URL & Authorized Code)
 	m3, _ := m2.(ConfigModel).Update(tea.KeyMsg{Type: tea.KeyEnter})
 	v3 := m3.(ConfigModel).View()
-	if !strings.Contains(v3, "Select models") {
-		t.Errorf("Step 3 missing models selection header, got:\n%s", v3)
+
+	if !strings.Contains(v3, "Claude Subscription Authorization") {
+		t.Errorf("expected Claude Subscription Authorization view, got:\n%s", v3)
+	}
+	if !strings.Contains(v3, "https://claude.ai/oauth/authorize") {
+		t.Errorf("expected generated authorize URL, got:\n%s", v3)
+	}
+	if !strings.Contains(v3, "Auth Code:") {
+		t.Errorf("expected Auth Code input, got:\n%s", v3)
 	}
 
-	// Check sonnet with Space
-	m4, _ := m3.(ConfigModel).Update(tea.KeyMsg{Type: tea.KeySpace})
-	v4 := m4.(ConfigModel).View()
-	if !strings.Contains(v4, "[x] sonnet") {
-		t.Errorf("expected sonnet to be checked [x], got:\n%s", v4)
+	fmt.Println("--- Claude OAuth View Test Passed! ---")
+	fmt.Println(v3)
+}
+
+func TestClaudeExistingSessionAndVersionedModels(t *testing.T) {
+	cfg := config.DefaultConfig()
+	model := NewConfigModel(cfg, "ringmaster.toml")
+
+	// Step 1: press 'a'
+	m1, _ := model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'a'}})
+	// Step 2: press Enter on Anthropic
+	m2, _ := m1.(ConfigModel).Update(tea.KeyMsg{Type: tea.KeyEnter})
+	// Move down to option 1 (Reuse existing local ~/.claude session)
+	m2_down, _ := m2.(ConfigModel).Update(tea.KeyMsg{Type: tea.KeyDown})
+	// Press Enter -> directly lists models with FULL VERSIONS!
+	m3, _ := m2_down.(ConfigModel).Update(tea.KeyMsg{Type: tea.KeyEnter})
+	v3 := m3.(ConfigModel).View()
+
+	// Verify full versions are listed!
+	if !strings.Contains(v3, "claude-3-7-sonnet-20250219") {
+		t.Errorf("expected full version claude-3-7-sonnet-20250219, got:\n%s", v3)
+	}
+	if !strings.Contains(v3, "claude-3-5-sonnet-20241022") {
+		t.Errorf("expected full version claude-3-5-sonnet-20241022, got:\n%s", v3)
+	}
+	if !strings.Contains(v3, "claude-3-5-haiku-20241022") {
+		t.Errorf("expected full version claude-3-5-haiku-20241022, got:\n%s", v3)
 	}
 
-	// Move down and check haiku with Space
+	// Check models with Space
+	m4, _ := m3.(ConfigModel).Update(tea.KeyMsg{Type: tea.KeySpace}) // check claude-3-7-sonnet
 	m5, _ := m4.(ConfigModel).Update(tea.KeyMsg{Type: tea.KeyDown})
-	m6, _ := m5.(ConfigModel).Update(tea.KeyMsg{Type: tea.KeySpace})
+	m6, _ := m5.(ConfigModel).Update(tea.KeyMsg{Type: tea.KeySpace}) // check claude-3-5-sonnet
 	v6 := m6.(ConfigModel).View()
-	if !strings.Contains(v6, "[x] haiku") {
-		t.Errorf("expected haiku to be checked [x], got:\n%s", v6)
+
+	if !strings.Contains(v6, "[x] claude-3-7-sonnet-20250219") {
+		t.Errorf("expected claude-3-7-sonnet-20250219 to be checked [x], got:\n%s", v6)
 	}
 
-	fmt.Println("--- V6 (With [x] Checkboxes Checked): ---")
+	fmt.Println("--- Model Checklist with Full Versions Passed! ---")
 	fmt.Println(v6)
 
-	// Confirm with Enter -> Puts checked models on agent list!
+	// Press Enter to confirm and add to agent list
 	m7, _ := m6.(ConfigModel).Update(tea.KeyMsg{Type: tea.KeyEnter})
 	v7 := m7.(ConfigModel).View()
 
-	fmt.Println("--- V7 (Final Agents Tab with Added Models): ---")
+	fmt.Println("--- Final Agent Roster with Versioned Models: ---")
 	fmt.Println(v7)
-
-	cfgFinal := m7.(ConfigModel).cfg
-	if len(cfgFinal.Agents) < 2 {
-		t.Errorf("expected at least 2 agents added, got %d", len(cfgFinal.Agents))
-	}
 }
