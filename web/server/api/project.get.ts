@@ -77,15 +77,15 @@ export default defineEventHandler((event) => {
       const content = fs.readFileSync(filePath, 'utf-8')
       const masterMatch = content.match(/default_master\s*=\s*['"]([^'"]+)['"]/)
       if (masterMatch && masterMatch[1] && masterMatch[1].trim() !== '') {
-        const potentialMaster = masterMatch[1].trim()
+        const potentialMaster = masterMatch[1].trim().replace(/^['"]|['"]$/g, '')
         // Check if this potentialMaster actually has role = 'master' in [agents]
-        const agentBlockRegex = new RegExp(`\\[agents\\.${potentialMaster.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\$&')}\\]([\\s\\S]*?)(?=\\n\\[|$)`)
+        const agentBlockRegex = new RegExp(`\\[agents\\.(?:'|")?${potentialMaster.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\$&')}(?:'|")?\\]([\\s\\S]*?)(?=\\n\\[|$)`)
         const agentBlock = content.match(agentBlockRegex)
         if (agentBlock && agentBlock[1].includes("role = 'master'")) {
           master = potentialMaster
         } else {
           // If default_master has role = 'worker', search for any other agent with role = 'master'
-          const allAgents = content.matchAll(/\[agents\.([^\]]+)\]([\s\S]*?)(?=\n\[|$)/g)
+          const allAgents = content.matchAll(/\[agents\.(?:'|")?([^'\]]+)(?:'|")?\]([\s\S]*?)(?=\n\[|$)/g)
           let foundMaster = false
           for (const a of allAgents) {
             if (a[2].includes("role = 'master'")) {
@@ -104,7 +104,7 @@ export default defineEventHandler((event) => {
       
       const agentMatches = content.matchAll(/\[agents\.([^\]]+)\]/g)
       for (const m of agentMatches) {
-        const aName = m[1].trim()
+        const aName = m[1].trim().replace(/^['"]|['"]$/g, '')
         if (aName !== master && !workers.includes(aName)) {
           workers.push(aName)
         }

@@ -9,10 +9,6 @@ import (
 
 // SaveFile marshals config to TOML format and saves to path
 func SaveFile(path string, cfg *Config) error {
-	if err := Validate(cfg); err != nil {
-		return err
-	}
-
 	data, err := toml.Marshal(cfg)
 	if err != nil {
 		return fmt.Errorf("failed to marshal config to TOML: %w", err)

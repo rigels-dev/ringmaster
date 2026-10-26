@@ -1,83 +1,79 @@
-import fs from 'node:fs'
+import { spawn } from 'node:child_process'
 import path from 'node:path'
+import fs from 'node:fs'
 
-export default defineEventHandler(() => {
+export default defineEventHandler(async () => {
   const projectDir = process.env.RINGMASTER_PROJECT_DIR || process.cwd()
   const localToml = path.join(projectDir, 'ringmaster.toml')
   const rootToml = '/home/ubuntu/project/ringmaster/ringmaster.toml'
   const targetToml = fs.existsSync(localToml) ? localToml : rootToml
 
-  const providers: any[] = []
-  const agents: any[] = []
-  let defaultMaster = ''
-  let defaultWorker = ''
+  // Call Go binary directly: ringmaster config-api
+  return new Promise((resolve) => {
+    const ringmasterBin = '/home/ubuntu/project/ringmaster/bin/ringmaster'
+    const child = spawn(ringmasterBin, ['config-api'])
 
-  if (fs.existsSync(targetToml)) {
-    try {
-      const content = fs.readFileSync(targetToml, 'utf-8')
-      
-      // Robust Regex for provider & agent names allowing dots, slashes, hyphens, underscores
-      const provRegex = /\[providers\.([^\]]+)\]([\s\S]*?)(?=\n\[|$)/g
-      let match: RegExpExecArray | null
-      while ((match = provRegex.exec(content)) !== null) {
-        const id = match[1].trim()
-        const block = match[2]
-        const typeMatch = block.match(/type\s*=\s*['"]([^'"]+)['"]/)
-        const urlMatch = block.match(/base_url\s*=\s*['"]([^'"]+)['"]/)
-        const envMatch = block.match(/api_key_env\s*=\s*['"]([^'"]+)['"]/)
-        providers.push({
-          id,
-          type: typeMatch ? typeMatch[1] : 'openai',
-          base_url: urlMatch ? urlMatch[1] : '',
-          api_key_env: envMatch ? envMatch[1] : ''
-        })
-      }
+    let stdout = ''
+    let stderr = ''
 
-      const agentRegex = /\[agents\.([^\]]+)\]([\s\S]*?)(?=\n\[|$)/g
-      while ((match = agentRegex.exec(content)) !== null) {
-        const id = match[1].trim()
-        const block = match[2]
-        const provMatch = block.match(/provider\s*=\s*['"]([^'"]+)['"]/)
-        const modelMatch = block.match(/model\s*=\s*['"]([^'"]+)['"]/)
-        const roleMatch = block.match(/role\s*=\s*['"]([^'"]+)['"]/)
-        const tcMatch = block.match(/tool_calling\s*=\s*(true|false)/)
-        agents.push({
-          id,
-          provider: provMatch ? provMatch[1] : '',
-          model: modelMatch ? modelMatch[1] : '',
-          role: roleMatch ? roleMatch[1] : 'worker',
-          tool_calling: tcMatch ? tcMatch[1] === 'true' : true
-        })
-      }
+    child.stdout.on('data', (d) => { stdout += d.toString() })
+    child.stderr.on('data', (d) => { stderr += d.toString() })
 
-      const dmMatch = content.match(/default_master\s*=\s*['"]([^'"]+)['"]/)
-      if (dmMatch && dmMatch[1].trim() !== '') {
-        const potentialDm = dmMatch[1].trim()
-        const targetAgent = agents.find(a => a.id === potentialDm)
-        if (targetAgent && targetAgent.role === 'master') {
-          defaultMaster = potentialDm
+    child.on('close', (code) => {
+      try {
+        const json = JSON.parse(stdout)
+        if (json.ok && json.data && json.data.config) {
+          const cfg = json.data.config
+          const providers: any[] = []
+          const rawProviders = cfg.providers || cfg.Providers || {}
+          for (const [id, p] of Object.entries(rawProviders)) {
+            const prov = p as any
+            providers.push({
+              id,
+              type: prov.type || prov.Type || 'openai',
+              base_url: prov.base_url || prov.BaseURL || '',
+              api_key_env: prov.api_key_env || prov.APIKeyEnv || ''
+            })
+          }
+
+          const agents: any[] = []
+          const rawAgents = cfg.agents || cfg.Agents || {}
+          for (const [id, a] of Object.entries(rawAgents)) {
+            const ag = a as any
+            agents.push({
+              id,
+              provider: ag.provider || ag.Provider || '',
+              model: ag.model || ag.Model || '',
+              role: ag.role || ag.Role || 'worker',
+              tool_calling: typeof ag.tool_calling === 'boolean' ? ag.tool_calling : (typeof ag.ToolCalling === 'boolean' ? ag.ToolCalling : true)
+            })
+          }
+
+          const routing = cfg.routing || cfg.Routing || {}
+          resolve({
+            ok: true,
+            configPath: json.data.config_path,
+            providers,
+            agents,
+            defaultMaster: routing.default_master || routing.DefaultMaster || '',
+            defaultWorker: routing.default_worker || routing.DefaultWorker || ''
+          })
         } else {
-          const masterAgent = agents.find(a => a.role === 'master')
-          defaultMaster = masterAgent ? masterAgent.id : ''
+          resolve({ ok: false, error: json.error || 'Failed to read config' })
         }
-      } else {
-        const masterAgent = agents.find(a => a.role === 'master')
-        defaultMaster = masterAgent ? masterAgent.id : ''
+      } catch (err: any) {
+        resolve({
+          ok: false,
+          error: stderr || stdout || err.message
+        })
       }
-      const dwMatch = content.match(/default_worker\s*=\s*['"]([^'"]+)['"]/)
-      if (dwMatch) defaultWorker = dwMatch[1]
+    })
 
-    } catch (err: any) {
-      return { ok: false, error: err.message }
-    }
-  }
-
-  return {
-    ok: true,
-    configPath: targetToml,
-    providers,
-    agents,
-    defaultMaster,
-    defaultWorker
-  }
+    const payload = JSON.stringify({
+      action: 'get',
+      config_path: targetToml
+    })
+    child.stdin.write(payload)
+    child.stdin.end()
+  })
 })

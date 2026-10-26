@@ -197,9 +197,5 @@ func LoadFile(path string) (*Config, error) {
 		cfg.Sandbox.Allow = DefaultAllowedCommands
 	}
 
-	if err := Validate(cfg); err != nil {
-		return nil, err
-	}
-
 	return cfg, nil
 }
