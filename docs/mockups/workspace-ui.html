@@ -1002,9 +1002,9 @@
         <span class="beast-tag">Tame The Beasts:</span>
         <span class="token-burn">Cheap-by-Default (~84%)</span>
       </div>
-      <div class="status-pill">
-        <span class="status-dot"></span>
-        Control Plane: ONLINE
+      <div class="status-pill" id="controlPlaneStatus">
+        <span class="status-dot" id="statusDot"></span>
+        <span id="statusText">Control Plane: ONLINE</span>
       </div>
     </div>
   </header>
@@ -1023,65 +1023,65 @@
       <div class="panel-content">
         <div class="plan-stats">
           <div class="stat-item">
-            <span class="stat-val gold">1</span>
+            <span class="stat-val gold" id="statActive">1</span>
             <span class="stat-lbl">Active</span>
           </div>
           <div class="stat-item">
-            <span class="stat-val green">2</span>
+            <span class="stat-val green" id="statVerified">2</span>
             <span class="stat-lbl">Verified</span>
           </div>
           <div class="stat-item">
-            <span class="stat-val cyan">1</span>
+            <span class="stat-val cyan" id="statQueued">1</span>
             <span class="stat-lbl">Queued</span>
           </div>
         </div>
 
-        <div class="task-tree">
-          <div class="task-card">
+        <div class="task-tree" id="taskTreeContainer">
+          <div class="task-card" id="task-T01" onclick="selectTask('T01')">
             <div class="task-header">
               <span class="task-id">T01 · Scaffold Go Core</span>
-              <span class="task-state-badge badge-done">MERGED</span>
+              <span class="task-state-badge badge-done" id="badge-T01">MERGED</span>
             </div>
             <div class="task-desc">Inisialisasi single binary Go 1.27, cobra CLI commands, dan TOML loader.</div>
             <div class="task-footer">
               <span class="puppet-tag">Puppet: coder-fast</span>
-              <span>100% criteria</span>
+              <span id="footer-T01">100% criteria</span>
             </div>
           </div>
 
-          <div class="task-card active" id="taskT02">
+          <div class="task-card active" id="task-T02" onclick="selectTask('T02')">
             <div class="task-header">
               <span class="task-id">T02 · Multi-Provider Engine</span>
-              <span class="task-state-badge badge-running">STRING PULLED</span>
+              <span class="task-state-badge badge-running" id="badge-T02">STRING PULLED</span>
             </div>
             <div class="task-desc">Wrapper OpenAI HTTP client agnostic untuk Ollama lokal & 9router.</div>
             <div class="task-footer">
               <span class="puppet-tag">Puppet: coder-fast</span>
-              <span style="color: var(--cyan-energy);">Turn 4/30</span>
+              <span id="footer-T02" style="color: var(--cyan-energy);">Turn 4/30</span>
             </div>
           </div>
 
-          <div class="task-card">
+          <div class="task-card" id="task-T03" onclick="selectTask('T03')">
             <div class="task-header">
               <span class="task-id">T03 · Isolated Worktree Sandbox</span>
-              <span class="task-state-badge badge-done">MERGED</span>
+              <span class="task-state-badge badge-done" id="badge-T03">MERGED</span>
             </div>
             <div class="task-desc">Spawn git worktrees otomatis per puppet task agar main branch aman.</div>
             <div class="task-footer">
               <span class="puppet-tag">Puppet: coder-cheap</span>
-              <span>Pass verification</span>
+              <span id="footer-T03">Pass verification</span>
             </div>
           </div>
 
-          <div class="task-card">
+          <div class="task-card" id="task-T04" onclick="selectTask('T04')">
             <div class="task-header">
               <span class="task-id">T04 · Trapdoor Merge Gate</span>
-              <span class="task-state-badge badge-queued">BLOCKED BY T02</span>
+              <span class="task-state-badge badge-queued" id="badge-T04">BLOCKED BY T02</span>
             </div>
             <div class="task-desc">Automated test runner & acceptance criteria validator sebelum fast-forward.</div>
             <div class="task-footer">
               <span class="puppet-tag">Puppet: coder-strict</span>
-              <span>Wait trigger</span>
+              <span id="footer-T04">Wait trigger</span>
             </div>
           </div>
         </div>
@@ -1097,17 +1097,17 @@
         <div class="panel-badge" id="masterModelBadge">Master: claude-opus-5-5</div>
       </div>
       <div class="panel-content">
-        <div class="lead-plan-card">
+        <div class="lead-plan-card" id="activeDirectiveCard">
           <div class="lead-title-row">
-            <div class="lead-title">
+            <div class="lead-title" id="directiveTitle">
               <span>★</span> ACTIVE DIRECTIVE: T02-multi-provider-engine
             </div>
-            <span style="font-size: 10px; color: var(--gear-gold);">Budget cap: 15,000 tokens</span>
+            <span style="font-size: 10px; color: var(--gear-gold);" id="directiveBudget">Budget cap: 15,000 tokens</span>
           </div>
-          <div class="prompt-box">
+          <div class="prompt-box" id="directivePrompt">
             "Implementasi interface Provider dengan method Complete(ctx, req) dan streaming support. Pastikan fallback jika Ollama 127.0.0.1 offline."
           </div>
-          <div class="criteria-box">
+          <div class="criteria-box" id="directiveCriteria">
             <strong>Acceptance Criteria (Trapdoor Guard):</strong>
             • go test ./internal/provider/... lulus 100% tanpa mock leak<br>
             • Max turn tidak melebihi 20 call ke LLM worker
@@ -1177,16 +1177,22 @@
   <!-- Bottom Command Deck -->
   <footer class="control-deck">
     <div class="shortcuts">
-      <span><span class="key-badge" onclick="triggerWhipAction()">SPACE</span> Whip / Pause</span>
+      <span><span class="key-badge" onclick="triggerWhipAction()">SPACE</span> Whip / Orchestrate</span>
       <span><span class="key-badge" onclick="triggerWhipAction()">W</span> Tame The Beasts</span>
+      <span><span class="key-badge" onclick="togglePauseOrchestration()">P</span> Pause/Resume</span>
       <span><span class="key-badge" onclick="openConfigModal()">C</span> Set Providers/Models</span>
-      <span><span class="key-badge">ESC</span> Close Modal</span>
+      <span><span class="key-badge" onclick="resetOrchestration()">R</span> Reset Flow</span>
     </div>
 
-    <button class="whip-action-btn" id="whipButton" onclick="triggerWhipAction()">
-      <span style="font-size: 15px;">🔥</span>
-      <span>TAME THE BEASTS (WHIP WORKERS)</span>
-    </button>
+    <div style="display: flex; gap: 10px; align-items: center;">
+      <button class="cfg-btn-top" id="pauseBtn" style="display: none; height: 32px; padding: 0 12px;" onclick="togglePauseOrchestration()">
+        ⏸ Pause
+      </button>
+      <button class="whip-action-btn" id="whipButton" onclick="triggerWhipAction()">
+        <span style="font-size: 15px;">🔥</span>
+        <span id="whipBtnLabel">START ORCHESTRATION (WHIP)</span>
+      </button>
+    </div>
   </footer>
 
   <!-- MODAL: SET PROVIDER AND MODEL LIST -->
@@ -1304,7 +1310,578 @@
   <audio id="whipAudioFile1" preload="auto" src="whip_crack.mp3"></audio>
 
   <script>
-    // --- Global Config Store ---
+    // ==========================================
+    // 1. SOUND ENGINE (SYNTHETIC ACOUSTICS & AUDIO FX)
+    // ==========================================
+    const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+
+    function playProceduralWhipCrack() {
+      if (audioContext.state === 'suspended') {
+        audioContext.resume();
+      }
+
+      const now = audioContext.currentTime;
+
+      // Part A: High-speed Windup Whoosh (Bandpass Noise)
+      const whooshBuffer = audioContext.createBuffer(1, audioContext.sampleRate * 0.22, audioContext.sampleRate);
+      const whooshData = whooshBuffer.getChannelData(0);
+      for (let i = 0; i < whooshData.length; i++) {
+        whooshData[i] = (Math.random() * 2 - 1);
+      }
+      const whooshSource = audioContext.createBufferSource();
+      whooshSource.buffer = whooshBuffer;
+
+      const whooshFilter = audioContext.createBiquadFilter();
+      whooshFilter.type = 'bandpass';
+      whooshFilter.frequency.setValueAtTime(300, now);
+      whooshFilter.frequency.exponentialRampToValueAtTime(3200, now + 0.18);
+      whooshFilter.Q.setValueAtTime(4.0, now);
+
+      const whooshGain = audioContext.createGain();
+      whooshGain.gain.setValueAtTime(0.01, now);
+      whooshGain.gain.linearRampToValueAtTime(0.4, now + 0.15);
+      whooshGain.gain.exponentialRampToValueAtTime(0.001, now + 0.22);
+
+      whooshSource.connect(whooshFilter);
+      whooshFilter.connect(whooshGain);
+      whooshGain.connect(audioContext.destination);
+      whooshSource.start(now);
+
+      // Part B: The Explosive Sonic Boom Crack (at t + 0.16s)
+      const crackStart = now + 0.16;
+      const crackBuffer = audioContext.createBuffer(1, audioContext.sampleRate * 0.35, audioContext.sampleRate);
+      const crackData = crackBuffer.getChannelData(0);
+      for (let i = 0; i < crackData.length; i++) {
+        crackData[i] = (Math.random() * 2 - 1) * Math.exp(-i / (audioContext.sampleRate * 0.035));
+      }
+      const crackSource = audioContext.createBufferSource();
+      crackSource.buffer = crackBuffer;
+
+      const crackHighpass = audioContext.createBiquadFilter();
+      crackHighpass.type = 'highpass';
+      crackHighpass.frequency.setValueAtTime(1200, crackStart);
+      crackHighpass.frequency.exponentialRampToValueAtTime(400, crackStart + 0.2);
+
+      const crackGain = audioContext.createGain();
+      crackGain.gain.setValueAtTime(1.0, crackStart);
+      crackGain.gain.exponentialRampToValueAtTime(0.001, crackStart + 0.35);
+
+      crackSource.connect(crackHighpass);
+      crackHighpass.connect(crackGain);
+      crackGain.connect(audioContext.destination);
+      crackSource.start(crackStart);
+
+      // Part C: Sub Thump / Body Impact
+      const osc = audioContext.createOscillator();
+      const oscGain = audioContext.createGain();
+      osc.type = 'triangle';
+      osc.frequency.setValueAtTime(180, crackStart);
+      osc.frequency.exponentialRampToValueAtTime(40, crackStart + 0.2);
+
+      oscGain.gain.setValueAtTime(0.8, crackStart);
+      oscGain.gain.exponentialRampToValueAtTime(0.001, crackStart + 0.22);
+
+      osc.connect(oscGain);
+      oscGain.connect(audioContext.destination);
+      osc.start(crackStart);
+      osc.stop(crackStart + 0.25);
+    }
+
+    function playWhipSound() {
+      const a1 = document.getElementById('whipAudioFile1');
+      if (a1) {
+        a1.currentTime = 0;
+        a1.play().catch(e => console.log('Audio element note:', e));
+      }
+      playProceduralWhipCrack();
+    }
+
+    // ==========================================
+    // 2. CANVAS WHIP VFX & EMBER PARTICLES ENGINE
+    // ==========================================
+    const canvas = document.getElementById('whipCanvas');
+    const ctx = canvas.getContext('2d');
+
+    function resizeCanvas() {
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+    }
+    window.addEventListener('resize', resizeCanvas);
+    resizeCanvas();
+
+    let particles = [];
+
+    class EmberParticle {
+      constructor(x, y, vx, vy, color, size, life) {
+        this.x = x;
+        this.y = y;
+        this.vx = vx;
+        this.vy = vy;
+        this.color = color;
+        this.size = size;
+        this.life = life;
+        this.maxLife = life;
+      }
+      update() {
+        this.x += this.vx;
+        this.y += this.vy;
+        this.vy += 0.15; // gravity
+        this.vx *= 0.98;
+        this.life -= 0.02;
+        this.size = Math.max(0.1, this.size * 0.97);
+      }
+      draw(c) {
+        c.save();
+        c.globalAlpha = Math.max(0, this.life / this.maxLife);
+        c.shadowBlur = 10;
+        c.shadowColor = this.color;
+        c.fillStyle = this.color;
+        c.beginPath();
+        c.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+        c.fill();
+        c.restore();
+      }
+    }
+
+    function startWhipVFX() {
+      const startX = window.innerWidth * 0.92;
+      const startY = window.innerHeight * 0.95;
+      const targetX = window.innerWidth * 0.38;
+      const targetY = window.innerHeight * 0.45;
+
+      const startTime = performance.now();
+      const duration = 480;
+
+      // Burst sparks at impact point
+      setTimeout(() => {
+        document.body.classList.add('screen-shake');
+        setTimeout(() => document.body.classList.remove('screen-shake'), 450);
+
+        const sparkColors = ['#ff3300', '#ff9900', '#ffea00', '#29F2EC', '#ffffff'];
+        for (let i = 0; i < 75; i++) {
+          const angle = Math.random() * Math.PI * 2;
+          const speed = Math.random() * 14 + 3;
+          particles.push(new EmberParticle(
+            targetX + (Math.random() - 0.5) * 40,
+            targetY + (Math.random() - 0.5) * 40,
+            Math.cos(angle) * speed,
+            Math.sin(angle) * speed,
+            sparkColors[Math.floor(Math.random() * sparkColors.length)],
+            Math.random() * 4 + 2,
+            Math.random() * 0.6 + 0.4
+          ));
+        }
+      }, 160);
+
+      function renderFrame(now) {
+        const elapsed = now - startTime;
+        const progress = Math.min(1, elapsed / duration);
+
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        // Draw Whip Line with Bézier wave simulation
+        if (progress < 0.7) {
+          const t = progress / 0.7;
+          ctx.save();
+          ctx.lineCap = 'round';
+          ctx.lineJoin = 'round';
+
+          const cp1x = startX - (startX - targetX) * 0.3 + Math.sin(t * Math.PI * 3) * 180;
+          const cp1y = startY - (startY - targetY) * 0.7 - Math.cos(t * Math.PI * 2) * 140;
+          const cp2x = targetX + Math.cos(t * Math.PI * 4) * 90;
+          const cp2y = targetY - Math.sin(t * Math.PI * 3) * 90;
+
+          // Outer Fire Glow
+          ctx.beginPath();
+          ctx.moveTo(startX, startY);
+          ctx.bezierCurveTo(cp1x, cp1y, cp2x, cp2y, targetX, targetY);
+          ctx.strokeStyle = 'rgba(255, 68, 0, ' + (1 - t * 0.5) + ')';
+          ctx.lineWidth = 14 * (1 - t * 0.6);
+          ctx.shadowBlur = 24;
+          ctx.shadowColor = '#ff2200';
+          ctx.stroke();
+
+          // Golden Core
+          ctx.beginPath();
+          ctx.moveTo(startX, startY);
+          ctx.bezierCurveTo(cp1x, cp1y, cp2x, cp2y, targetX, targetY);
+          ctx.strokeStyle = 'rgba(255, 215, 0, ' + (1 - t * 0.3) + ')';
+          ctx.lineWidth = 6 * (1 - t * 0.5);
+          ctx.shadowBlur = 12;
+          ctx.shadowColor = '#DEAA3B';
+          ctx.stroke();
+
+          // White-hot tip
+          ctx.beginPath();
+          ctx.moveTo(startX, startY);
+          ctx.bezierCurveTo(cp1x, cp1y, cp2x, cp2y, targetX, targetY);
+          ctx.strokeStyle = '#ffffff';
+          ctx.lineWidth = 2.5;
+          ctx.stroke();
+
+          ctx.restore();
+        }
+
+        // Particles
+        for (let i = particles.length - 1; i >= 0; i--) {
+          const p = particles[i];
+          p.update();
+          p.draw(ctx);
+          if (p.life <= 0) {
+            particles.splice(i, 1);
+          }
+        }
+
+        if (progress < 1 || particles.length > 0) {
+          requestAnimationFrame(renderFrame);
+        } else {
+          ctx.clearRect(0, 0, canvas.width, canvas.height);
+        }
+      }
+
+      requestAnimationFrame(renderFrame);
+    }
+
+    // ==========================================
+    // 3. RINGMASTER QUOTES & BANNER
+    // ==========================================
+    const ringmasterQuotes = [
+      "TAME THE BEASTS!",
+      "WHIP THEM INTO SHAPE!",
+      "BACK INTO LINE, PUPPETS!",
+      "LET THE CURTAIN RISE!",
+      "FASTER, MY WOODEN MINIONS!",
+      "NOT A SINGLE TOKEN TO SPARE!"
+    ];
+
+    function showQuoteBanner(text) {
+      const banner = document.getElementById('quoteBanner');
+      const quoteText = document.getElementById('quoteText');
+      quoteText.textContent = text;
+      banner.classList.add('active');
+      setTimeout(() => banner.classList.remove('active'), 2000);
+    }
+
+    function appendStreamLog(actor, text, isWhip = false) {
+      const stream = document.getElementById('streamLog');
+      const timeStr = new Date().toTimeString().split(' ')[0];
+
+      const line = document.createElement('div');
+      line.className = `log-line ${isWhip ? 'flash-line' : ''}`;
+      
+      let actorClass = 'actor-master';
+      if (actor.includes('PUPPET')) actorClass = 'actor-puppet';
+      if (actor.includes('WHIP')) actorClass = 'actor-whip';
+      if (actor.includes('TRAPDOOR')) actorClass = 'actor-trapdoor';
+
+      line.innerHTML = `
+        <span class="log-time">${timeStr}</span>
+        <span class="log-actor ${actorClass}">[${actor}]</span>
+        <span class="log-text">${text}</span>
+      `;
+      stream.prepend(line);
+      if (isWhip) {
+        setTimeout(() => line.classList.remove('flash-line'), 1200);
+      }
+    }
+
+    // ==========================================
+    // 4. TASK DETAILS & INTERACTIVE PEGBOARD
+    // ==========================================
+    const taskDetails = {
+      'T01': {
+        title: 'T01 · Scaffold Go Core',
+        budget: 'Budget cap: 10,000 tokens',
+        prompt: '"Inisialisasi single binary Go 1.27, setup struktur directory internal/ cli/ config/, serta cobra root commands."',
+        criteria: '<strong>Acceptance Criteria (Trapdoor Guard):</strong>• go build ./... berhasil tanpa warning<br>• ringmaster --version mencetak v0.4.0',
+        puppet: 'coder-fast'
+      },
+      'T02': {
+        title: 'T02 · Multi-Provider Engine',
+        budget: 'Budget cap: 15,000 tokens',
+        prompt: '"Implementasi interface Provider dengan method Complete(ctx, req) dan streaming support. Pastikan fallback jika Ollama 127.0.0.1 offline."',
+        criteria: '<strong>Acceptance Criteria (Trapdoor Guard):</strong>• go test ./internal/provider/... lulus 100% tanpa mock leak<br>• Max turn tidak melebihi 20 call ke LLM worker',
+        puppet: 'coder-fast'
+      },
+      'T03': {
+        title: 'T03 · Isolated Worktree Sandbox',
+        budget: 'Budget cap: 12,000 tokens',
+        prompt: '"Spawn git worktrees otomatis per puppet task agar main branch aman dari dirty state, merge back via fast-forward queue."',
+        criteria: '<strong>Acceptance Criteria (Trapdoor Guard):</strong>• Worktree isolasi terverifikasi di .worktrees/Txx<br>• Cleanup worktree otomatis saat task dinyatakan MERGED',
+        puppet: 'coder-cheap'
+      },
+      'T04': {
+        title: 'T04 · Trapdoor Merge Gate',
+        budget: 'Budget cap: 18,000 tokens',
+        prompt: '"Automated test runner & acceptance criteria validator independen sebelum git merge fast-forward ke main branch."',
+        criteria: '<strong>Acceptance Criteria (Trapdoor Guard):</strong>• Ringmaster memverifikasi sendiri tanpa percaya klaim Puppet<br>• Reject merge jika ada file di luar scope task',
+        puppet: 'coder-strict'
+      }
+    };
+
+    function selectTask(taskId) {
+      document.querySelectorAll('.task-card').forEach(el => el.classList.remove('active'));
+      const activeCard = document.getElementById(`task-${taskId}`);
+      if (activeCard) activeCard.classList.add('active');
+
+      const data = taskDetails[taskId];
+      if (data) {
+        document.getElementById('directiveTitle').innerHTML = `<span>★</span> ACTIVE DIRECTIVE: ${data.title}`;
+        document.getElementById('directiveBudget').textContent = data.budget;
+        document.getElementById('directivePrompt').innerHTML = data.prompt;
+        document.getElementById('directiveCriteria').innerHTML = data.criteria;
+      }
+    }
+
+    // ==========================================
+    // 5. ORCHESTRATION ENGINE (WHIP TO RUN)
+    // ==========================================
+    let orchestrationState = 'idle'; // 'idle' | 'running' | 'paused' | 'completed'
+    let orchestrationTimer = null;
+    let orchestrationStep = 0;
+    let speedMultiplier = 1;
+
+    const orchestrationSequence = [
+      {
+        delay: 1000,
+        run: () => {
+          appendStreamLog('RINGMASTER', 'DAG loaded: T02 has 1 active dependency. Worker <code>coder-fast</code> assigned.');
+          selectTask('T02');
+          document.getElementById('footer-T02').textContent = 'Turn 6/30';
+          document.getElementById('footer-T02').style.color = 'var(--cyan-energy)';
+        }
+      },
+      {
+        delay: 2000,
+        run: () => {
+          appendStreamLog('PUPPET:coder-fast', 'Pulled string. Editing <code>internal/provider/registry.go</code> — adding agnostic OpenAI client.');
+          document.getElementById('footer-T02').textContent = 'Turn 12/30 (Editing code)';
+        }
+      },
+      {
+        delay: 2500,
+        run: () => {
+          appendStreamLog('PUPPET:coder-fast', 'Committed unit tests in worktree <code>.worktrees/T02-provider</code>.');
+          document.getElementById('footer-T02').textContent = 'Turn 16/30 (Tests written)';
+        }
+      },
+      {
+        delay: 2000,
+        run: () => {
+          appendStreamLog('TRAPDOOR GUARD', 'Running Trapdoor gate check: <code>go test -v ./internal/provider/...</code>');
+          document.getElementById('footer-T02').textContent = 'Trapdoor verifying...';
+          document.getElementById('footer-T02').style.color = 'var(--gear-gold)';
+        }
+      },
+      {
+        delay: 2500,
+        run: () => {
+          appendStreamLog('TRAPDOOR GUARD', '<strong style="color: #5bf28d;">✓ Trapdoor Pass:</strong> 100% tests passed. Zero mock leaks detected.');
+          document.getElementById('badge-T02').textContent = 'MERGED';
+          document.getElementById('badge-T02').className = 'task-state-badge badge-done';
+          document.getElementById('footer-T02').textContent = '100% criteria met';
+          document.getElementById('footer-T02').style.color = '#5bf28d';
+          
+          document.getElementById('statActive').textContent = '1';
+          document.getElementById('statVerified').textContent = '3';
+          document.getElementById('statQueued').textContent = '0';
+
+          // Unlock T04
+          appendStreamLog('RINGMASTER', 'T02 fast-forward merged to <code>main</code>! Unblocking dependent task <strong>T04</strong>.');
+          document.getElementById('badge-T04').textContent = 'STRING PULLED';
+          document.getElementById('badge-T04').className = 'task-state-badge badge-running';
+          document.getElementById('footer-T04').textContent = 'Verifying merge queue';
+          document.getElementById('footer-T04').style.color = 'var(--cyan-energy)';
+          selectTask('T04');
+        }
+      },
+      {
+        delay: 2500,
+        run: () => {
+          appendStreamLog('PUPPET:coder-strict', 'Trapdoor validator checking git worktree acceptance diff & fast-forward queue safety.');
+          document.getElementById('footer-T04').textContent = 'Lint & Scope check passed';
+        }
+      },
+      {
+        delay: 2500,
+        run: () => {
+          appendStreamLog('RINGMASTER', '<strong style="color: #ffc857;">★ ALL TASKS VERIFIED & MERGED!</strong> The carnival curtain closes with perfection.');
+          document.getElementById('badge-T04').textContent = 'MERGED';
+          document.getElementById('badge-T04').className = 'task-state-badge badge-done';
+          document.getElementById('footer-T04').textContent = 'Pass verification';
+          document.getElementById('footer-T04').style.color = '#5bf28d';
+
+          document.getElementById('statActive').textContent = '0';
+          document.getElementById('statVerified').textContent = '4';
+          document.getElementById('statQueued').textContent = '0';
+
+          finishOrchestration();
+        }
+      }
+    ];
+
+    function startOrchestration() {
+      orchestrationState = 'running';
+      orchestrationStep = 0;
+      speedMultiplier = 1;
+
+      document.getElementById('statusText').textContent = 'Control Plane: ORCHESTRATING (ACTIVE)';
+      document.getElementById('statusDot').style.background = '#29F2EC';
+      document.getElementById('statusDot').style.boxShadow = '0 0 10px #29F2EC';
+      
+      document.getElementById('whipBtnLabel').textContent = 'TAME THE BEASTS (EXPEDITE WORKERS)';
+      document.getElementById('pauseBtn').style.display = 'block';
+
+      appendStreamLog('RINGMASTER', '⚡ <strong>The Ringmaster has cracked the whip!</strong> Orchestrating DAG across isolated worktrees.', true);
+      runNextOrchestrationStep();
+    }
+
+    function runNextOrchestrationStep() {
+      if (orchestrationState !== 'running') return;
+      if (orchestrationStep >= orchestrationSequence.length) {
+        finishOrchestration();
+        return;
+      }
+
+      const step = orchestrationSequence[orchestrationStep];
+      const delay = Math.max(400, step.delay / speedMultiplier);
+
+      orchestrationTimer = setTimeout(() => {
+        if (orchestrationState === 'running') {
+          step.run();
+          orchestrationStep++;
+          runNextOrchestrationStep();
+        }
+      }, delay);
+    }
+
+    function togglePauseOrchestration() {
+      if (orchestrationState === 'running') {
+        orchestrationState = 'paused';
+        clearTimeout(orchestrationTimer);
+        document.getElementById('statusText').textContent = 'Control Plane: PAUSED';
+        document.getElementById('statusDot').style.background = '#DEAA3B';
+        document.getElementById('pauseBtn').textContent = '▶ Resume';
+        appendStreamLog('RINGMASTER', 'Stage paused by Ringmaster.');
+      } else if (orchestrationState === 'paused') {
+        orchestrationState = 'running';
+        document.getElementById('statusText').textContent = 'Control Plane: ORCHESTRATING (ACTIVE)';
+        document.getElementById('statusDot').style.background = '#29F2EC';
+        document.getElementById('pauseBtn').textContent = '⏸ Pause';
+        appendStreamLog('RINGMASTER', 'Resuming strings tension.');
+        runNextOrchestrationStep();
+      }
+    }
+
+    function finishOrchestration() {
+      orchestrationState = 'completed';
+      document.getElementById('statusText').textContent = 'Control Plane: ALL TASKS MERGED';
+      document.getElementById('statusDot').style.background = '#5bf28d';
+      document.getElementById('statusDot').style.boxShadow = '0 0 10px #5bf28d';
+      document.getElementById('pauseBtn').style.display = 'none';
+      document.getElementById('whipBtnLabel').textContent = 'RE-RUN ORCHESTRATION (WHIP)';
+    }
+
+    function resetOrchestration() {
+      orchestrationState = 'idle';
+      clearTimeout(orchestrationTimer);
+      orchestrationStep = 0;
+      speedMultiplier = 1;
+
+      document.getElementById('statusText').textContent = 'Control Plane: ONLINE';
+      document.getElementById('statusDot').style.background = '#5bf28d';
+      document.getElementById('statusDot').style.boxShadow = '0 0 6px rgba(91, 242, 141, 0.6)';
+      document.getElementById('pauseBtn').style.display = 'none';
+      document.getElementById('whipBtnLabel').textContent = 'START ORCHESTRATION (WHIP)';
+
+      // Reset badges
+      document.getElementById('badge-T02').textContent = 'STRING PULLED';
+      document.getElementById('badge-T02').className = 'task-state-badge badge-running';
+      document.getElementById('footer-T02').textContent = 'Turn 4/30';
+      document.getElementById('footer-T02').style.color = 'var(--cyan-energy)';
+
+      document.getElementById('badge-T04').textContent = 'BLOCKED BY T02';
+      document.getElementById('badge-T04').className = 'task-state-badge badge-queued';
+      document.getElementById('footer-T04').textContent = 'Wait trigger';
+      document.getElementById('footer-T04').style.color = 'var(--text-muted)';
+
+      document.getElementById('statActive').textContent = '1';
+      document.getElementById('statVerified').textContent = '2';
+      document.getElementById('statQueued').textContent = '1';
+
+      selectTask('T02');
+      appendStreamLog('RINGMASTER', 'Stage reset to initial state. Puppets awaiting instructions.');
+    }
+
+    // ==========================================
+    // 6. WHIP ACTION TRIGGER (ANIMATION + ORCHESTRATION)
+    // ==========================================
+    function triggerWhipAction() {
+      // 1. Play realistic sound (synthetic boom + mp3 sample)
+      playWhipSound();
+
+      // 2. Play fiery canvas visual whip arc + embers + screen shake
+      startWhipVFX();
+
+      // 3. Random quote banner
+      const quote = ringmasterQuotes[Math.floor(Math.random() * ringmasterQuotes.length)];
+      showQuoteBanner(quote);
+
+      // 4. Animate all puppet cards with .whipped cringe & surge
+      document.querySelectorAll('.puppet-puppet-card').forEach(el => {
+        el.classList.add('whipped');
+        setTimeout(() => el.classList.remove('whipped'), 550);
+      });
+
+      // 5. Orchestration logic: Start if idle, expedite if running
+      if (orchestrationState === 'idle') {
+        startOrchestration();
+      } else if (orchestrationState === 'running') {
+        speedMultiplier += 0.8;
+        appendStreamLog('WHIP CRACK', `⚡ Ringmaster orders: "${quote}" — Puppets expedited! Speed boost ${speedMultiplier.toFixed(1)}x`, true);
+      } else if (orchestrationState === 'paused') {
+        togglePauseOrchestration();
+      } else if (orchestrationState === 'completed') {
+        resetOrchestration();
+        startOrchestration();
+      }
+    }
+
+    // Logo Click triggers whip crack
+    document.getElementById('logoClick').addEventListener('click', () => {
+      triggerWhipAction();
+    });
+
+    // ==========================================
+    // 7. KEYBOARD SHORTCUTS
+    // ==========================================
+    window.addEventListener('keydown', (e) => {
+      if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT' || e.target.tagName === 'TEXTAREA') return;
+
+      if (e.code === 'KeyW' || e.code === 'Space') {
+        e.preventDefault();
+        triggerWhipAction();
+      }
+      if (e.key === 'p' || e.key === 'P') {
+        e.preventDefault();
+        togglePauseOrchestration();
+      }
+      if (e.key === 'r' || e.key === 'R') {
+        e.preventDefault();
+        resetOrchestration();
+      }
+      if (e.key === 'c' || e.key === 'C') {
+        e.preventDefault();
+        openConfigModal();
+      }
+      if (e.key === 'Escape') {
+        closeConfigModal();
+      }
+    });
+
+    // ==========================================
+    // 8. GLOBAL CONFIG & PROVIDER/AGENT ROSTER
+    // ==========================================
     let currentConfig = { providers: {}, agents: {} };
 
     async function loadConfigFromServer() {
@@ -1482,32 +2059,6 @@
         document.getElementById('tabProvBtn').classList.remove('active');
         document.getElementById('tabAgentBtn').classList.add('active');
       }
-    }
-
-    // Modal close on ESC
-    window.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape') closeConfigModal();
-      if (e.key === 'c' || e.key === 'C') {
-        if (e.target.tagName !== 'INPUT' && e.target.tagName !== 'SELECT') {
-          openConfigModal();
-        }
-      }
-    });
-
-    // Sound & Whip Trigger
-    const audioContext = new (window.AudioContext || window.webkitAudioContext)();
-    function playWhip() {
-      const a = document.getElementById('whipAudioFile1');
-      if (a) { a.currentTime = 0; a.play().catch(e=>e); }
-    }
-
-    function triggerWhipAction() {
-      playWhip();
-      document.body.classList.add('screen-shake');
-      setTimeout(() => document.body.classList.remove('screen-shake'), 450);
-      const b = document.getElementById('quoteBanner');
-      b.classList.add('active');
-      setTimeout(() => b.classList.remove('active'), 1800);
     }
 
     // Initialize
