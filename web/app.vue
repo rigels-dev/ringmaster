@@ -610,10 +610,9 @@
               <tbody class="divide-y divide-steel/50">
                 <tr v-for="a in providersData.agents" :key="a.id" class="hover:bg-slate-dark/50 transition">
                   <td class="py-3 font-bold text-parchment flex items-center gap-2">
-                    <span v-if="a.role === 'master'" class="text-gear-gold" title="Master Planner">★</span>
-                    <span v-else class="text-cyan-energy" title="Worker">⚡</span>
+                    <span v-if="a.role === 'master'" class="text-gear-gold text-base" title="Master Planner">★</span>
+                    <span v-else class="text-cyan-energy text-base" title="Worker">⚡</span>
                     <span>{{ a.id }}</span>
-                    <span v-if="providersData.defaultMaster === a.id" class="text-[8px] bg-gear-dark/40 text-gear-gold px-1 rounded border border-gear-dark">DEFAULT MASTER</span>
                   </td>
                   <td class="py-3 font-mono text-[11px] text-zinc-300">{{ a.model }}</td>
                   <td class="py-3 text-zinc-400">{{ a.provider }}</td>
