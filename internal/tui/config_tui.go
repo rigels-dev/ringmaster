@@ -101,15 +101,11 @@ var (
 			Bold(true)
 
 	badgeMasterStyle = lipgloss.NewStyle().
-				Foreground(lipgloss.AdaptiveColor{Light: "#FFFFFF", Dark: "#192026"}).
-				Background(lipgloss.AdaptiveColor{Light: "#B45309", Dark: "#DEAA3B"}).
-				Bold(true).
-				Padding(0, 1)
+				Foreground(lipgloss.AdaptiveColor{Light: "#9A3412", Dark: "#DEAA3B"}).
+				Bold(true)
 
 	badgeWorkerStyle = lipgloss.NewStyle().
-				Foreground(lipgloss.AdaptiveColor{Light: "#334155", Dark: "#EFE4CE"}).
-				Background(lipgloss.AdaptiveColor{Light: "#CBD5E1", Dark: "#2E3842"}).
-				Padding(0, 1)
+				Foreground(lipgloss.AdaptiveColor{Light: "#64748B", Dark: "#8493A0"})
 
 	badgeToolYes = lipgloss.NewStyle().
 			Foreground(lipgloss.AdaptiveColor{Light: "#0D9488", Dark: "#29F2EC"}).
@@ -1753,11 +1749,11 @@ func (m ConfigModel) View() string {
 			}
 			currentWorker := m.cfg.Routing.DefaultWorker
 
-			masterInfo := fmt.Sprintf(" 🎪 ROUTING: [★ Master Planner: %s]  [⚡ Default Worker: %s] ", currentMaster, currentWorker)
+			masterInfo := fmt.Sprintf(" RINGMASTER ROUTING: [Master Planner: %s]  [Default Worker: %s] ", currentMaster, currentWorker)
 			routingBox := lipgloss.NewStyle().
 				Border(lipgloss.RoundedBorder()).
 				BorderForeground(lipgloss.AdaptiveColor{Light: "#CBD5E1", Dark: "#2E3842"}).
-				Foreground(lipgloss.AdaptiveColor{Light: "#B45309", Dark: "#DEAA3B"}).
+				Foreground(lipgloss.AdaptiveColor{Light: "#9A3412", Dark: "#DEAA3B"}).
 				Bold(true).
 				Render(masterInfo)
 
@@ -1765,7 +1761,7 @@ func (m ConfigModel) View() string {
 			b.WriteString(hintStyle.Render(" [m] Set highlighted as Master · [w] Set as Default Worker") + "\n\n")
 
 			// Table Header with wider columns for Model
-			plainHeader := fmt.Sprintf("  %-18s %-32s %-16s %-12s %-6s", "ALIAS", "MODEL", "PROVIDER", "ROLE", "TOOLS")
+			plainHeader := fmt.Sprintf("  %-18s %-32s %-16s %-14s %-6s", "ALIAS", "MODEL", "PROVIDER", "ROLE", "TOOLS")
 			b.WriteString(headerStyle.Render(plainHeader) + "\n")
 			b.WriteString(tableBorderLine.Render("────────────────────────────────────────────────────────────────────────────────────────────") + "\n")
 
@@ -1779,9 +1775,11 @@ func (m ConfigModel) View() string {
 					lineStyle = selectedItemStyle
 				}
 
-				roleBadge := badgeWorkerStyle.Render("worker")
+				roleText := "[ worker ]"
+				roleStyled := badgeWorkerStyle.Render(roleText)
 				if a.Role == "master" {
-					roleBadge = badgeMasterStyle.Render("★ master")
+					roleText = "[★ master]"
+					roleStyled = badgeMasterStyle.Render(roleText)
 				}
 
 				toolsBadge := badgeToolNo.Render("no")
@@ -1794,16 +1792,15 @@ func (m ConfigModel) View() string {
 					dispProv = "claude_sub"
 				}
 
-				// Format row with fixed width columns
 				aliasCol := fmt.Sprintf("%-18s", alias)
 				modelCol := fmt.Sprintf("%-32s", a.Model)
 				provCol := fmt.Sprintf("%-16s", dispProv)
 
 				if isCursor {
 					colsRendered := lineStyle.Render(fmt.Sprintf("%s %s %s", aliasCol, modelCol, provCol))
-					b.WriteString(prefix + colsRendered + " " + fmt.Sprintf("%-12s", roleBadge) + " " + toolsBadge + "\n")
+					b.WriteString(prefix + colsRendered + " " + fmt.Sprintf("%-14s", roleStyled) + " " + toolsBadge + "\n")
 				} else {
-					b.WriteString(prefix + fmt.Sprintf("%s %s %s %-12s %s", aliasCol, modelCol, provCol, roleBadge, toolsBadge) + "\n")
+					b.WriteString(prefix + fmt.Sprintf("%s %s %s %-14s %s", aliasCol, modelCol, provCol, roleStyled, toolsBadge) + "\n")
 				}
 			}
 		}
