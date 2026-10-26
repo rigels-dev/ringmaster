@@ -379,6 +379,7 @@ type ConfigModel struct {
 	selectedProvider      *ProviderOption
 	selectedAuthMethod    *AuthMethodOption
 	configuredProviderKey string
+	pendingProviderConfig *config.ProviderConfig
 	fetchedModels         []llm.ModelInfo
 	checkedModels         map[string]bool // checkbox state per model ID
 	modelCursor           int
@@ -453,8 +454,7 @@ func (m ConfigModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		p := config.ProviderConfig{
 			Type: "claude_subscription",
 		}
-		m.cfg.Providers[providerKey] = p
-		_ = config.SaveFile(m.configPath, m.cfg)
+		m.pendingProviderConfig = &p
 		m.configuredProviderKey = providerKey
 
 		// Fetch models
@@ -748,9 +748,8 @@ func (m ConfigModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					return m, m.focusCurrentInput()
 				}
 
-				// Direct auto-configure and save
-				m.cfg.Providers[providerKey] = p
-				_ = config.SaveFile(m.configPath, m.cfg)
+				// Stage provider in pending state without saving to file yet
+				m.pendingProviderConfig = &p
 				m.selectedAuthMethod = &method
 				m.configuredProviderKey = providerKey
 
@@ -770,6 +769,10 @@ func (m ConfigModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					return m, nil
 				}
 
+				// If no models fetched or manual provider, commit now
+				m.cfg.Providers[providerKey] = p
+				_ = config.SaveFile(m.configPath, m.cfg)
+				m.pendingProviderConfig = nil
 				m.statusMsg = fmt.Sprintf("✓ Configured provider '%s' (%s) successfully!", providerKey, method.Label)
 				m.mode = modeList
 				return m, nil
@@ -808,8 +811,7 @@ func (m ConfigModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				p := config.ProviderConfig{
 					Type: "claude_subscription",
 				}
-				m.cfg.Providers[providerKey] = p
-				_ = config.SaveFile(m.configPath, m.cfg)
+				m.pendingProviderConfig = &p
 				m.configuredProviderKey = providerKey
 
 				// Fetch models
@@ -837,7 +839,10 @@ func (m ConfigModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 			switch msg.String() {
 			case "esc":
+				// If provider was pending, cancel and discard it without saving!
+				m.pendingProviderConfig = nil
 				m.mode = modeList
+				m.statusMsg = "Model selection canceled. Provider setup was not saved."
 				return m, nil
 			case "up":
 				if m.modelCursor > 0 {
@@ -886,8 +891,15 @@ func (m ConfigModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 
 				if len(selected) == 0 {
+					m.pendingProviderConfig = nil
 					m.mode = modeList
 					return m, nil
+				}
+
+				// Atomically commit pending provider to config now that models are confirmed!
+				if m.pendingProviderConfig != nil && m.configuredProviderKey != "" {
+					m.cfg.Providers[m.configuredProviderKey] = *m.pendingProviderConfig
+					m.pendingProviderConfig = nil
 				}
 
 				// Put selected models onto agent list
@@ -1046,6 +1058,12 @@ func (m ConfigModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					// Back
 					m.mode = modePickModel
 					return m, nil
+				}
+
+				// Atomically commit pending provider if entering via role picker
+				if m.pendingProviderConfig != nil && m.configuredProviderKey != "" {
+					m.cfg.Providers[m.configuredProviderKey] = *m.pendingProviderConfig
+					m.pendingProviderConfig = nil
 				}
 
 				if m.roleCursor == 0 {
@@ -1303,25 +1321,20 @@ func (m *ConfigModel) submitForm() (tea.Model, tea.Cmd) {
 			}
 		}
 
-		m.cfg.Providers[name] = config.ProviderConfig{
-			Type:      pType,
-			BaseURL:   baseURL,
-			APIKeyEnv: apiEnv,
-		}
-
-		if err := config.SaveFile(m.configPath, m.cfg); err != nil {
-			m.err = err
-			m.mode = modeList
-			return m, nil
-		}
-
-		m.configuredProviderKey = name
 		client := llm.NewProvider(pType, baseURL, apiEnv)
 		ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
 		models, err := client.ListModels(ctx)
 		cancel()
 
+		pCfg := config.ProviderConfig{
+			Type:      pType,
+			BaseURL:   baseURL,
+			APIKeyEnv: apiEnv,
+		}
+
 		if err == nil && len(models) > 0 {
+			m.pendingProviderConfig = &pCfg
+			m.configuredProviderKey = name
 			m.fetchedModels = models
 			m.checkedModels = make(map[string]bool)
 			m.modelCursor = 0
@@ -1331,6 +1344,13 @@ func (m *ConfigModel) submitForm() (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 
+		// If no models fetched or direct edit/add, save directly
+		m.cfg.Providers[name] = pCfg
+		if err := config.SaveFile(m.configPath, m.cfg); err != nil {
+			m.err = err
+			m.mode = modeList
+			return m, nil
+		}
 		m.statusMsg = fmt.Sprintf("✓ Provider '%s' (%s) saved successfully!", name, pType)
 		m.mode = modeList
 
