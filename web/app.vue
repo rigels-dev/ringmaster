@@ -85,6 +85,31 @@
       </div>
     </div>
 
+    <!-- Steampunk Custom Confirmation Dialog (Replaces browser confirm) -->
+    <div v-if="confirmDialog.show" class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+      <div class="bg-slate-dark border border-gear-gold/60 p-5 rounded-xl max-w-sm w-full shadow-2xl flex flex-col gap-3 font-mono">
+        <div class="flex items-center gap-2 text-gear-gold">
+          <span class="text-lg">⚠</span>
+          <h3 class="font-bold text-sm">{{ confirmDialog.title }}</h3>
+        </div>
+        <p class="text-xs text-zinc-300 leading-relaxed">{{ confirmDialog.message }}</p>
+        <div class="flex items-center justify-end gap-2.5 pt-2 border-t border-steel/60">
+          <button 
+            @click="confirmDialog.show = false" 
+            class="px-3.5 py-1.5 rounded text-xs text-zinc-400 hover:text-zinc-200 border border-steel bg-slate-panel"
+          >
+            Cancel
+          </button>
+          <button 
+            @click="executeConfirmDialog" 
+            class="px-4 py-1.5 rounded text-xs font-bold bg-red-950 text-red-400 hover:bg-red-900 border border-red-800 shadow"
+          >
+            Confirm Delete
+          </button>
+        </div>
+      </div>
+    </div>
+
     <!-- Main Content Workspace Area -->
     <main class="flex-1 flex flex-col h-full bg-slate-deep overflow-hidden">
       <!-- 1. CHAT VIEW (Blank on init until user starts) -->
@@ -704,6 +729,20 @@ const fetchedModelList = ref([])
 const agentPingStates = ref({})
 const toastList = ref([])
 
+const confirmDialog = ref({
+  show: false,
+  title: '',
+  message: '',
+  action: null
+})
+
+function executeConfirmDialog() {
+  if (confirmDialog.value.action) {
+    confirmDialog.value.action()
+  }
+  confirmDialog.value.show = false
+}
+
 function showToast(title, message, type = 'success', meta = null) {
   const id = Date.now() + Math.random()
   toastList.value.push({ id, title, message, type, meta })
@@ -904,23 +943,29 @@ async function setAgentRole(id, role) {
 }
 
 async function deleteAgent(id) {
-  if (!confirm(`Delete agent '${id}' from fleet?`)) return
-  try {
-    const res = await fetch('/api/providers', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'delete_agent', id })
-    })
-    const data = await res.json()
-    if (data.ok) {
-      showToast('Agent Removed', `Agent '${id}' removed from fleet.`, 'info')
-      loadProvidersData()
-      loadProjectData()
-    } else {
-      showToast('Delete Failed', data.error, 'error')
+  confirmDialog.value = {
+    show: true,
+    title: 'Delete Agent',
+    message: `Are you sure you want to remove agent '${id}' from the fleet?`,
+    action: async () => {
+      try {
+        const res = await fetch('/api/providers', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'delete_agent', id })
+        })
+        const data = await res.json()
+        if (data.ok) {
+          showToast('Agent Removed', `Agent '${id}' removed from fleet.`, 'info')
+          loadProvidersData()
+          loadProjectData()
+        } else {
+          showToast('Delete Failed', data.error, 'error')
+        }
+      } catch (err) {
+        showToast('Failed to delete agent', err.message, 'error')
+      }
     }
-  } catch (err) {
-    showToast('Failed to delete agent', err.message, 'error')
   }
 }
 
@@ -1052,20 +1097,28 @@ async function saveProvider() {
 }
 
 async function deleteProvider(id) {
-  if (!confirm(`Delete provider '${id}'?`)) return
-  try {
-    const res = await fetch('/api/providers', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'delete_provider', id })
-    })
-    const data = await res.json()
-    if (data.ok) {
-      showToast('Provider Deleted', `Provider '${id}' removed from configuration.`, 'info')
-      loadProvidersData()
+  confirmDialog.value = {
+    show: true,
+    title: 'Delete Provider',
+    message: `Are you sure you want to delete provider '${id}'? Agents using this provider will lose connectivity.`,
+    action: async () => {
+      try {
+        const res = await fetch('/api/providers', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'delete_provider', id })
+        })
+        const data = await res.json()
+        if (data.ok) {
+          showToast('Provider Deleted', `Provider '${id}' removed from configuration.`, 'info')
+          loadProvidersData()
+        } else {
+          showToast('Delete Failed', data.error, 'error')
+        }
+      } catch (err) {
+        showToast('Delete Failed', err.message, 'error')
+      }
     }
-  } catch (err) {
-    showToast('Delete Failed', err.message, 'error')
   }
 }
 
@@ -1111,6 +1164,10 @@ function instructWorker(msg, action) {
 }
 
 function crackWhip() {
-  alert('💥 Crack! Ringmaster whips workers to accelerate execution!')
+  showToast(
+    'Whip Cracked!',
+    'Ringmaster cracks the flaming whip across all worktrees to tame and expedite workers!',
+    'success'
+  )
 }
 </script>
