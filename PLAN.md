@@ -218,7 +218,7 @@ Ringmaster **tidak menghitung biaya dalam USD**. Yang dicatat adalah jumlah toke
 - Konfigurasi di `ringmaster.toml`:
 
 ```toml
-[providers.ninerouter]
+[providers.9router]
 base_url = "http://localhost:20128/v1"
 api_key_env = "NINEROUTER_API_KEY"
 
@@ -231,7 +231,7 @@ base_url = "https://openrouter.ai/api/v1"
 api_key_env = "OPENROUTER_API_KEY"
 
 [agents.master]
-provider = "ninerouter"
+provider = "9router"
 model = "claude-opus-5-5"
 role = "master"
 

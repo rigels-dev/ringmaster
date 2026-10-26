@@ -231,7 +231,7 @@ func (m *ConfigModel) initProviderInputs(name string, p config.ProviderConfig) {
 	m.inputs = make([]textinput.Model, 3)
 
 	m.inputs[0] = textinput.New()
-	m.inputs[0].Placeholder = "e.g. ollama_local, openrouter, ninerouter"
+	m.inputs[0].Placeholder = "e.g. ollama_local, openrouter, 9router"
 	m.inputs[0].SetValue(name)
 	m.inputs[0].Prompt = "Provider Name: "
 

@@ -7,9 +7,9 @@ import (
 
 func TestRegistry(t *testing.T) {
 	cfg := config.DefaultConfig()
-	cfg.Providers["ninerouter"] = config.ProviderConfig{BaseURL: "http://localhost:20128/v1"}
-	cfg.Agents["master"] = config.AgentConfig{Provider: "ninerouter", Model: "opus", Role: "master"}
-	cfg.Agents["coder"] = config.AgentConfig{Provider: "ninerouter", Model: "qwen", Role: "worker"}
+	cfg.Providers["9router"] = config.ProviderConfig{BaseURL: "http://localhost:20128/v1"}
+	cfg.Agents["master"] = config.AgentConfig{Provider: "9router", Model: "opus", Role: "master"}
+	cfg.Agents["coder"] = config.AgentConfig{Provider: "9router", Model: "qwen", Role: "worker"}
 
 	reg := NewRegistry(cfg)
 
