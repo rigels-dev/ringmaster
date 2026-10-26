@@ -1,30 +1,22 @@
+# Ringmaster Configuration Example
+
 [providers.claude_subscription]
 type = "claude_subscription"
-
-[providers.claude]
-type = "anthropic"
-base_url = "https://api.anthropic.com/v1"
-api_key_env = "ANTHROPIC_API_KEY"
 
 [providers.openai]
 type = "openai"
 base_url = "https://api.openai.com/v1"
 api_key_env = "OPENAI_API_KEY"
 
+[providers.claude]
+type = "anthropic"
+base_url = "https://api.anthropic.com/v1"
+api_key_env = "ANTHROPIC_API_KEY"
+
 [providers.9router]
 type = "openai"
 base_url = "http://localhost:20128/v1"
 api_key_env = "NINEROUTER_API_KEY"
-
-[providers.openrouter]
-type = "openai"
-base_url = "https://openrouter.ai/api/v1"
-api_key_env = "OPENROUTER_API_KEY"
-
-[providers.ollama_local]
-type = "openai"
-base_url = "http://localhost:11434/v1"
-api_key_env = "OLLAMA_API_KEY"
 
 [agents.master]
 provider = "claude_subscription"
@@ -37,22 +29,9 @@ model = "haiku"
 role = "worker"
 tool_calling = true
 
-[agents.coder-openai]
-provider = "openai"
-model = "gpt-4o-mini"
-role = "worker"
-tool_calling = true
-
-[agents.coder-cheap]
-provider = "ollama_local"
-model = "qwen2.5-coder:7b"
-role = "worker"
-tool_calling = true
-
 [routing]
 default_master = "master"
 default_worker = "coder-fast"
-fallback_worker = "coder-cheap"
 
 [budget]
 max_tokens_per_project = 2000000
@@ -70,11 +49,3 @@ allow = [
   "git status",
   "git diff"
 ]
-
-[estimates.backend]
-tokens_in = [20000, 80000]
-tokens_out = [5000, 25000]
-
-[estimates.frontend]
-tokens_in = [15000, 60000]
-tokens_out = [4000, 20000]

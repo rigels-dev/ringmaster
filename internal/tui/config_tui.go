@@ -44,7 +44,7 @@ var (
 			Foreground(lipgloss.Color("#51606D")).
 			Italic(true)
 
-	savedStyle = lipgloss.NewStyle().
+	statusStyle = lipgloss.NewStyle().
 			Foreground(lipgloss.Color("#5BF28D")).
 			Bold(true)
 
@@ -64,23 +64,130 @@ type viewMode int
 
 const (
 	modeList viewMode = iota
+	modePickProviderTemplate
 	modeEditProvider
 	modeAddProvider
+	modePickAgentTemplate
 	modeEditAgent
 	modeAddAgent
 )
 
+type ProviderTemplate struct {
+	Title       string
+	Description string
+	Name        string
+	Type        string
+	BaseURL     string
+	APIKeyEnv   string
+}
+
+var providerTemplates = []ProviderTemplate{
+	{
+		Title:       "Claude Subscription",
+		Description: "Uses local ~/.claude session / Claude Code CLI (No API key or URL required)",
+		Name:        "claude_sub",
+		Type:        "claude_subscription",
+		BaseURL:     "",
+		APIKeyEnv:   "",
+	},
+	{
+		Title:       "OpenAI Compatible",
+		Description: "Standard OpenAI endpoint (OpenAI, OpenRouter, vLLM)",
+		Name:        "openai",
+		Type:        "openai",
+		BaseURL:     "https://api.openai.com/v1",
+		APIKeyEnv:   "OPENAI_API_KEY",
+	},
+	{
+		Title:       "Claude Official API",
+		Description: "Direct Anthropic Messages API (api.anthropic.com)",
+		Name:        "claude",
+		Type:        "anthropic",
+		BaseURL:     "https://api.anthropic.com/v1",
+		APIKeyEnv:   "ANTHROPIC_API_KEY",
+	},
+	{
+		Title:       "9router (Local Proxy)",
+		Description: "Local multi-provider proxy on http://localhost:20128/v1",
+		Name:        "9router",
+		Type:        "openai",
+		BaseURL:     "http://localhost:20128/v1",
+		APIKeyEnv:   "NINEROUTER_API_KEY",
+	},
+	{
+		Title:       "Ollama (Local LLM)",
+		Description: "Self-hosted local models on http://localhost:11434/v1",
+		Name:        "ollama_local",
+		Type:        "openai",
+		BaseURL:     "http://localhost:11434/v1",
+		APIKeyEnv:   "",
+	},
+	{
+		Title:       "Custom Manual Entry",
+		Description: "Fill provider name, type, endpoint URL, and API key environment variable",
+		Name:        "",
+		Type:        "openai",
+		BaseURL:     "",
+		APIKeyEnv:   "",
+	},
+}
+
+type AgentTemplate struct {
+	Title       string
+	Description string
+	Alias       string
+	Role        string
+	Model       string
+	ToolCalling bool
+}
+
+var agentTemplates = []AgentTemplate{
+	{
+		Title:       "Master Planner (Sonnet / Opus)",
+		Description: "Control Plane Ringmaster agent that analyzes briefs and breaks tasks into DAG",
+		Alias:       "master",
+		Role:        "master",
+		Model:       "sonnet",
+		ToolCalling: false,
+	},
+	{
+		Title:       "Worker: Fast Coder (Haiku / Mini)",
+		Description: "Fast, token-efficient worker for scaffold and smaller edits",
+		Alias:       "coder-fast",
+		Role:        "worker",
+		Model:       "haiku",
+		ToolCalling: true,
+	},
+	{
+		Title:       "Worker: Local / Cheap Coder (Qwen / DeepSeek)",
+		Description: "Cheap or local worker executing code within isolated worktrees",
+		Alias:       "coder-cheap",
+		Role:        "worker",
+		Model:       "qwen2.5-coder:7b",
+		ToolCalling: true,
+	},
+	{
+		Title:       "Custom Agent",
+		Description: "Manually specify alias, provider binding, model name, and role",
+		Alias:       "",
+		Role:        "worker",
+		Model:       "",
+		ToolCalling: true,
+	},
+}
+
 type ConfigModel struct {
-	cfg        *config.Config
-	configPath string
-	activeTab  tab
-	mode       viewMode
-	cursor     int
-	inputs     []textinput.Model
-	statusMsg  string
-	err        error
-	width      int
-	height     int
+	cfg            *config.Config
+	configPath     string
+	activeTab      tab
+	mode           viewMode
+	cursor         int
+	templateCursor int
+	inputs         []textinput.Model
+	statusMsg      string
+	err            error
+	width          int
+	height         int
 }
 
 func NewConfigModel(cfg *config.Config, configPath string) ConfigModel {
@@ -105,11 +212,10 @@ func (m ConfigModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case tea.KeyMsg:
-		m.statusMsg = ""
 		switch m.mode {
 		case modeList:
 			switch msg.String() {
-			case "ctrl+c", "q":
+			case "q", "ctrl+c":
 				return m, tea.Quit
 			case "tab":
 				if m.activeTab == tabProviders {
@@ -117,6 +223,15 @@ func (m ConfigModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				} else {
 					m.activeTab = tabProviders
 				}
+				m.cursor = 0
+				m.statusMsg = ""
+				return m, nil
+			case "1":
+				m.activeTab = tabProviders
+				m.cursor = 0
+				return m, nil
+			case "2":
+				m.activeTab = tabAgents
 				m.cursor = 0
 				return m, nil
 			case "up", "k":
@@ -130,16 +245,16 @@ func (m ConfigModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.cursor++
 				}
 				return m, nil
-			case "a": // Add new
+			case "a":
+				m.statusMsg = ""
+				m.templateCursor = 0
 				if m.activeTab == tabProviders {
-					m.initProviderInputs("", config.ProviderConfig{})
-					m.mode = modeAddProvider
+					m.mode = modePickProviderTemplate
 				} else {
-					m.initAgentInputs("", config.AgentConfig{})
-					m.mode = modeAddAgent
+					m.mode = modePickAgentTemplate
 				}
-				return m, m.focusCurrentInput()
-			case "enter", "e": // Edit
+				return m, nil
+			case "enter", "e":
 				maxLen := m.currentListLen()
 				if maxLen == 0 {
 					return m, nil
@@ -161,7 +276,7 @@ func (m ConfigModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						return m, m.focusCurrentInput()
 					}
 				}
-			case "d", "x": // Delete
+			case "d", "x":
 				if m.activeTab == tabProviders {
 					names := m.getProviderNames()
 					if m.cursor < len(names) {
@@ -183,14 +298,62 @@ func (m ConfigModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						}
 					}
 				}
-				return m, nil
-			case "s": // Save
+			case "s":
 				if err := config.SaveFile(m.configPath, m.cfg); err != nil {
 					m.err = err
 				} else {
-					m.statusMsg = fmt.Sprintf("✓ Saved to %s", m.configPath)
+					m.statusMsg = fmt.Sprintf("✓ Configuration successfully saved to %s", m.configPath)
+				}
+			}
+
+		case modePickProviderTemplate:
+			switch msg.String() {
+			case "esc", "q":
+				m.mode = modeList
+				return m, nil
+			case "up", "k":
+				if m.templateCursor > 0 {
+					m.templateCursor--
 				}
 				return m, nil
+			case "down", "j":
+				if m.templateCursor < len(providerTemplates)-1 {
+					m.templateCursor++
+				}
+				return m, nil
+			case "1", "2", "3", "4", "5", "6":
+				idx := int(msg.Runes[0] - '1')
+				if idx >= 0 && idx < len(providerTemplates) {
+					m.templateCursor = idx
+					return m.selectProviderTemplate()
+				}
+			case "enter":
+				return m.selectProviderTemplate()
+			}
+
+		case modePickAgentTemplate:
+			switch msg.String() {
+			case "esc", "q":
+				m.mode = modeList
+				return m, nil
+			case "up", "k":
+				if m.templateCursor > 0 {
+					m.templateCursor--
+				}
+				return m, nil
+			case "down", "j":
+				if m.templateCursor < len(agentTemplates)-1 {
+					m.templateCursor++
+				}
+				return m, nil
+			case "1", "2", "3", "4":
+				idx := int(msg.Runes[0] - '1')
+				if idx >= 0 && idx < len(agentTemplates) {
+					m.templateCursor = idx
+					return m.selectAgentTemplate()
+				}
+			case "enter":
+				return m.selectAgentTemplate()
 			}
 
 		case modeAddProvider, modeEditProvider, modeAddAgent, modeEditAgent:
@@ -205,7 +368,6 @@ func (m ConfigModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.focusPrevInput()
 				return m, nil
 			case "enter":
-				// If on last input, submit form
 				if m.isLastInputFocused() {
 					return m.submitForm()
 				}
@@ -213,7 +375,6 @@ func (m ConfigModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, nil
 			}
 
-			// Update active textinput
 			var cmds []tea.Cmd
 			for i := range m.inputs {
 				var cmd tea.Cmd
@@ -225,6 +386,36 @@ func (m ConfigModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 
 	return m, nil
+}
+
+func (m *ConfigModel) selectProviderTemplate() (tea.Model, tea.Cmd) {
+	tmpl := providerTemplates[m.templateCursor]
+	p := config.ProviderConfig{
+		Type:      tmpl.Type,
+		BaseURL:   tmpl.BaseURL,
+		APIKeyEnv: tmpl.APIKeyEnv,
+	}
+	m.initProviderInputs(tmpl.Name, p)
+	m.mode = modeAddProvider
+	return m, m.focusCurrentInput()
+}
+
+func (m *ConfigModel) selectAgentTemplate() (tea.Model, tea.Cmd) {
+	tmpl := agentTemplates[m.templateCursor]
+	provName := ""
+	for p := range m.cfg.Providers {
+		provName = p
+		break
+	}
+	a := config.AgentConfig{
+		Provider:    provName,
+		Model:       tmpl.Model,
+		Role:        tmpl.Role,
+		ToolCalling: tmpl.ToolCalling,
+	}
+	m.initAgentInputs(tmpl.Alias, a)
+	m.mode = modeAddAgent
+	return m, m.focusCurrentInput()
 }
 
 func (m *ConfigModel) initProviderInputs(name string, p config.ProviderConfig) {
@@ -266,30 +457,30 @@ func (m *ConfigModel) initAgentInputs(alias string, a config.AgentConfig) {
 	m.inputs[0].Prompt = "Agent Alias:   "
 
 	m.inputs[1] = textinput.New()
-	m.inputs[1].Placeholder = "Registered provider name (e.g. ollama_local)"
+	m.inputs[1].Placeholder = "Registered provider name (e.g. claude_subscription)"
 	m.inputs[1].SetValue(a.Provider)
 	m.inputs[1].Prompt = "Provider:      "
 
 	m.inputs[2] = textinput.New()
-	m.inputs[2].Placeholder = "e.g. qwen2.5-coder:7b, claude-3.5-haiku"
+	m.inputs[2].Placeholder = "e.g. sonnet, haiku, gpt-4o-mini"
 	m.inputs[2].SetValue(a.Model)
-	m.inputs[2].Prompt = "Model:         "
+	m.inputs[2].Prompt = "Model Name:    "
 
 	m.inputs[3] = textinput.New()
-	m.inputs[3].Placeholder = "master / worker"
 	role := a.Role
 	if role == "" {
 		role = "worker"
 	}
+	m.inputs[3].Placeholder = "master or worker"
 	m.inputs[3].SetValue(role)
 	m.inputs[3].Prompt = "Role:          "
 
 	m.inputs[4] = textinput.New()
-	m.inputs[4].Placeholder = "true / false"
 	tc := "true"
-	if !a.ToolCalling && alias != "" {
+	if !a.ToolCalling && a.Role == "master" {
 		tc = "false"
 	}
+	m.inputs[4].Placeholder = "true or false"
 	m.inputs[4].SetValue(tc)
 	m.inputs[4].Prompt = "Tool Calling:  "
 
@@ -305,6 +496,9 @@ func (m *ConfigModel) focusNextInput() {
 			return
 		}
 	}
+	if len(m.inputs) > 0 {
+		m.inputs[0].Focus()
+	}
 }
 
 func (m *ConfigModel) focusPrevInput() {
@@ -316,23 +510,26 @@ func (m *ConfigModel) focusPrevInput() {
 			return
 		}
 	}
+	if len(m.inputs) > 0 {
+		m.inputs[0].Focus()
+	}
 }
 
 func (m *ConfigModel) focusCurrentInput() tea.Cmd {
 	for i := range m.inputs {
 		if m.inputs[i].Focused() {
-			return textinput.Blink
+			return m.inputs[i].Focus()
 		}
 	}
 	if len(m.inputs) > 0 {
-		m.inputs[0].Focus()
+		return m.inputs[0].Focus()
 	}
-	return textinput.Blink
+	return nil
 }
 
 func (m *ConfigModel) isLastInputFocused() bool {
 	if len(m.inputs) == 0 {
-		return false
+		return true
 	}
 	return m.inputs[len(m.inputs)-1].Focused()
 }
@@ -382,7 +579,7 @@ func (m *ConfigModel) submitForm() (tea.Model, tea.Cmd) {
 		prov := strings.TrimSpace(m.inputs[1].Value())
 		model := strings.TrimSpace(m.inputs[2].Value())
 		role := strings.ToLower(strings.TrimSpace(m.inputs[3].Value()))
-		toolCalling := strings.ToLower(strings.TrimSpace(m.inputs[4].Value())) == "true"
+		tcStr := strings.ToLower(strings.TrimSpace(m.inputs[4].Value()))
 
 		if alias == "" || prov == "" || model == "" {
 			m.statusMsg = "Alias, Provider, and Model are required!"
@@ -390,14 +587,22 @@ func (m *ConfigModel) submitForm() (tea.Model, tea.Cmd) {
 		}
 
 		if role != "master" && role != "worker" {
-			role = "worker"
+			m.statusMsg = "Role must be 'master' or 'worker'!"
+			return m, nil
 		}
+
+		if _, ok := m.cfg.Providers[prov]; !ok {
+			m.statusMsg = fmt.Sprintf("Provider '%s' does not exist! Add it in Providers tab first.", prov)
+			return m, nil
+		}
+
+		tc := tcStr == "true" || tcStr == "yes" || tcStr == "1"
 
 		m.cfg.Agents[alias] = config.AgentConfig{
 			Provider:    prov,
 			Model:       model,
 			Role:        role,
-			ToolCalling: toolCalling,
+			ToolCalling: tc,
 		}
 
 		if err := config.SaveFile(m.configPath, m.cfg); err != nil {
@@ -437,52 +642,98 @@ func (m ConfigModel) currentListLen() int {
 func (m ConfigModel) View() string {
 	var b strings.Builder
 
-	// Title
-	b.WriteString(titleStyle.Render("⚙ RINGMASTER — PROVIDER & MODEL REGISTRY"))
+	b.WriteString("\n")
+	b.WriteString(titleStyle.Render(" RINGMASTER · Multi-Provider & Agent Configuration "))
 	b.WriteString("\n\n")
 
-	// Tabs
-	tabProv := inactiveTabStyle.Render("1. PROVIDERS")
-	tabAg := inactiveTabStyle.Render("2. AGENTS & MODELS")
-
+	tabProv := inactiveTabStyle.Render(" [1] Providers ")
+	tabAg := inactiveTabStyle.Render(" [2] Agents ")
 	if m.activeTab == tabProviders {
-		tabProv = activeTabStyle.Render("1. PROVIDERS")
+		tabProv = activeTabStyle.Render(" [1] Providers ")
 	} else {
-		tabAg = activeTabStyle.Render("2. AGENTS & MODELS")
+		tabAg = activeTabStyle.Render(" [2] Agents ")
 	}
-
 	b.WriteString(lipgloss.JoinHorizontal(lipgloss.Top, tabProv, " ", tabAg))
 	b.WriteString("\n\n")
 
-	// Form Mode
-	if m.mode != modeList {
-		formTitle := "Add New Provider"
-		if m.mode == modeEditProvider {
-			formTitle = "Edit Provider"
-		} else if m.mode == modeAddAgent {
-			formTitle = "Add New Agent / Model"
-		} else if m.mode == modeEditAgent {
-			formTitle = "Edit Agent / Model"
-		}
-
-		b.WriteString(headerStyle.Render(fmt.Sprintf("━━━ %s ━━━", formTitle)))
+	if m.mode == modePickProviderTemplate {
+		b.WriteString(headerStyle.Render("★ CHOOSE A PROVIDER TEMPLATE"))
+		b.WriteString("\n")
+		b.WriteString(hintStyle.Render("Press [1-6] or use [↑/↓] and press [Enter] to select. Press [Esc] to cancel."))
 		b.WriteString("\n\n")
 
-		for _, in := range m.inputs {
-			b.WriteString(in.View())
-			b.WriteString("\n\n")
-		}
+		for i, tmpl := range providerTemplates {
+			prefix := "  "
+			itemStyle := normalItemStyle
+			if i == m.templateCursor {
+				prefix = "▸ "
+				itemStyle = selectedItemStyle
+			}
 
-		b.WriteString(hintStyle.Render("Press [Tab] to navigate fields • [Enter] to submit • [Esc] to cancel"))
-		b.WriteString("\n")
+			numBadge := fmt.Sprintf("[%d] ", i+1)
+			b.WriteString(prefix)
+			b.WriteString(itemStyle.Render(numBadge + tmpl.Title))
+			b.WriteString("\n")
+			b.WriteString("    " + hintStyle.Render(tmpl.Description) + "\n\n")
+		}
 		return b.String()
 	}
 
-	// List Mode
+	if m.mode == modePickAgentTemplate {
+		b.WriteString(headerStyle.Render("★ CHOOSE AN AGENT TEMPLATE"))
+		b.WriteString("\n")
+		b.WriteString(hintStyle.Render("Press [1-4] or use [↑/↓] and press [Enter] to select. Press [Esc] to cancel."))
+		b.WriteString("\n\n")
+
+		for i, tmpl := range agentTemplates {
+			prefix := "  "
+			itemStyle := normalItemStyle
+			if i == m.templateCursor {
+				prefix = "▸ "
+				itemStyle = selectedItemStyle
+			}
+
+			numBadge := fmt.Sprintf("[%d] ", i+1)
+			b.WriteString(prefix)
+			b.WriteString(itemStyle.Render(numBadge + tmpl.Title))
+			b.WriteString("\n")
+			b.WriteString("    " + hintStyle.Render(tmpl.Description) + "\n\n")
+		}
+		return b.String()
+	}
+
+	if m.mode == modeAddProvider || m.mode == modeEditProvider || m.mode == modeAddAgent || m.mode == modeEditAgent {
+		title := "Add Provider"
+		if m.mode == modeEditProvider {
+			title = "Edit Provider"
+		} else if m.mode == modeAddAgent {
+			title = "Add Agent"
+		} else if m.mode == modeEditAgent {
+			title = "Edit Agent"
+		}
+
+		b.WriteString(headerStyle.Render(fmt.Sprintf("★ %s", strings.ToUpper(title))))
+		b.WriteString("\n")
+		b.WriteString(hintStyle.Render("Press [Tab] or [↓] to switch fields, [Enter] on last field to submit, [Esc] to cancel."))
+		b.WriteString("\n\n")
+
+		for i := range m.inputs {
+			b.WriteString(m.inputs[i].View())
+			b.WriteString("\n")
+		}
+
+		b.WriteString("\n")
+		if m.statusMsg != "" {
+			b.WriteString(statusStyle.Render(m.statusMsg))
+			b.WriteString("\n")
+		}
+		return b.String()
+	}
+
 	if m.activeTab == tabProviders {
 		names := m.getProviderNames()
 		if len(names) == 0 {
-			b.WriteString(hintStyle.Render("No providers registered yet. Press [a] to add one."))
+			b.WriteString(hintStyle.Render("No providers registered yet. Press [a] to choose a template."))
 			b.WriteString("\n")
 		} else {
 			b.WriteString(fmt.Sprintf("%-18s %-16s %-32s %-20s\n", headerStyle.Render("PROVIDER NAME"), headerStyle.Render("TYPE"), headerStyle.Render("BASE URL"), headerStyle.Render("API KEY ENV")))
@@ -514,17 +765,11 @@ func (m ConfigModel) View() string {
 	} else {
 		aliases := m.getAgentAliases()
 		if len(aliases) == 0 {
-			b.WriteString(hintStyle.Render("No agents registered yet. Press [a] to add one."))
+			b.WriteString(hintStyle.Render("No agents configured yet. Press [a] to choose a template."))
 			b.WriteString("\n")
 		} else {
-			b.WriteString(fmt.Sprintf("%-18s %-16s %-28s %-10s %-12s\n",
-				headerStyle.Render("ALIAS"),
-				headerStyle.Render("PROVIDER"),
-				headerStyle.Render("MODEL"),
-				headerStyle.Render("ROLE"),
-				headerStyle.Render("TOOL CALLING"),
-			))
-			b.WriteString(lipgloss.NewStyle().Foreground(lipgloss.Color("#2E3842")).Render("────────────────────────────────────────────────────────────────────────────────────────\n"))
+			b.WriteString(fmt.Sprintf("%-16s %-16s %-24s %-10s %-12s\n", headerStyle.Render("ALIAS"), headerStyle.Render("PROVIDER"), headerStyle.Render("MODEL"), headerStyle.Render("ROLE"), headerStyle.Render("TOOL CALL")))
+			b.WriteString(lipgloss.NewStyle().Foreground(lipgloss.Color("#2E3842")).Render("──────────────────────────────────────────────────────────────────────────────────────────\n"))
 
 			for i, alias := range aliases {
 				a := m.cfg.Agents[alias]
@@ -540,7 +785,7 @@ func (m ConfigModel) View() string {
 					tc = "yes"
 				}
 
-				row := fmt.Sprintf("%s%-16s %-16s %-28s %-10s %-12s", prefix, alias, a.Provider, a.Model, a.Role, tc)
+				row := fmt.Sprintf("%s%-14s %-16s %-24s %-10s %-12s", prefix, alias, a.Provider, a.Model, a.Role, tc)
 				b.WriteString(lineStyle.Render(row))
 				b.WriteString("\n")
 			}
@@ -549,16 +794,12 @@ func (m ConfigModel) View() string {
 
 	b.WriteString("\n")
 	if m.statusMsg != "" {
-		b.WriteString(savedStyle.Render(m.statusMsg))
-		b.WriteString("\n")
-	}
-	if m.err != nil {
-		b.WriteString(errStyle.Render(fmt.Sprintf("Error: %v", m.err)))
-		b.WriteString("\n")
+		b.WriteString(statusStyle.Render(m.statusMsg))
+		b.WriteString("\n\n")
 	}
 
-	b.WriteString("\n")
-	b.WriteString(hintStyle.Render("[Tab] Switch Tab • [↑/↓] Navigate • [a] Add • [Enter/e] Edit • [d/x] Delete • [s] Save • [q] Quit"))
+	help := hintStyle.Render("[a] Add with Template · [e/Enter] Edit · [d] Delete · [s] Save to TOML · [Tab] Switch Tab · [q] Quit")
+	b.WriteString(help)
 	b.WriteString("\n")
 
 	return b.String()

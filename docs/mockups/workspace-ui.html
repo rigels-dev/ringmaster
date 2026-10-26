@@ -1228,7 +1228,21 @@
         </table>
 
         <div class="add-form-row">
-          <strong style="font-size: 10px; color: var(--gear-gold);">+ Add New Provider</strong>
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+            <strong style="font-size: 11px; color: var(--gear-gold);">+ Add New Provider</strong>
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <span style="font-size: 10px; color: var(--text-dim);">Template:</span>
+              <select id="provPresetSelect" onchange="applyProviderPreset(this.value)" style="background: var(--bg-inner); border: 1px solid var(--gear-gold); color: var(--gear-gold); padding: 4px 8px; border-radius: 4px; font-size: 10px; font-weight: 600;">
+                <option value="">Choose a Template...</option>
+                <option value="claude_sub">★ Claude Subscription (Local ~/.claude)</option>
+                <option value="openai">OpenAI Compatible (api.openai.com)</option>
+                <option value="claude_api">Claude Official API (api.anthropic.com)</option>
+                <option value="9router">9router (Local Proxy :20128)</option>
+                <option value="ollama">Ollama (Local LLM :11434)</option>
+                <option value="custom">Custom Manual Entry</option>
+              </select>
+            </div>
+          </div>
           <div class="form-grid">
             <div class="form-group">
               <label>Provider Name</label>
@@ -1995,6 +2009,42 @@
           <td><button class="cfg-btn-del" onclick="deleteAgent('${alias}')">Delete</button></td>
         `;
         aBody.appendChild(tr);
+      }
+    }
+
+        function applyProviderPreset(val) {
+      if (!val) return;
+      const presets = {
+        'claude_sub': { name: 'claude_subscription', type: 'claude_subscription', url: '', env: '' },
+        'openai': { name: 'openai', type: 'openai', url: 'https://api.openai.com/v1', env: 'OPENAI_API_KEY' },
+        'claude_api': { name: 'claude', type: 'anthropic', url: 'https://api.anthropic.com/v1', env: 'ANTHROPIC_API_KEY' },
+        '9router': { name: '9router', type: 'openai', url: 'http://localhost:20128/v1', env: 'NINEROUTER_API_KEY' },
+        'ollama': { name: 'ollama_local', type: 'openai', url: 'http://localhost:11434/v1', env: '' },
+        'custom': { name: '', type: 'openai', url: '', env: '' }
+      };
+      const p = presets[val];
+      if (p) {
+        document.getElementById('newProvName').value = p.name;
+        document.getElementById('newProvType').value = p.type;
+        document.getElementById('newProvURL').value = p.url;
+        document.getElementById('newProvEnv').value = p.env;
+      }
+    }
+
+    function applyAgentPreset(val) {
+      if (!val) return;
+      const presets = {
+        'master': { alias: 'master', model: 'sonnet', role: 'master', tc: 'false' },
+        'fast': { alias: 'coder-fast', model: 'haiku', role: 'worker', tc: 'true' },
+        'cheap': { alias: 'coder-cheap', model: 'qwen2.5-coder:7b', role: 'worker', tc: 'true' },
+        'custom': { alias: '', model: '', role: 'worker', tc: 'true' }
+      };
+      const a = presets[val];
+      if (a) {
+        document.getElementById('newAgentAlias').value = a.alias;
+        document.getElementById('newAgentModel').value = a.model;
+        document.getElementById('newAgentRole').value = a.role;
+        document.getElementById('newAgentTool').value = a.tc;
       }
     }
 
