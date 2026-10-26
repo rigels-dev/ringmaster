@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -1355,15 +1356,26 @@ func (m ConfigModel) getProviderNames() []string {
 	for k := range m.cfg.Providers {
 		names = append(names, k)
 	}
+	sort.Strings(names)
 	return names
 }
 
 func (m ConfigModel) getAgentAliases() []string {
-	var aliases []string
-	for k := range m.cfg.Agents {
-		aliases = append(aliases, k)
+	var masters []string
+	var workers []string
+
+	for k, a := range m.cfg.Agents {
+		if a.Role == "master" {
+			masters = append(masters, k)
+		} else {
+			workers = append(workers, k)
+		}
 	}
-	return aliases
+	sort.Strings(masters)
+	sort.Strings(workers)
+
+	// Deterministic stable order: Master always at index 0, followed by alphabetical workers!
+	return append(masters, workers...)
 }
 
 func (m ConfigModel) currentListLen() int {
@@ -1725,9 +1737,9 @@ func (m ConfigModel) View() string {
 			b.WriteString(stepAnswerStyle.Render(masterInfo) + "\n")
 			b.WriteString(hintStyle.Render("  [m] Set highlighted as Master · [w] Set as Default Worker") + "\n\n")
 
-			plainHeader := fmt.Sprintf("  %-18s %-22s %-32s %-10s %-10s", "ALIAS", "PROVIDER", "MODEL", "ROLE", "TOOL CALL")
+			plainHeader := fmt.Sprintf("  %-16s %-26s %-14s %-8s %-5s", "ALIAS", "MODEL", "PROVIDER", "ROLE", "TOOLS")
 			b.WriteString(headerStyle.Render(plainHeader) + "\n")
-			b.WriteString(lipgloss.NewStyle().Foreground(lipgloss.Color("#2E3842")).Render("────────────────────────────────────────────────────────────────────────────────────────────") + "\n")
+			b.WriteString(lipgloss.NewStyle().Foreground(lipgloss.Color("#2E3842")).Render("───────────────────────────────────────────────────────────────────────") + "\n")
 
 			for i, alias := range aliases {
 				a := m.cfg.Agents[alias]
@@ -1743,7 +1755,12 @@ func (m ConfigModel) View() string {
 					tc = "yes"
 				}
 
-				row := fmt.Sprintf("%s%-18s %-22s %-32s %-10s %-10s", prefix, alias, a.Provider, a.Model, a.Role, tc)
+				dispProv := a.Provider
+				if dispProv == "claude_subscription" {
+					dispProv = "claude_sub"
+				}
+
+				row := fmt.Sprintf("%s%-14s %-26s %-14s %-8s %-5s", prefix, alias, a.Model, dispProv, a.Role, tc)
 				b.WriteString(lineStyle.Render(row) + "\n")
 			}
 		}

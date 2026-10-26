@@ -2,11 +2,42 @@ package tui
 
 import (
 	"fmt"
+	"reflect"
 	tea "github.com/charmbracelet/bubbletea"
 	"ringmaster/internal/config"
 	"strings"
 	"testing"
 )
+
+func TestDeterministicAgentOrdering(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.Agents["coder-sonnet"] = config.AgentConfig{Provider: "p", Model: "sonnet", Role: "worker"}
+	cfg.Agents["coder-haiku"] = config.AgentConfig{Provider: "p", Model: "haiku", Role: "worker"}
+	cfg.Agents["coder-opus"] = config.AgentConfig{Provider: "p", Model: "opus", Role: "worker"}
+	cfg.Agents["master"] = config.AgentConfig{Provider: "p", Model: "sonnet-3-7", Role: "master"}
+
+	model := NewConfigModel(cfg, "ringmaster.toml")
+
+	firstList := model.getAgentAliases()
+	if len(firstList) != 4 {
+		t.Fatalf("expected 4 agents, got %d", len(firstList))
+	}
+
+	// Verify master is ALWAYS at index 0!
+	if firstList[0] != "master" {
+		t.Errorf("expected master to be at index 0, got %s", firstList[0])
+	}
+
+	// Run 100 iterations - order must be 100% frozen and stable!
+	for i := 0; i < 100; i++ {
+		iterList := model.getAgentAliases()
+		if !reflect.DeepEqual(firstList, iterList) {
+			t.Fatalf("iteration %d had different order: %v vs %v", i, iterList, firstList)
+		}
+	}
+
+	fmt.Println("--- Deterministic Agent Ordering Test Passed (100 iterations perfectly stable)! ---")
+}
 
 func TestNavigationNoLoopAndLeftRight(t *testing.T) {
 	cfg := config.DefaultConfig()
@@ -15,39 +46,31 @@ func TestNavigationNoLoopAndLeftRight(t *testing.T) {
 	cfg.Agents["agent3"] = config.AgentConfig{Provider: "p", Model: "m3", Role: "worker"}
 
 	model := NewConfigModel(cfg, "ringmaster.toml")
-	// Switch to tabAgents
 	m, _ := model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'2'}})
 
-	// Currently at cursor 0
 	if m.(ConfigModel).cursor != 0 {
 		t.Fatalf("expected cursor 0, got %d", m.(ConfigModel).cursor)
 	}
 
-	// Press UP when at top -> Should STAY at 0 (no loop to bottom!)
 	m, _ = m.(ConfigModel).Update(tea.KeyMsg{Type: tea.KeyUp})
 	if m.(ConfigModel).cursor != 0 {
 		t.Errorf("expected cursor to stay at 0, got %d", m.(ConfigModel).cursor)
 	}
 
-	// Press RIGHT -> Jump to bottom (cursor 2)
 	m, _ = m.(ConfigModel).Update(tea.KeyMsg{Type: tea.KeyRight})
 	if m.(ConfigModel).cursor != 2 {
 		t.Errorf("expected cursor 2 (bottom), got %d", m.(ConfigModel).cursor)
 	}
 
-	// Press DOWN when at bottom -> Should STAY at 2 (no loop to top!)
 	m, _ = m.(ConfigModel).Update(tea.KeyMsg{Type: tea.KeyDown})
 	if m.(ConfigModel).cursor != 2 {
 		t.Errorf("expected cursor to stay at 2, got %d", m.(ConfigModel).cursor)
 	}
 
-	// Press LEFT -> Jump to top (cursor 0)
 	m, _ = m.(ConfigModel).Update(tea.KeyMsg{Type: tea.KeyLeft})
 	if m.(ConfigModel).cursor != 0 {
 		t.Errorf("expected cursor 0 (top), got %d", m.(ConfigModel).cursor)
 	}
-
-	fmt.Println("--- Navigation Test Passed (No loop, Left=Top, Right=Bottom)! ---")
 }
 
 func TestDeleteProviderConfirmation(t *testing.T) {
