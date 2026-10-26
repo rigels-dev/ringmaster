@@ -314,22 +314,23 @@
         </div>
       </section>
 
-      <!-- 3. PROVIDERS & MODELS CONFIG (Full Web Config & Ping!) -->
+      <!-- 3. PROVIDERS & MODELS / AGENTS CONFIG -->
       <section v-else-if="activeView === 'providers'" class="flex-1 flex flex-col p-6 overflow-y-auto">
         <div class="flex items-center justify-between mb-6">
           <div>
-            <h2 class="text-lg font-bold text-gear-gold font-cinzel">AI Providers & Model Registry</h2>
-            <p class="text-xs text-zinc-400">Configure LLM providers, test connection latency, and register agents directly.</p>
+            <h2 class="text-lg font-bold text-gear-gold font-cinzel">AI Providers & Model Fleet Registry</h2>
+            <p class="text-xs text-zinc-400">Configure LLM providers, assign Master Planner vs Worker roles, and test connections.</p>
           </div>
           <span class="text-[10px] text-zinc-400 bg-slate-panel px-3 py-1.5 rounded border border-steel">
             Config File: <code class="text-gear-gold">{{ providersData.configPath || 'ringmaster.toml' }}</code>
           </span>
         </div>
 
-        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <!-- Section 1: Registered Providers -->
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
           <!-- Add Provider Card Form -->
           <div class="bg-slate-panel border border-steel rounded-lg p-5 flex flex-col gap-4">
-            <h3 class="text-xs font-bold text-gear-gold uppercase tracking-wider">Add / Edit Provider</h3>
+            <h3 class="text-xs font-bold text-gear-gold uppercase tracking-wider">1. Add / Edit Provider</h3>
 
             <div class="space-y-3">
               <div>
@@ -337,7 +338,7 @@
                 <input 
                   v-model="newProv.id" 
                   type="text" 
-                  placeholder="e.g. anthropic, openai, 9router" 
+                  placeholder="e.g. anthropic, 9router, ollama" 
                   class="w-full bg-slate-inner border border-steel text-parchment text-xs px-3 py-2 rounded focus:outline-none focus:border-gear-gold"
                 />
               </div>
@@ -361,7 +362,7 @@
                   v-model="newProv.base_url" 
                   :disabled="newProv.type === 'claude_subscription'"
                   type="text" 
-                  :placeholder="newProv.type === 'claude_subscription' ? '(Not needed - uses local Claude CLI)' : 'https://api.openai.com/v1'" 
+                  :placeholder="newProv.type === 'claude_subscription' ? '(Not needed - uses local Claude CLI)' : 'http://localhost:20128/v1 or https://api.openai.com/v1'" 
                   class="w-full bg-slate-inner border border-steel text-parchment text-xs px-3 py-2 rounded focus:outline-none focus:border-gear-gold disabled:opacity-40 disabled:cursor-not-allowed"
                 />
               </div>
@@ -419,10 +420,10 @@
               <table class="w-full text-left text-xs">
                 <thead>
                   <tr class="border-b border-steel text-[10px] text-zinc-400 uppercase">
-                    <th class="pb-2">Name / ID</th>
+                    <th class="pb-2">ID</th>
                     <th class="pb-2">Type</th>
                     <th class="pb-2">Endpoint</th>
-                    <th class="pb-2">API Key Env</th>
+                    <th class="pb-2">API Key</th>
                     <th class="pb-2 text-right">Actions</th>
                   </tr>
                 </thead>
@@ -430,7 +431,7 @@
                   <tr v-for="p in providersData.providers" :key="p.id" class="hover:bg-slate-dark/50 transition">
                     <td class="py-2.5 font-bold text-gear-gold">{{ p.id }}</td>
                     <td class="py-2.5 text-zinc-300">{{ p.type }}</td>
-                    <td class="py-2.5 text-zinc-400 text-[10px] max-w-[160px] truncate">{{ p.base_url || '(local CLI session)' }}</td>
+                    <td class="py-2.5 text-zinc-400 text-[10px] max-w-[160px] truncate">{{ p.base_url || '(local session)' }}</td>
                     <td class="py-2.5 text-zinc-400 font-mono text-[10px] tracking-wider">{{ maskApiKey(p.api_key_env) }}</td>
                     <td class="py-2.5 text-right space-x-2">
                       <button @click="pingExisting(p)" class="px-2 py-0.5 rounded text-[10px] bg-slate-inner text-cyan-energy hover:border-cyan-dim border border-steel">
@@ -442,11 +443,131 @@
                     </td>
                   </tr>
                   <tr v-if="!providersData.providers || providersData.providers.length === 0">
-                    <td colspan="5" class="py-6 text-center text-zinc-500 italic">No providers registered yet. Add one above!</td>
+                    <td colspan="5" class="py-6 text-center text-zinc-500 italic">Belum ada provider yang disimpan.</td>
                   </tr>
                 </tbody>
               </table>
             </div>
+          </div>
+        </div>
+
+        <!-- Section 2: Agent Fleet & Role Assignment (Master vs Worker) -->
+        <div class="bg-slate-panel border border-steel rounded-lg p-5">
+          <div class="flex items-center justify-between mb-4 pb-3 border-b border-steel">
+            <div>
+              <h3 class="text-xs font-bold text-gear-gold uppercase tracking-wider">2. Model Fleet & Role Assignments</h3>
+              <p class="text-[10px] text-zinc-400 mt-0.5">Tentukan model mana yang menjadi Master Planner (Arsitek) dan Worker (Coder/Executor).</p>
+            </div>
+            <button 
+              @click="showAddAgentModal = true" 
+              class="px-3 py-1.5 bg-cyan-dim hover:bg-cyan-energy text-slate-deep font-bold text-xs rounded transition flex items-center gap-1.5"
+            >
+              <span>+ Register New Agent</span>
+            </button>
+          </div>
+
+          <!-- Add Agent Form inline / expandable -->
+          <div v-if="showAddAgentModal" class="mb-5 p-4 bg-slate-inner border border-gear-dark/40 rounded-lg space-y-3">
+            <h4 class="text-xs font-bold text-parchment">Register Model into Agent Fleet</h4>
+            <div class="grid grid-cols-4 gap-3">
+              <div>
+                <label class="block text-[9px] text-zinc-400 mb-1">Agent Alias / ID</label>
+                <input v-model="newAgent.id" type="text" placeholder="e.g. planner-gemini, coder-flash" class="w-full bg-slate-panel border border-steel text-xs px-2.5 py-1.5 rounded text-parchment focus:outline-none focus:border-gear-gold" />
+              </div>
+              <div>
+                <label class="block text-[9px] text-zinc-400 mb-1">Provider</label>
+                <select v-model="newAgent.provider" class="w-full bg-slate-panel border border-steel text-xs px-2.5 py-1.5 rounded text-parchment focus:outline-none focus:border-gear-gold">
+                  <option v-for="p in providersData.providers" :key="p.id" :value="p.id">{{ p.id }} ({{ p.type }})</option>
+                </select>
+              </div>
+              <div>
+                <label class="block text-[9px] text-zinc-400 mb-1">Model Name</label>
+                <input v-model="newAgent.model" type="text" placeholder="e.g. ag/gemini-3.8-flash, gpt-4o" class="w-full bg-slate-panel border border-steel text-xs px-2.5 py-1.5 rounded text-parchment focus:outline-none focus:border-gear-gold" />
+              </div>
+              <div>
+                <label class="block text-[9px] text-zinc-400 mb-1">Role</label>
+                <select v-model="newAgent.role" class="w-full bg-slate-panel border border-steel text-xs px-2.5 py-1.5 rounded text-parchment focus:outline-none focus:border-gear-gold">
+                  <option value="worker">Worker (Coder, Tool Calling)</option>
+                  <option value="master">Master Planner (Architect)</option>
+                </select>
+              </div>
+            </div>
+            <div class="flex items-center justify-end gap-2 pt-2">
+              <button @click="showAddAgentModal = false" class="px-3 py-1 bg-slate-panel hover:bg-slate-dark text-zinc-400 text-xs rounded border border-steel">Cancel</button>
+              <button @click="saveNewAgent" class="px-4 py-1 bg-gear-gold hover:bg-gear-glow text-slate-deep font-bold text-xs rounded">Save Agent</button>
+            </div>
+          </div>
+
+          <!-- Agents Fleet Table -->
+          <div class="overflow-x-auto">
+            <table class="w-full text-left text-xs">
+              <thead>
+                <tr class="border-b border-steel text-[10px] text-zinc-400 uppercase">
+                  <th class="pb-2">Agent Alias</th>
+                  <th class="pb-2">Model</th>
+                  <th class="pb-2">Provider</th>
+                  <th class="pb-2">Current Role</th>
+                  <th class="pb-2">Tool Calling</th>
+                  <th class="pb-2 text-right">Switch Role / Action</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-steel/50">
+                <tr v-for="a in providersData.agents" :key="a.id" class="hover:bg-slate-dark/50 transition">
+                  <td class="py-3 font-bold text-parchment flex items-center gap-2">
+                    <span v-if="a.role === 'master'" class="text-gear-gold" title="Master Planner">★</span>
+                    <span v-else class="text-cyan-energy" title="Worker">⚡</span>
+                    <span>{{ a.id }}</span>
+                    <span v-if="providersData.defaultMaster === a.id" class="text-[8px] bg-gear-dark/40 text-gear-gold px-1 rounded border border-gear-dark">DEFAULT MASTER</span>
+                  </td>
+                  <td class="py-3 font-mono text-[11px] text-zinc-300">{{ a.model }}</td>
+                  <td class="py-3 text-zinc-400">{{ a.provider }}</td>
+                  <td class="py-3">
+                    <span 
+                      class="text-[9px] font-bold px-2 py-0.5 rounded uppercase"
+                      :class="a.role === 'master' ? 'bg-gear-gold text-slate-deep' : 'bg-slate-inner text-cyan-energy border border-cyan-dim/40'"
+                    >
+                      {{ a.role }}
+                    </span>
+                  </td>
+                  <td class="py-3">
+                    <span class="text-[10px] font-bold" :class="a.tool_calling ? 'text-green-400' : 'text-zinc-500'">
+                      {{ a.tool_calling ? 'YES' : 'NO' }}
+                    </span>
+                  </td>
+                  <td class="py-3 text-right space-x-2">
+                    <!-- Quick Set Master button -->
+                    <button 
+                      v-if="a.role !== 'master'" 
+                      @click="setAgentRole(a.id, 'master')" 
+                      class="px-2 py-0.5 rounded text-[10px] bg-gear-dark/40 hover:bg-gear-gold hover:text-slate-deep text-gear-gold border border-gear-dark transition"
+                      title="Promote to Master Planner"
+                    >
+                      ★ Set Master
+                    </button>
+                    <!-- Quick Set Worker button -->
+                    <button 
+                      v-if="a.role !== 'worker'" 
+                      @click="setAgentRole(a.id, 'worker')" 
+                      class="px-2 py-0.5 rounded text-[10px] bg-slate-inner hover:bg-cyan-energy hover:text-slate-deep text-cyan-energy border border-steel transition"
+                      title="Set as Worker"
+                    >
+                      ⚡ Set Worker
+                    </button>
+                    <!-- Delete Agent -->
+                    <button 
+                      @click="deleteAgent(a.id)" 
+                      class="px-2 py-0.5 rounded text-[10px] bg-red-950/60 hover:bg-red-900 text-red-400 border border-red-800 transition"
+                      title="Delete Agent"
+                    >
+                      Delete
+                    </button>
+                  </td>
+                </tr>
+                <tr v-if="!providersData.agents || providersData.agents.length === 0">
+                  <td colspan="6" class="py-6 text-center text-zinc-500 italic">Belum ada agent yang terdaftar. Daftarkan model di atas!</td>
+                </tr>
+              </tbody>
+            </table>
           </div>
         </div>
       </section>
@@ -511,6 +632,14 @@ const newProv = ref({
 const pingStatus = ref(null)
 const isPinging = ref(false)
 const showApiKey = ref(false)
+const showAddAgentModal = ref(false)
+
+const newAgent = ref({
+  id: '',
+  provider: '',
+  model: '',
+  role: 'worker'
+})
 
 function maskApiKey(val) {
   if (!val) return '—'
@@ -555,6 +684,9 @@ async function loadProvidersData() {
     const data = await res.json()
     if (data.ok) {
       providersData.value = data
+      if (data.providers && data.providers.length > 0 && !newAgent.value.provider) {
+        newAgent.value.provider = data.providers[0].id
+      }
     }
   } catch {}
 }
@@ -616,6 +748,76 @@ const totalTokensConsumed = computed(() => {
 const completedTasksCount = computed(() => {
   return tasks.value.filter(t => t.status === 'DONE').length
 })
+
+async function saveNewAgent() {
+  if (!newAgent.value.id.trim() || !newAgent.value.model.trim()) {
+    alert('Agent alias and model name are required')
+    return
+  }
+  try {
+    const res = await fetch('/api/providers', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: 'add_agent',
+        ...newAgent.value,
+        tool_calling: newAgent.value.role === 'worker'
+      })
+    })
+    const data = await res.json()
+    if (data.ok) {
+      alert(data.message)
+      showAddAgentModal.value = false
+      newAgent.value.id = ''
+      newAgent.value.model = ''
+      loadProvidersData()
+      loadProjectData()
+    } else {
+      alert('Error: ' + data.error)
+    }
+  } catch (err) {
+    alert('Failed to register agent: ' + err.message)
+  }
+}
+
+async function setAgentRole(id, role) {
+  try {
+    const res = await fetch('/api/providers', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'set_role', id, role })
+    })
+    const data = await res.json()
+    if (data.ok) {
+      loadProvidersData()
+      loadProjectData()
+    } else {
+      alert('Error: ' + data.error)
+    }
+  } catch (err) {
+    alert('Failed to switch role: ' + err.message)
+  }
+}
+
+async function deleteAgent(id) {
+  if (!confirm(`Delete agent '${id}' from fleet?`)) return
+  try {
+    const res = await fetch('/api/providers', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'delete_agent', id })
+    })
+    const data = await res.json()
+    if (data.ok) {
+      loadProvidersData()
+      loadProjectData()
+    } else {
+      alert('Error: ' + data.error)
+    }
+  } catch (err) {
+    alert('Failed to delete agent: ' + err.message)
+  }
+}
 
 function handleTypeChange() {
   if (newProv.value.type === 'claude_subscription') {
