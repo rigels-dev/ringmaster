@@ -2,6 +2,7 @@ package tui
 
 import (
 	tea "github.com/charmbracelet/bubbletea"
+	"path/filepath"
 	"ringmaster/internal/config"
 	"strings"
 	"testing"
@@ -13,7 +14,7 @@ func TestPingKeyHandling(t *testing.T) {
 	cfg.Providers["test_prov"] = config.ProviderConfig{Type: "openai", BaseURL: "http://localhost:8080"}
 	cfg.Agents["tester"] = config.AgentConfig{Provider: "test_prov", Model: "gpt-4o", Role: "worker"}
 
-	model := NewConfigModel(cfg, "ringmaster.toml")
+	model := NewConfigModel(cfg, filepath.Join(t.TempDir(), "ringmaster.toml"))
 
 	// Switch to Agents tab
 	mAgents, _ := model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'2'}})

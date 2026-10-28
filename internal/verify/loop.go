@@ -17,21 +17,21 @@ import (
 
 // TaskAttemptLoopResult records the final outcome after one or more attempts.
 type TaskAttemptLoopResult struct {
-	TaskID         string         `json:"task_id"`
-	Decision       Decision       `json:"decision"`
-	TotalAttempts  int            `json:"total_attempts"`
-	TotalUsage     schemas.Usage  `json:"total_usage"`
-	Duration       time.Duration  `json:"duration"`
-	FinalReport    *schemas.WorkerReport `json:"final_report,omitempty"`
+	TaskID        string                `json:"task_id"`
+	Decision      Decision              `json:"decision"`
+	TotalAttempts int                   `json:"total_attempts"`
+	TotalUsage    schemas.Usage         `json:"total_usage"`
+	Duration      time.Duration         `json:"duration"`
+	FinalReport   *schemas.WorkerReport `json:"final_report,omitempty"`
 }
 
 // AuditEvent represents an entry in .ringmaster/logs/events.jsonl
 type AuditEvent struct {
-	Timestamp string       `json:"timestamp"`
-	TaskID    string       `json:"task_id"`
-	Attempt   int          `json:"attempt"`
-	Action    string       `json:"action"` // ATTEMPT_STARTED, ATTEMPT_FINISHED, ACCEPTANCE_CHECKED, DECISION
-	Payload   any          `json:"payload,omitempty"`
+	Timestamp string `json:"timestamp"`
+	TaskID    string `json:"task_id"`
+	Attempt   int    `json:"attempt"`
+	Action    string `json:"action"` // ATTEMPT_STARTED, ATTEMPT_FINISHED, ACCEPTANCE_CHECKED, DECISION
+	Payload   any    `json:"payload,omitempty"`
 }
 
 // RunTaskLoop executes attempts for task until DONE, BLOCKED, NEEDS_REVIEW, or PAUSED.

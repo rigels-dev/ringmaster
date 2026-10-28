@@ -5,12 +5,12 @@ import "time"
 type TaskExecutionStatus string
 
 const (
-	TaskStatePending    TaskExecutionStatus = "PENDING"
-	TaskStateRunning    TaskExecutionStatus = "RUNNING"
-	TaskStateCompleted  TaskExecutionStatus = "COMPLETED"
-	TaskStateBlocked    TaskExecutionStatus = "BLOCKED"
-	TaskStateFailed     TaskExecutionStatus = "FAILED"
-	TaskStateReview     TaskExecutionStatus = "NEEDS_REVIEW"
+	TaskStatePending   TaskExecutionStatus = "PENDING"
+	TaskStateRunning   TaskExecutionStatus = "RUNNING"
+	TaskStateCompleted TaskExecutionStatus = "COMPLETED"
+	TaskStateBlocked   TaskExecutionStatus = "BLOCKED"
+	TaskStateFailed    TaskExecutionStatus = "FAILED"
+	TaskStateReview    TaskExecutionStatus = "NEEDS_REVIEW"
 )
 
 type TaskState struct {

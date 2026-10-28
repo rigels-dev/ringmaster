@@ -2,13 +2,14 @@ package tui
 
 import (
 	tea "github.com/charmbracelet/bubbletea"
+	"path/filepath"
 	"ringmaster/internal/config"
 	"testing"
 )
 
 func TestAtomicWizardProviderDiscardOnEsc(t *testing.T) {
 	cfg := config.DefaultConfig()
-	model := NewConfigModel(cfg, "ringmaster.toml")
+	model := NewConfigModel(cfg, filepath.Join(t.TempDir(), "ringmaster.toml"))
 
 	// Step 1: Add provider -> select Anthropic
 	m1, _ := model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'a'}})

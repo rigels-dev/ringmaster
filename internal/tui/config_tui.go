@@ -38,9 +38,9 @@ var (
 			Padding(0, 2)
 
 	inactiveTabStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.AdaptiveColor{Light: "#64748B", Dark: "#8493A0"}).
-			Background(lipgloss.AdaptiveColor{Light: "#E2E8F0", Dark: "#232B33"}).
-			Padding(0, 2)
+				Foreground(lipgloss.AdaptiveColor{Light: "#64748B", Dark: "#8493A0"}).
+				Background(lipgloss.AdaptiveColor{Light: "#E2E8F0", Dark: "#232B33"}).
+				Padding(0, 2)
 
 	headerStyle = lipgloss.NewStyle().
 			Foreground(lipgloss.AdaptiveColor{Light: "#9A3412", Dark: "#DEAA3B"}).
@@ -51,16 +51,16 @@ var (
 			Bold(true)
 
 	stepActiveBullet = lipgloss.NewStyle().
-			Foreground(lipgloss.AdaptiveColor{Light: "#B6432A", Dark: "#E05436"}).
-			Bold(true)
+				Foreground(lipgloss.AdaptiveColor{Light: "#B6432A", Dark: "#E05436"}).
+				Bold(true)
 
 	stepTitleStyle = lipgloss.NewStyle().
 			Foreground(lipgloss.AdaptiveColor{Light: "#0F172A", Dark: "#EFE4CE"}).
 			Bold(true)
 
 	stepDimTitleStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.AdaptiveColor{Light: "#64748B", Dark: "#8493A0"}).
-			Bold(true)
+				Foreground(lipgloss.AdaptiveColor{Light: "#64748B", Dark: "#8493A0"}).
+				Bold(true)
 
 	stepAnswerStyle = lipgloss.NewStyle().
 			Foreground(lipgloss.AdaptiveColor{Light: "#0284C7", Dark: "#29F2EC"}).
@@ -118,6 +118,7 @@ var (
 	tableBorderLine = lipgloss.NewStyle().
 			Foreground(lipgloss.AdaptiveColor{Light: "#CBD5E1", Dark: "#2E3842"})
 )
+
 type tab int
 
 const (
@@ -128,13 +129,13 @@ const (
 type viewMode int
 
 const (
-	modeList viewMode = iota
-	modePickProviderStep1 // Step 1: Choose Provider
-	modePickProviderStep2 // Step 2: Choose Auth Method
-	modeClaudeOAuth       // Interactive OAuth URL + Code paste
-	modePickModel         // Step 3: Pick Model from fetched list
-	modePickModelRole     // Step 4: Pick Role for chosen model
-	modeConfirmDeleteProvider // Step: Confirm provider deletion
+	modeList                  viewMode = iota
+	modePickProviderStep1              // Step 1: Choose Provider
+	modePickProviderStep2              // Step 2: Choose Auth Method
+	modeClaudeOAuth                    // Interactive OAuth URL + Code paste
+	modePickModel                      // Step 3: Pick Model from fetched list
+	modePickModelRole                  // Step 4: Pick Role for chosen model
+	modeConfirmDeleteProvider          // Step: Confirm provider deletion
 	modeEditProvider
 	modeAddProvider
 	modePickAgentTemplate
@@ -1784,7 +1785,7 @@ func (m ConfigModel) View() string {
 			title = "Edit Agent"
 		}
 
-		b.WriteString(headerStyle.Render("★ " + strings.ToUpper(title)) + "\n")
+		b.WriteString(headerStyle.Render("★ "+strings.ToUpper(title)) + "\n")
 		b.WriteString(hintStyle.Render("Press [Tab] or [↓] to switch fields, [Enter] on last field to submit, [Esc] to cancel.") + "\n\n")
 
 		for i := range m.inputs {

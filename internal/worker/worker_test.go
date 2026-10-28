@@ -151,7 +151,7 @@ func TestRunnerAttemptExecution(t *testing.T) {
 									"id":   "call_1",
 									"type": "function",
 									"function": map[string]any{
-										"name": "write_file",
+										"name":      "write_file",
 										"arguments": fmt.Sprintf(`{"path":"outputs/T01.md","content":%q}`, reportYAML),
 									},
 								},

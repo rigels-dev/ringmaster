@@ -7,11 +7,12 @@ import (
 )
 
 // ResolveProjectDir smartly finds the target project directory:
-// 1. If name is empty or ".", checks if current working directory has a ringmaster project.
-// 2. If name is specified:
-//    a. Checks relative path directly (e.g. "./my-app")
-//    b. Checks "projects/<name>" (optional fallback)
-//    c. Checks "examples/<name>"
+//  1. If name is empty or ".", checks if current working directory has a ringmaster project.
+//  2. If name is specified:
+//     a. Checks relative path directly (e.g. "./my-app")
+//     b. Checks "projects/<name>" (optional fallback)
+//     c. Checks "examples/<name>"
+//
 // Returns the resolved directory path or an error if not found.
 func ResolveProjectDir(name string) (string, error) {
 	cwd, err := os.Getwd()

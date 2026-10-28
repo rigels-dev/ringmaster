@@ -14,7 +14,7 @@ type TaskEstimate struct {
 
 // ProjectEstimate holds cumulative token boundaries for the entire project.
 type ProjectEstimate struct {
-	Tasks []TaskEstimate
+	Tasks    []TaskEstimate
 	TotalMin int
 	TotalMax int
 }

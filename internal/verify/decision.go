@@ -19,9 +19,9 @@ const (
 
 // Decision encapsulates the outcome of verifying a worker report and checks.
 type Decision struct {
-	Type        DecisionType  `json:"type"`
-	Reason      string        `json:"reason"`
-	FailureLogs string        `json:"failure_logs,omitempty"`
+	Type        DecisionType `json:"type"`
+	Reason      string       `json:"reason"`
+	FailureLogs string       `json:"failure_logs,omitempty"`
 }
 
 // Decide is a pure, side-effect-free function evaluating task attempt results.
@@ -42,8 +42,8 @@ func Decide(
 	if report == nil {
 		if attempt <= maxRetries {
 			return Decision{
-				Type:   DecisionRETRY,
-				Reason: "Worker produced no report.",
+				Type:        DecisionRETRY,
+				Reason:      "Worker produced no report.",
 				FailureLogs: "Missing output report file. Please generate outputs/Txx.md before completing.",
 			}
 		}

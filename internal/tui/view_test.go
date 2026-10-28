@@ -2,8 +2,9 @@ package tui
 
 import (
 	"fmt"
-	"reflect"
 	tea "github.com/charmbracelet/bubbletea"
+	"path/filepath"
+	"reflect"
 	"ringmaster/internal/config"
 	"strings"
 	"testing"
@@ -16,7 +17,7 @@ func TestDeterministicAgentOrdering(t *testing.T) {
 	cfg.Agents["coder-opus"] = config.AgentConfig{Provider: "p", Model: "opus", Role: "worker"}
 	cfg.Agents["master"] = config.AgentConfig{Provider: "p", Model: "sonnet-3-7", Role: "master"}
 
-	model := NewConfigModel(cfg, "ringmaster.toml")
+	model := NewConfigModel(cfg, filepath.Join(t.TempDir(), "ringmaster.toml"))
 
 	firstList := model.getAgentAliases()
 	if len(firstList) != 4 {
@@ -46,7 +47,7 @@ func TestNavigationNoLoopAndLeftRight(t *testing.T) {
 	cfg.Agents["agent2"] = config.AgentConfig{Provider: "p", Model: "m2", Role: "worker"}
 	cfg.Agents["agent3"] = config.AgentConfig{Provider: "p", Model: "m3", Role: "worker"}
 
-	model := NewConfigModel(cfg, "ringmaster.toml")
+	model := NewConfigModel(cfg, filepath.Join(t.TempDir(), "ringmaster.toml"))
 	m, _ := model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'2'}})
 
 	if m.(ConfigModel).cursor != 0 {
@@ -80,7 +81,7 @@ func TestDeleteProviderConfirmation(t *testing.T) {
 	cfg.Agents["agent1"] = config.AgentConfig{Provider: "test_prov", Model: "gpt-4", Role: "master"}
 	cfg.Agents["agent2"] = config.AgentConfig{Provider: "test_prov", Model: "gpt-3.5", Role: "worker"}
 
-	model := NewConfigModel(cfg, "ringmaster.toml")
+	model := NewConfigModel(cfg, filepath.Join(t.TempDir(), "ringmaster.toml"))
 
 	m1, _ := model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'d'}})
 	v1 := m1.(ConfigModel).View()
@@ -110,7 +111,7 @@ func TestDeleteProviderConfirmation(t *testing.T) {
 
 func TestClaudeExistingSessionAndVersionedModels(t *testing.T) {
 	cfg := config.DefaultConfig()
-	model := NewConfigModel(cfg, "ringmaster.toml")
+	model := NewConfigModel(cfg, filepath.Join(t.TempDir(), "ringmaster.toml"))
 
 	m1, _ := model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'a'}})
 	m2, _ := m1.(ConfigModel).Update(tea.KeyMsg{Type: tea.KeyEnter})

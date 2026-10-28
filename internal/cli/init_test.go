@@ -8,6 +8,7 @@ import (
 
 func TestInitProject(t *testing.T) {
 	tempDir := t.TempDir()
+	t.Setenv("HOME", t.TempDir()) // keep RunInit from writing the real ~/.ringmaster/active_project
 	origWd, err := os.Getwd()
 	if err != nil {
 		t.Fatal(err)

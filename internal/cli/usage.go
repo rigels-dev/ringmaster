@@ -71,12 +71,12 @@ func buildUsageView(projectDir, projectName string, asJSON bool) (string, error)
 
 	if asJSON {
 		payload := map[string]any{
-			"project":            projectName,
-			"planning_usage":     state.Planning,
-			"agent_usage":        agentUsage,
-			"task_states":        state.TaskStates,
-			"total_tokens":       calcTotalTokens(state),
-			"estimated_range":    fmt.Sprintf("%d - %d", estimates.TotalMin, estimates.TotalMax),
+			"project":         projectName,
+			"planning_usage":  state.Planning,
+			"agent_usage":     agentUsage,
+			"task_states":     state.TaskStates,
+			"total_tokens":    calcTotalTokens(state),
+			"estimated_range": fmt.Sprintf("%d - %d", estimates.TotalMin, estimates.TotalMax),
 		}
 		data, _ := json.MarshalIndent(payload, "", "  ")
 		return string(data) + "\n", nil

@@ -12,8 +12,8 @@ import (
 )
 
 const (
-	maxTailBytes       = 4 * 1024 // 4 KB truncation
-	maxAcceptanceWait  = 90 * time.Second
+	maxTailBytes      = 4 * 1024 // 4 KB truncation
+	maxAcceptanceWait = 90 * time.Second
 )
 
 // CheckResult represents the outcome of running a single acceptance criterion command.
