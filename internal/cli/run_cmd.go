@@ -41,6 +41,12 @@ var runCmd = &cobra.Command{
 			return err
 		}
 
+		// Advertise the live run so the web UI can detect it across processes
+		pidFile := filepath.Join(projectDir, ".ringmaster", "run.pid")
+		if err := os.WriteFile(pidFile, []byte(fmt.Sprintf("%d", os.Getpid())), 0644); err == nil {
+			defer os.Remove(pidFile)
+		}
+
 		// Graceful shutdown on SIGINT / SIGTERM
 		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 		defer stop()
