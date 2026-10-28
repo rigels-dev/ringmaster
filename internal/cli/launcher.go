@@ -12,6 +12,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"ringmaster/internal/config"
 	"ringmaster/internal/tui"
 )
 
@@ -185,9 +186,12 @@ func StartTUI() error {
 
 func StartWebUI(projectDir string, hasProject bool) error {
 	// Locate web output
+	root := config.RootDir()
 	candidates := []string{
 		filepath.Join(projectDir, "web", ".output", "server", "index.mjs"),
-		"/home/ubuntu/project/ringmaster/web/.output/server/index.mjs",
+	}
+	if root != "" {
+		candidates = append(candidates, filepath.Join(root, "web", ".output", "server", "index.mjs"))
 	}
 
 	var serverScript string
@@ -214,6 +218,12 @@ func StartWebUI(projectDir string, hasProject bool) error {
 		"NITRO_HOST=127.0.0.1",
 		fmt.Sprintf("RINGMASTER_PROJECT_DIR=%s", projectDir),
 	)
+	if root != "" {
+		cmd.Env = append(cmd.Env, fmt.Sprintf("RINGMASTER_ROOT=%s", root))
+	}
+	if exe, err := os.Executable(); err == nil {
+		cmd.Env = append(cmd.Env, fmt.Sprintf("RINGMASTER_BIN=%s", exe))
+	}
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 

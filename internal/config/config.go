@@ -153,6 +153,37 @@ func Validate(cfg *Config) error {
 	return nil
 }
 
+// RootDir returns the Ringmaster installation root: $RINGMASTER_ROOT if set,
+// otherwise the directory holding the executable (or its parent when the
+// binary lives in bin/). Returns "" when no root can be determined.
+func RootDir() string {
+	if root := os.Getenv("RINGMASTER_ROOT"); root != "" {
+		return root
+	}
+	exe, err := os.Executable()
+	if err != nil {
+		return ""
+	}
+	if resolved, err := filepath.EvalSymlinks(exe); err == nil {
+		exe = resolved
+	}
+	dir := filepath.Dir(exe)
+	if filepath.Base(dir) == "bin" {
+		return filepath.Dir(dir)
+	}
+	return dir
+}
+
+// GlobalConfigPath returns the path of the global fleet config
+// (<root>/ringmaster.toml), or "" when no root can be determined.
+func GlobalConfigPath() string {
+	root := RootDir()
+	if root == "" {
+		return ""
+	}
+	return filepath.Join(root, "ringmaster.toml")
+}
+
 func FindConfigFile() (string, error) {
 	cwd, err := os.Getwd()
 	if err != nil {

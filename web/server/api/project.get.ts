@@ -1,37 +1,9 @@
 import fs from 'node:fs'
 import path from 'node:path'
-import os from 'node:os'
+import { rootTomlPath, resolveProjectDir } from '../utils/ringmaster'
 
 export default defineEventHandler((event) => {
-  // 1. Resolve project directory in priority:
-  // a. Environment variable RINGMASTER_PROJECT_DIR
-  // b. Global active project file (~/.ringmaster/active_project)
-  // c. Process CWD if contains ringmaster project markers
-  // d. Fallback to /home/ubuntu/project/ringmaster/examples/todo-app
-  let projectDir = process.env.RINGMASTER_PROJECT_DIR
-
-  if (!projectDir || projectDir.includes('.openclaw')) {
-    const activeFile = path.join(os.homedir(), '.ringmaster', 'active_project')
-    if (fs.existsSync(activeFile)) {
-      try {
-        const stored = fs.readFileSync(activeFile, 'utf-8').trim()
-        if (stored && fs.existsSync(stored)) {
-          projectDir = stored
-        }
-      } catch {}
-    }
-  }
-
-  const cwd = process.cwd()
-  if (!projectDir) {
-    if (fs.existsSync(path.join(cwd, 'ringmaster.toml')) || fs.existsSync(path.join(cwd, 'BRIEF.md'))) {
-      projectDir = cwd
-    } else {
-      const exampleDir = '/home/ubuntu/project/ringmaster/examples/todo-app'
-      projectDir = fs.existsSync(exampleDir) ? exampleDir : cwd
-    }
-  }
-
+  const projectDir = resolveProjectDir()
   const projectName = path.basename(projectDir)
 
   // 1. Read BRIEF.md
@@ -62,12 +34,12 @@ export default defineEventHandler((event) => {
   }
 
   // 4. Resolve Master Planner & Workers configuration:
-  // Global fleet config is in /home/ubuntu/project/ringmaster/ringmaster.toml
+  // Global fleet config is in <ringmaster root>/ringmaster.toml
   // Local project manifest is in <projectDir>/ringmaster.toml
   let master = 'none'
   let workers: string[] = []
 
-  const rootToml = '/home/ubuntu/project/ringmaster/ringmaster.toml'
+  const rootToml = rootTomlPath()
   const projectToml = path.join(projectDir, 'ringmaster.toml')
 
   // Helper to parse master & workers from toml content

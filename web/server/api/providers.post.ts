@@ -1,18 +1,19 @@
 import { spawn } from 'node:child_process'
 import path from 'node:path'
 import fs from 'node:fs'
+import { ringmasterBinPath, rootTomlPath, resolveProjectDir } from '../utils/ringmaster'
 
 export default defineEventHandler(async (event) => {
   const body = await readBody(event)
-  const projectDir = process.env.RINGMASTER_PROJECT_DIR || process.cwd()
+  const projectDir = resolveProjectDir()
   const localToml = path.join(projectDir, 'ringmaster.toml')
-  const rootToml = '/home/ubuntu/project/ringmaster/ringmaster.toml'
+  const rootToml = rootTomlPath()
   const targetToml = fs.existsSync(localToml) ? localToml : rootToml
 
   // Call Go binary directly: ringmaster config-api
   // This ensures 100% Go TOML parser, validation, and zero regex fragility
   return new Promise((resolve) => {
-    const ringmasterBin = '/home/ubuntu/project/ringmaster/bin/ringmaster'
+    const ringmasterBin = ringmasterBinPath()
     const child = spawn(ringmasterBin, ['config-api'])
 
     let stdout = ''

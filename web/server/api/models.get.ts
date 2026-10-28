@@ -1,5 +1,6 @@
 import fs from 'node:fs'
 import path from 'node:path'
+import { rootTomlPath, resolveProjectDir } from '../utils/ringmaster'
 
 function escapeRegex(str: string) {
   return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
@@ -13,9 +14,9 @@ export default defineEventHandler(async (event) => {
     return { ok: false, error: 'provider query param is required' }
   }
 
-  const projectDir = process.env.RINGMASTER_PROJECT_DIR || process.cwd()
+  const projectDir = resolveProjectDir()
   const localToml = path.join(projectDir, 'ringmaster.toml')
-  const rootToml = '/home/ubuntu/project/ringmaster/ringmaster.toml'
+  const rootToml = rootTomlPath()
   const targetToml = fs.existsSync(localToml) ? localToml : rootToml
 
   if (!fs.existsSync(targetToml)) {
