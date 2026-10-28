@@ -200,6 +200,17 @@ Test command and results.
 			var args map[string]any
 			_ = json.Unmarshal([]byte(tc.Function.Arguments), &args)
 
+			// Live CLI logging so UI stream can observe actual worker activity
+			if tc.Function.Name == "run_cmd" {
+				fmt.Printf("[%s] turn %d: exec `%v`\n", task.ID, turn, args["cmd"])
+			} else if tc.Function.Name == "write_file" {
+				fmt.Printf("[%s] turn %d: write `%v`\n", task.ID, turn, args["path"])
+			} else if tc.Function.Name == "read_file" {
+				fmt.Printf("[%s] turn %d: read `%v`\n", task.ID, turn, args["path"])
+			} else {
+				fmt.Printf("[%s] turn %d: call %s\n", task.ID, turn, tc.Function.Name)
+			}
+
 			out := toolSet.Execute(ctx, tc.Function.Name, args)
 
 			recordLog(TranscriptEntry{

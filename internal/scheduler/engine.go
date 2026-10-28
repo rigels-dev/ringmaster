@@ -184,6 +184,8 @@ func (e *Engine) Run(ctx context.Context) error {
 				ts.Worker = task.Worker
 			})
 
+			fmt.Printf("⚡ [Scheduler] Dispatching task %s to worker automaton '%s'...\n", task.ID, task.Worker)
+
 			sem <- struct{}{}
 			wg.Add(1)
 
@@ -260,6 +262,7 @@ func (e *Engine) executeTask(ctx context.Context, planTask schemas.PlanTask) {
 	// 6. Handle verification decision
 	switch loopRes.Decision.Type {
 	case verify.DecisionDONE:
+		fmt.Printf("✓ [Scheduler] Task %s passed acceptance tests! Queuing git merge...\n", planTask.ID)
 		// Attempt to commit any uncommitted changes in worktree
 		_, _ = workspace.RunGit(ctx, worktree, "add", "-A")
 		_, _ = workspace.RunGit(ctx, worktree, "commit", "-m", fmt.Sprintf("Complete task %s", planTask.ID))
@@ -268,6 +271,7 @@ func (e *Engine) executeTask(ctx context.Context, planTask schemas.PlanTask) {
 		mergeRes, mErr := e.mergeQueue.Enqueue(ctx, planTask.ID)
 		if mErr != nil || mergeRes == nil || !mergeRes.Merged {
 			// Merge conflict encountered -> set to NEEDS_REVIEW
+			fmt.Printf("⚠ [Scheduler] Task %s merge conflict! Needs review.\n", planTask.ID)
 			_ = e.stateMgr.UpdateTaskState(planTask.ID, func(ts *schemas.TaskState) {
 				ts.Status = schemas.TaskStateReview
 				ts.Error = fmt.Sprintf("Merge conflict: %s", strings.Join(mergeRes.ConflictedFiles, ", "))
@@ -276,6 +280,7 @@ func (e *Engine) executeTask(ctx context.Context, planTask schemas.PlanTask) {
 		}
 
 		// Merge succeeded -> remove worktree & mark COMPLETED
+		fmt.Printf("★ [Scheduler] Task %s successfully merged to main!\n", planTask.ID)
 		_ = workspace.RemoveWorktree(ctx, e.projectRoot, planTask.ID)
 		_ = e.stateMgr.UpdateTaskState(planTask.ID, func(ts *schemas.TaskState) {
 			ts.Status = schemas.TaskStateCompleted
@@ -283,6 +288,7 @@ func (e *Engine) executeTask(ctx context.Context, planTask schemas.PlanTask) {
 		})
 
 	case verify.DecisionBLOCKED:
+		fmt.Printf("❌ [Scheduler] Task %s reported BLOCKED: %s\n", planTask.ID, loopRes.Decision.Reason)
 		_ = e.stateMgr.UpdateTaskState(planTask.ID, func(ts *schemas.TaskState) {
 			ts.Status = schemas.TaskStateBlocked
 			ts.Error = loopRes.Decision.Reason
