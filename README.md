@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="docs/assets/ringmaster-animated.svg" width="260" height="260" alt="Ringmaster Animated Kinematics Emblem" />
+</p>
+
 # 🎪 Ringmaster — Local AI Agent Orchestration Control Plane
 
 > **Cheap-by-default, Provider-Agnostic, Multi-Agent Software Engineering Control Plane**
