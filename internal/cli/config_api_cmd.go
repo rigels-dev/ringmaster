@@ -21,6 +21,7 @@ type ConfigAPIRequest struct {
 	Model       string `json:"model,omitempty"`
 	Role        string `json:"role,omitempty"`
 	ToolCalling bool   `json:"tool_calling,omitempty"`
+	Disabled    *bool  `json:"disabled,omitempty"`
 }
 
 var configAPICmd = &cobra.Command{
@@ -111,14 +112,22 @@ var configAPICmd = &cobra.Command{
 			if role == "" {
 				role = "worker"
 			}
+			// If adding a master, ensure exclusivity: demote any existing master to worker
+			if role == "master" {
+				for aID, ag := range cfgObj.Agents {
+					if ag.Role == "master" {
+						ag.Role = "worker"
+						ag.ToolCalling = true
+						cfgObj.Agents[aID] = ag
+					}
+				}
+				cfgObj.Routing.DefaultMaster = req.ID
+			}
 			cfgObj.Agents[req.ID] = config.AgentConfig{
 				Provider:    req.Provider,
 				Model:       req.Model,
 				Role:        role,
 				ToolCalling: role == "worker",
-			}
-			if role == "master" {
-				cfgObj.Routing.DefaultMaster = req.ID
 			}
 			if err := config.SaveFile(absPath, cfgObj); err != nil {
 				return outputJSON(false, err.Error(), nil)
@@ -133,22 +142,57 @@ var configAPICmd = &cobra.Command{
 			if !exists {
 				return outputJSON(false, fmt.Sprintf("agent '%s' not found", req.ID), nil)
 			}
-			agent.Role = req.Role
-			agent.ToolCalling = req.Role == "worker"
-			cfgObj.Agents[req.ID] = agent
 
+			// If setting to master, enforce single Master rule across the entire fleet
 			if req.Role == "master" {
+				for aID, ag := range cfgObj.Agents {
+					if ag.Role == "master" && aID != req.ID {
+						ag.Role = "worker"
+						ag.ToolCalling = true
+						cfgObj.Agents[aID] = ag
+					}
+				}
+				agent.Role = "master"
+				agent.ToolCalling = false
 				cfgObj.Routing.DefaultMaster = req.ID
 			} else if req.Role == "worker" {
+				agent.Role = "worker"
+				agent.ToolCalling = true
 				if cfgObj.Routing.DefaultMaster == req.ID {
 					cfgObj.Routing.DefaultMaster = ""
 				}
 				cfgObj.Routing.DefaultWorker = req.ID
 			}
+			cfgObj.Agents[req.ID] = agent
+
 			if err := config.SaveFile(absPath, cfgObj); err != nil {
 				return outputJSON(false, err.Error(), nil)
 			}
 			return outputJSON(true, fmt.Sprintf("Agent '%s' role updated to %s via Go core", req.ID, req.Role), nil)
+
+		case "toggle_agent":
+			if req.ID == "" {
+				return outputJSON(false, "agent id is required", nil)
+			}
+			agent, exists := cfgObj.Agents[req.ID]
+			if !exists {
+				return outputJSON(false, fmt.Sprintf("agent '%s' not found", req.ID), nil)
+			}
+			if req.Disabled != nil {
+				agent.Disabled = *req.Disabled
+			} else {
+				agent.Disabled = !agent.Disabled
+			}
+			cfgObj.Agents[req.ID] = agent
+
+			if err := config.SaveFile(absPath, cfgObj); err != nil {
+				return outputJSON(false, err.Error(), nil)
+			}
+			statusStr := "active"
+			if agent.Disabled {
+				statusStr = "inactive"
+			}
+			return outputJSON(true, fmt.Sprintf("Agent '%s' is now %s", req.ID, statusStr), nil)
 
 		case "delete_agent":
 			if req.ID == "" {

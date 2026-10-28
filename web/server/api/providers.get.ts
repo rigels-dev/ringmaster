@@ -1,13 +1,9 @@
 import { spawn } from 'node:child_process'
-import path from 'node:path'
-import fs from 'node:fs'
-import { ringmasterBinPath, rootTomlPath, resolveProjectDir } from '../utils/ringmaster'
+import { ringmasterBinPath, rootTomlPath } from '../utils/ringmaster'
 
 export default defineEventHandler(async () => {
-  const projectDir = resolveProjectDir()
-  const localToml = path.join(projectDir, 'ringmaster.toml')
   const rootToml = rootTomlPath()
-  const targetToml = fs.existsSync(localToml) ? localToml : rootToml
+  const targetToml = rootToml
 
   // Call Go binary directly: ringmaster config-api
   return new Promise((resolve) => {
@@ -46,7 +42,8 @@ export default defineEventHandler(async () => {
               provider: ag.provider || ag.Provider || '',
               model: ag.model || ag.Model || '',
               role: ag.role || ag.Role || 'worker',
-              tool_calling: typeof ag.tool_calling === 'boolean' ? ag.tool_calling : (typeof ag.ToolCalling === 'boolean' ? ag.ToolCalling : true)
+              tool_calling: typeof ag.tool_calling === 'boolean' ? ag.tool_calling : (typeof ag.ToolCalling === 'boolean' ? ag.ToolCalling : true),
+              disabled: Boolean(ag.disabled || ag.Disabled)
             })
           }
 

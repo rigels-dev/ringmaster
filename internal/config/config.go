@@ -19,6 +19,7 @@ type AgentConfig struct {
 	Model       string `toml:"model"`
 	Role        string `toml:"role"` // "master" or "worker"
 	ToolCalling bool   `toml:"tool_calling"`
+	Disabled    bool   `toml:"disabled,omitempty"` // true if agent is toggled inactive
 }
 
 type RoutingConfig struct {
@@ -112,10 +113,7 @@ func Validate(cfg *Config) error {
 		}
 	}
 
-	if len(cfg.Agents) == 0 {
-		return fmt.Errorf("validation error [agents]: at least one agent must be defined")
-	}
-
+	// Note: Validation allows 0 agents initially so user can configure fleet in UI or project manifest
 	for aName, a := range cfg.Agents {
 		if a.Provider == "" {
 			return fmt.Errorf("validation error [agents.%s.provider]: provider must be specified", aName)
@@ -210,6 +208,13 @@ func FindConfigFile() (string, error) {
 		dir = parent
 	}
 
+	// 3. Fallback to global ringmaster root
+	if globalTarget := GlobalConfigPath(); globalTarget != "" {
+		if _, err := os.Stat(globalTarget); err == nil {
+			return globalTarget, nil
+		}
+	}
+
 	return "", fmt.Errorf("ringmaster.toml not found in %s or parent directories", cwd)
 }
 
@@ -222,6 +227,27 @@ func LoadFile(path string) (*Config, error) {
 	cfg := DefaultConfig()
 	if err := toml.Unmarshal(data, cfg); err != nil {
 		return nil, fmt.Errorf("failed to parse TOML from '%s': %w", path, err)
+	}
+
+	// If loaded config has no agents (e.g. project manifest), merge from global root config
+	globalPath := GlobalConfigPath()
+	if len(cfg.Agents) == 0 && globalPath != "" && path != globalPath {
+		if globalData, err := os.ReadFile(globalPath); err == nil {
+			globalCfg := DefaultConfig()
+			if err := toml.Unmarshal(globalData, globalCfg); err == nil {
+				cfg.Providers = globalCfg.Providers
+				cfg.Agents = globalCfg.Agents
+				if cfg.Routing.DefaultMaster == "" {
+					cfg.Routing.DefaultMaster = globalCfg.Routing.DefaultMaster
+				}
+				if cfg.Routing.DefaultWorker == "" {
+					cfg.Routing.DefaultWorker = globalCfg.Routing.DefaultWorker
+				}
+				if cfg.Routing.FallbackWorker == "" {
+					cfg.Routing.FallbackWorker = globalCfg.Routing.FallbackWorker
+				}
+			}
+		}
 	}
 
 	if len(cfg.Sandbox.Allow) == 0 {

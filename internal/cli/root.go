@@ -45,6 +45,8 @@ func initConfig() {
 		loaded, err := config.LoadFile(cfgFile)
 		if err == nil {
 			cfg = loaded
+		} else {
+			fmt.Fprintf(os.Stderr, "Warning: failed to load config from %s: %v\n", cfgFile, err)
 		}
 	} else {
 		found, err := config.FindConfigFile()

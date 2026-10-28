@@ -5,10 +5,18 @@ import { ringmasterBinPath, rootTomlPath, resolveProjectDir } from '../utils/rin
 
 export default defineEventHandler(async (event) => {
   const body = await readBody(event)
+  const rootToml = rootTomlPath()
   const projectDir = resolveProjectDir()
   const localToml = path.join(projectDir, 'ringmaster.toml')
-  const rootToml = rootTomlPath()
-  const targetToml = fs.existsSync(localToml) ? localToml : rootToml
+
+  // Providers are ALWAYS stored globally in rootToml!
+  // Agents can be stored in local project if action is agent-specific, else fallback to rootToml
+  let targetToml = rootToml
+  if (body.action === 'add_agent' || body.action === 'set_role' || body.action === 'delete_agent') {
+    if (fs.existsSync(localToml)) {
+      targetToml = localToml
+    }
+  }
 
   // Call Go binary directly: ringmaster config-api
   // This ensures 100% Go TOML parser, validation, and zero regex fragility
