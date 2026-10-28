@@ -24,3 +24,6 @@ node_modules/
 .nuxt/
 .output/
 projects/
+examples/
+# Local design scratch (mockups, crops, reference renders)
+docs/mockups/
