@@ -1,4 +1,5 @@
 import fs from 'node:fs'
+import { spawn } from 'node:child_process'
 import path from 'node:path'
 import os from 'node:os'
 
@@ -32,7 +33,7 @@ export function rootTomlPath(): string {
 export function resolveProjectDir(): string {
   let projectDir = process.env.RINGMASTER_PROJECT_DIR
 
-  if (!projectDir || projectDir.includes('.openclaw')) {
+  if (!projectDir) {
     const activeFile = path.join(os.homedir(), '.ringmaster', 'active_project')
     if (fs.existsSync(activeFile)) {
       try {
@@ -45,6 +46,40 @@ export function resolveProjectDir(): string {
   }
 
   return projectDir || process.cwd()
+}
+
+// Run a command without a shell (args are passed verbatim), optionally piping
+// `input` to stdin. Rejects with stdout/stderr attached on non-zero exit or timeout.
+export function runCommand(
+  cmd: string,
+  args: string[],
+  opts: { cwd?: string; input?: string; timeout?: number } = {}
+): Promise<{ stdout: string; stderr: string }> {
+  return new Promise((resolve, reject) => {
+    const child = spawn(cmd, args, { cwd: opts.cwd, env: childEnv() })
+    let stdout = ''
+    let stderr = ''
+    let timedOut = false
+
+    const timer = opts.timeout
+      ? setTimeout(() => { timedOut = true; child.kill('SIGKILL') }, opts.timeout)
+      : null
+
+    child.stdout.on('data', (d) => { stdout += d.toString() })
+    child.stderr.on('data', (d) => { stderr += d.toString() })
+    child.on('error', (err: any) => {
+      if (timer) clearTimeout(timer)
+      reject(Object.assign(err, { stdout, stderr }))
+    })
+    child.on('close', (code) => {
+      if (timer) clearTimeout(timer)
+      if (code === 0 && !timedOut) return resolve({ stdout, stderr })
+      const reason = timedOut ? `timed out after ${opts.timeout}ms` : `exited with code ${code}`
+      reject(Object.assign(new Error(`${path.basename(cmd)} ${reason}: ${stderr.trim()}`), { stdout, stderr }))
+    })
+
+    child.stdin.end(opts.input ?? '')
+  })
 }
 
 // Environment for child processes: make sure node (for the claude CLI),
