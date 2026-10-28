@@ -16,6 +16,11 @@ import (
 	"ringmaster/internal/storage"
 )
 
+var (
+	headlessPlan bool
+	approvePlan  bool
+)
+
 var planCmd = &cobra.Command{
 	Use:   "plan [project_name]",
 	Short: "Generate, preview, or approve DAG plan for a project",
@@ -72,6 +77,23 @@ var planCmd = &cobra.Command{
 				return fmt.Errorf("failed reading %s: %w", planPath, err)
 			}
 			p = loadedPlan
+		}
+
+		// Check if called with --approve flag
+		if approvePlan {
+			hash, err := planner.ApprovePlan(projectDir, p)
+			if err != nil {
+				return fmt.Errorf("failed to approve plan: %w", err)
+			}
+			fmt.Printf("✓ Plan APPROVED successfully!\n  Canonical Hash: %s\n  Saved to: %s\n",
+				hash, filepath.Join(projectDir, "plan.approved.json"))
+			return nil
+		}
+
+		// Check if called with --headless flag (for Web UI / API consumption)
+		if headlessPlan {
+			fmt.Println("✓ Plan generated and ready for approval.")
+			return nil
 		}
 
 		// Render interactive preview gate
@@ -161,5 +183,7 @@ var planCmd = &cobra.Command{
 }
 
 func init() {
+	planCmd.Flags().BoolVar(&headlessPlan, "headless", false, "Generate plan without opening interactive terminal prompt")
+	planCmd.Flags().BoolVarP(&approvePlan, "approve", "y", false, "Directly approve current plan and generate plan.approved.json")
 	RootCmd.AddCommand(planCmd)
 }

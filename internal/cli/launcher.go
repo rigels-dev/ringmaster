@@ -121,7 +121,7 @@ func (m launcherModel) View() string {
 		desc  string
 	}{
 		{
-			title: "[1] Web UI Dashboard (Browser · https://ringmaster.rigels.web.id)",
+			title: "[1] Web UI Dashboard (Browser · http://localhost:12053)",
 			desc:  "Interactive chat briefing, real-time multi-worker fleet, and visual task pipeline",
 		},
 		{
@@ -148,16 +148,34 @@ func (m launcherModel) View() string {
 	return sb.String()
 }
 
-// RunInteractiveLauncher presents the interactive UI picker
 func RunInteractiveLauncher() error {
 	// Verify current directory or workspace has ringmaster context
 	cwd, _ := os.Getwd()
+
+	projectDir := cwd
 	hasProject := false
+
 	for _, checkFile := range []string{"ringmaster.toml", "BRIEF.md"} {
 		if _, err := os.Stat(filepath.Join(cwd, checkFile)); err == nil {
 			hasProject = true
 			break
 		}
+	}
+
+	// Outside a project, fall back to the last active project; inside one, remember it as active
+	if !hasProject {
+		activeFile := filepath.Join(os.Getenv("HOME"), ".ringmaster", "active_project")
+		if data, err := os.ReadFile(activeFile); err == nil {
+			stored := filepath.Clean(string(data))
+			if fi, err := os.Stat(stored); err == nil && fi.IsDir() {
+				projectDir = stored
+				hasProject = true
+			}
+		}
+	} else {
+		activeDir := filepath.Join(os.Getenv("HOME"), ".ringmaster")
+		_ = os.MkdirAll(activeDir, 0755)
+		_ = os.WriteFile(filepath.Join(activeDir, "active_project"), []byte(projectDir), 0644)
 	}
 
 	p := tea.NewProgram(initialLauncherModel())
@@ -172,7 +190,7 @@ func RunInteractiveLauncher() error {
 	}
 
 	if m.selected == choiceWeb {
-		return StartWebUI(cwd, hasProject)
+		return StartWebUI(projectDir, hasProject)
 	}
 
 	return StartTUI()
@@ -211,6 +229,7 @@ func StartWebUI(projectDir string, hasProject bool) error {
 
 	cmd := exec.CommandContext(ctx, "node", serverScript)
 	cmd.Dir = filepath.Dir(serverScript)
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true} // Isolate into own process group so killpg terminates all child threads
 	cmd.Env = append(os.Environ(),
 		"PORT=12053",
 		"NITRO_PORT=12053",
@@ -227,11 +246,19 @@ func StartWebUI(projectDir string, hasProject bool) error {
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 
+	// Watch for interrupt and cleanly kill the entire child process group
+	go func() {
+		<-ctx.Done()
+		if cmd.Process != nil {
+			_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+		}
+	}()
+
 	fmt.Println("\n🎪 Starting Ringmaster Web UI...")
 	if hasProject {
 		fmt.Printf("   Project Context: %s\n", projectDir)
 	}
-	fmt.Println("   URL: https://ringmaster.rigels.web.id (or http://localhost:12053)")
+	fmt.Println("   URL: http://localhost:12053")
 	fmt.Println("   Port: 12053 (Custom Dedicated Ringmaster Port)")
 	fmt.Println("   Status: Running. Press Ctrl+C to stop.")
 

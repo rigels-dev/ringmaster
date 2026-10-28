@@ -6,6 +6,7 @@ import (
 	"os/exec"
 	"path/filepath"
 
+	"github.com/charmbracelet/lipgloss"
 	"github.com/spf13/cobra"
 )
 
@@ -148,13 +149,62 @@ Write a concise description of the project goal and scope here.
 		_ = commitCmd.Run()
 	}
 
+	// Stylized Banner (Metro / Steampunk Circus theme)
+	bannerStyle := lipgloss.NewStyle().
+		Bold(true).
+		Foreground(lipgloss.Color("#DEAA3B"))
+
+	subBannerStyle := lipgloss.NewStyle().
+		Bold(true).
+		Foreground(lipgloss.Color("#29F2EC"))
+
+	labelStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("#8493A0"))
+
+	pathStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("#EFE4CE"))
+
+	cmdHighlight := lipgloss.NewStyle().
+		Bold(true).
+		Foreground(lipgloss.Color("#50FA7B"))
+
+	boxStyle := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(lipgloss.Color("#DEAA3B")).
+		Padding(0, 1)
+
+	banner := `
+  ____  ___ _   _  ____ __  __    _    ____ _____ _____ ____  
+ |  _ \|_ _| \ | |/ ___|  \/  |  / \  / ___|_   _| ____|  _ \ 
+ | |_) || ||  \| | |  _| |\/| | / _ \ \___ \ | | |  _| | |_) |
+ |  _ < | || |\  | |_| | |  | |/ ___ \ ___) || | | |___|  _ < 
+ |_| \_\___|_| \_|\____|_|  |_/_/   \_\____/ |_| |_____|_| \_\`
+
+	fmt.Println(bannerStyle.Render(banner))
+	fmt.Println(subBannerStyle.Render("       🎪 LOCAL AI MULTI-AGENT CONTROL PLANE 🎪\n"))
+
 	if isCurrentDir {
-		fmt.Printf("✓ Initialized current directory as Ringmaster project '%s'\n", name)
+		fmt.Printf("✓ %s '%s'\n", labelStyle.Render("Initialized current directory as Ringmaster project"), cmdHighlight.Render(name))
 	} else {
-		fmt.Printf("✓ Initialized Ringmaster project '%s' in %s\n", name, projectDir)
+		fmt.Printf("✓ %s '%s' in %s\n", labelStyle.Render("Initialized Ringmaster project"), cmdHighlight.Render(name), pathStyle.Render(projectDir))
 	}
-	fmt.Printf("  - Manifest: %s\n", manifestPath)
-	fmt.Printf("  - Brief:    %s\n", briefPath)
-	fmt.Printf("  - Repo:     %s\n", repoDir)
+	fmt.Printf("  • Manifest: %s\n", pathStyle.Render(manifestPath))
+	fmt.Printf("  • Brief:    %s\n", pathStyle.Render(briefPath))
+	fmt.Printf("  • Repo:     %s\n\n", pathStyle.Render(repoDir))
+
+	// Next Steps Instructions Box
+	var nextSteps string
+	if isCurrentDir {
+		nextSteps = fmt.Sprintf("Next steps:\n  1. Run %s to launch control plane\n  2. Discuss or plan your project interactively with Ringmaster\n     (or edit %s directly if you already have a prompt)",
+			cmdHighlight.Render("ringmaster"),
+			cmdHighlight.Render("BRIEF.md"))
+	} else {
+		nextSteps = fmt.Sprintf("Next steps:\n  1. %s\n  2. Run %s to launch control plane\n  3. Discuss or plan your project interactively with Ringmaster\n     (or edit %s directly if you already have a prompt)",
+			cmdHighlight.Render(fmt.Sprintf("cd %s", name)),
+			cmdHighlight.Render("ringmaster"),
+			cmdHighlight.Render("BRIEF.md"))
+	}
+	fmt.Println(boxStyle.Render(nextSteps))
+	fmt.Println()
 	return nil
 }
