@@ -1,6 +1,5 @@
 import fs from 'node:fs'
-import path from 'node:path'
-import { rootTomlPath, resolveProjectDir } from '../utils/ringmaster'
+import { rootTomlPath } from '../utils/ringmaster'
 
 function escapeRegex(str: string) {
   return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
@@ -14,10 +13,9 @@ export default defineEventHandler(async (event) => {
     return { ok: false, error: 'provider query param is required' }
   }
 
-  const projectDir = resolveProjectDir()
-  const localToml = path.join(projectDir, 'ringmaster.toml')
-  const rootToml = rootTomlPath()
-  const targetToml = fs.existsSync(localToml) ? localToml : rootToml
+  // Providers live in the global fleet config; a project's ringmaster.toml is
+  // only its manifest (name, brief, plan) and never defines providers
+  const targetToml = rootTomlPath()
 
   if (!fs.existsSync(targetToml)) {
     return { ok: false, error: 'Config file not found' }
@@ -53,13 +51,10 @@ export default defineEventHandler(async (event) => {
       provider: providerId,
       type: pType,
       models: [
-        { id: 'claude-3-7-sonnet-20250219', name: 'Claude 3.7 Sonnet (Latest Hybrid / Thinking)' },
-        { id: 'claude-3-5-sonnet-20241022', name: 'Claude 3.5 Sonnet' },
-        { id: 'claude-3-5-haiku-20241022', name: 'Claude 3.5 Haiku (Fast)' },
-        { id: 'claude-3-opus-20240229', name: 'Claude 3 Opus (Complex Architecture)' },
-        { id: 'claude-opus-5-5', name: 'Claude Opus 5.5' },
-        { id: 'claude-sonnet-5-5', name: 'Claude Sonnet 5.5' },
-        { id: 'claude-haiku-5-5', name: 'Claude Haiku 5.5' }
+        { id: 'claude-opus-5-5', name: 'Claude Opus 5.5 (deep architecture & planning)' },
+        { id: 'claude-sonnet-5-5', name: 'Claude Sonnet 5.5 (balanced)' },
+        { id: 'claude-haiku-5-5', name: 'Claude Haiku 5.5 (fast worker)' },
+        { id: 'claude-fable-5-1', name: 'Claude Fable 5.1' }
       ]
     }
   }

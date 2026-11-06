@@ -13,6 +13,15 @@ import (
 
 const gitTimeout = 60 * time.Second
 
+// StateDirName is the only directory Ringmaster adds to a project (besides
+// ringmaster.toml). The project directory itself is the git repository.
+const StateDirName = ".ringmaster"
+
+// WorktreesDir is where per-task git worktrees live.
+func WorktreesDir(projectRoot string) string {
+	return filepath.Join(projectRoot, StateDirName, "worktrees")
+}
+
 // RunGit runs a git command with -C <repoPath> explicitly.
 func RunGit(ctx context.Context, repoPath string, args ...string) (string, error) {
 	cmdArgs := append([]string{"-C", repoPath}, args...)
@@ -45,18 +54,121 @@ func RunGit(ctx context.Context, repoPath string, args ...string) (string, error
 }
 
 // EnsureGitIdentity sets user.name and user.email locally in the repo if not set.
+// An identity the user already has (local or global) is left untouched.
 func EnsureGitIdentity(ctx context.Context, repoPath string) error {
-	_, _ = RunGit(ctx, repoPath, "config", "user.name", "Ringmaster")
-	_, _ = RunGit(ctx, repoPath, "config", "user.email", "ringmaster@local")
+	if out, err := RunGit(ctx, repoPath, "config", "user.name"); err != nil || strings.TrimSpace(out) == "" {
+		_, _ = RunGit(ctx, repoPath, "config", "user.name", "Ringmaster")
+	}
+	if out, err := RunGit(ctx, repoPath, "config", "user.email"); err != nil || strings.TrimSpace(out) == "" {
+		_, _ = RunGit(ctx, repoPath, "config", "user.email", "ringmaster@local")
+	}
 	return nil
 }
 
-// CreateWorktree creates an isolated git worktree for taskID under .worktrees/Txx.
+// EnsureStateExcluded lists .ringmaster/ in the repo's info/exclude so that
+// Ringmaster state never shows up in git status or gets committed, without
+// touching the project's own .gitignore. info/exclude lives in the common git
+// dir, so it also covers every task worktree.
+func EnsureStateExcluded(ctx context.Context, repoPath string) error {
+	out, err := RunGit(ctx, repoPath, "rev-parse", "--git-common-dir")
+	if err != nil {
+		return err
+	}
+	commonDir := strings.TrimSpace(out)
+	if !filepath.IsAbs(commonDir) {
+		commonDir = filepath.Join(repoPath, commonDir)
+	}
+	excludePath := filepath.Join(commonDir, "info", "exclude")
+
+	existing, _ := os.ReadFile(excludePath)
+	for _, line := range strings.Split(string(existing), "\n") {
+		if strings.TrimSpace(line) == StateDirName+"/" {
+			return nil
+		}
+	}
+
+	_ = os.MkdirAll(filepath.Dir(excludePath), 0755)
+	f, err := os.OpenFile(excludePath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	entry := "# Ringmaster state\n" + StateDirName + "/\n"
+	if len(existing) > 0 && !strings.HasSuffix(string(existing), "\n") {
+		entry = "\n" + entry
+	}
+	_, err = f.WriteString(entry)
+	return err
+}
+
+// Trailer is one "Key: value" line in a commit message's trailer block.
+type Trailer struct {
+	Key, Value string
+}
+
+// CommitAll stages every change in dir and commits it with subject and
+// trailers (e.g. Ringmaster-Task / Ringmaster-Automaton), so the history
+// records which automaton produced each commit. It returns false when there
+// was nothing to commit.
+func CommitAll(ctx context.Context, dir, subject string, trailers []Trailer) (bool, error) {
+	if _, err := RunGit(ctx, dir, "add", "-A"); err != nil {
+		return false, err
+	}
+	if _, err := RunGit(ctx, dir, "diff", "--cached", "--quiet"); err == nil {
+		return false, nil
+	}
+	args := []string{"commit", "-m", subject}
+	if len(trailers) > 0 {
+		var lines []string
+		for _, t := range trailers {
+			lines = append(lines, t.Key+": "+t.Value)
+		}
+		args = append(args, "-m", strings.Join(lines, "\n"))
+	}
+	if _, err := RunGit(ctx, dir, args...); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+// IsRepoRoot reports whether dir is the top level of its own git repository.
+// A directory merely nested inside another repository (e.g. a project under
+// examples/ of some other checkout) is not.
+func IsRepoRoot(ctx context.Context, dir string) bool {
+	out, err := RunGit(ctx, dir, "rev-parse", "--show-toplevel")
+	if err != nil {
+		return false
+	}
+	return samePath(strings.TrimSpace(out), dir)
+}
+
+// EnsureRepoRoot refuses to operate on a project that is not its own git
+// repository, so task branches and merges never land in an enclosing repo.
+func EnsureRepoRoot(ctx context.Context, projectRoot string) error {
+	if IsRepoRoot(ctx, projectRoot) {
+		return nil
+	}
+	if out, err := RunGit(ctx, projectRoot, "rev-parse", "--show-toplevel"); err == nil {
+		return fmt.Errorf("project %s is nested inside git repository %s, not a repository of its own; run 'git init' in the project directory", projectRoot, strings.TrimSpace(out))
+	}
+	return fmt.Errorf("project %s is not a git repository; run 'ringmaster init' or 'git init' there", projectRoot)
+}
+
+func samePath(a, b string) bool {
+	ra, errA := filepath.EvalSymlinks(a)
+	rb, errB := filepath.EvalSymlinks(b)
+	if errA != nil || errB != nil {
+		return filepath.Clean(a) == filepath.Clean(b)
+	}
+	return ra == rb
+}
+
+// CreateWorktree creates an isolated git worktree for taskID under .ringmaster/worktrees/Txx.
 // It branches from baseRef (default "main", or "rm/<upstream>").
 // It is fully idempotent: if worktree already exists, it is safely reused.
 func CreateWorktree(ctx context.Context, projectRoot, taskID, baseRef string) (string, error) {
-	repoPath := filepath.Join(projectRoot, "repo")
-	worktreesDir := filepath.Join(projectRoot, ".worktrees")
+	repoPath := projectRoot
+	worktreesDir := WorktreesDir(projectRoot)
 	targetDir := filepath.Join(worktreesDir, taskID)
 	branchName := fmt.Sprintf("rm/%s", taskID)
 
@@ -64,7 +176,13 @@ func CreateWorktree(ctx context.Context, projectRoot, taskID, baseRef string) (s
 		baseRef = "main"
 	}
 
+	if err := EnsureRepoRoot(ctx, repoPath); err != nil {
+		return "", err
+	}
 	if err := EnsureGitIdentity(ctx, repoPath); err != nil {
+		return "", err
+	}
+	if err := EnsureStateExcluded(ctx, repoPath); err != nil {
 		return "", err
 	}
 
@@ -103,8 +221,8 @@ func CreateWorktree(ctx context.Context, projectRoot, taskID, baseRef string) (s
 
 // RemoveWorktree safely removes and prunes the worktree directory for taskID.
 func RemoveWorktree(ctx context.Context, projectRoot, taskID string) error {
-	repoPath := filepath.Join(projectRoot, "repo")
-	targetDir := filepath.Join(projectRoot, ".worktrees", taskID)
+	repoPath := projectRoot
+	targetDir := filepath.Join(WorktreesDir(projectRoot), taskID)
 
 	// Remove worktree from git
 	_, _ = RunGit(ctx, repoPath, "worktree", "remove", "--force", targetDir)

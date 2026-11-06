@@ -11,6 +11,8 @@ const (
 	TaskStateBlocked   TaskExecutionStatus = "BLOCKED"
 	TaskStateFailed    TaskExecutionStatus = "FAILED"
 	TaskStateReview    TaskExecutionStatus = "NEEDS_REVIEW"
+	TaskStatePaused    TaskExecutionStatus = "PAUSED"
+	TaskStateAwaiting  TaskExecutionStatus = "AWAITING_INPUT"
 )
 
 type TaskState struct {
@@ -20,6 +22,7 @@ type TaskState struct {
 	Attempt  int                 `json:"attempt"`
 	Usage    Usage               `json:"usage"`
 	Error    string              `json:"error,omitempty"`
+	Requests []HumanRequest      `json:"requests,omitempty"`
 	StartAt  *time.Time          `json:"start_at,omitempty"`
 	FinishAt *time.Time          `json:"finish_at,omitempty"`
 }

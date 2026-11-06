@@ -14,6 +14,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"ringmaster/internal/config"
 	"ringmaster/internal/tui"
+	"ringmaster/internal/version"
 )
 
 var (
@@ -149,33 +150,10 @@ func (m launcherModel) View() string {
 }
 
 func RunInteractiveLauncher() error {
-	// Verify current directory or workspace has ringmaster context
-	cwd, _ := os.Getwd()
-
-	projectDir := cwd
-	hasProject := false
-
-	for _, checkFile := range []string{"ringmaster.toml", "BRIEF.md"} {
-		if _, err := os.Stat(filepath.Join(cwd, checkFile)); err == nil {
-			hasProject = true
-			break
-		}
-	}
-
-	// Outside a project, fall back to the last active project; inside one, remember it as active
-	if !hasProject {
-		activeFile := filepath.Join(os.Getenv("HOME"), ".ringmaster", "active_project")
-		if data, err := os.ReadFile(activeFile); err == nil {
-			stored := filepath.Clean(string(data))
-			if fi, err := os.Stat(stored); err == nil && fi.IsDir() {
-				projectDir = stored
-				hasProject = true
-			}
-		}
-	} else {
-		activeDir := filepath.Join(os.Getenv("HOME"), ".ringmaster")
-		_ = os.MkdirAll(activeDir, 0755)
-		_ = os.WriteFile(filepath.Join(activeDir, "active_project"), []byte(projectDir), 0644)
+	// Like every project command, the launcher only runs inside a project
+	projectDir, err := ResolveProjectDir()
+	if err != nil {
+		return err
 	}
 
 	p := tea.NewProgram(initialLauncherModel())
@@ -190,24 +168,28 @@ func RunInteractiveLauncher() error {
 	}
 
 	if m.selected == choiceWeb {
-		return StartWebUI(projectDir, hasProject)
+		return StartWebUI(projectDir)
 	}
 
 	return StartTUI()
 }
 
 func StartTUI() error {
-	p := tea.NewProgram(tui.NewConfigModel(cfg, cfgFile), tea.WithAltScreen())
+	path := config.ConfigPath(cfgFile)
+	loaded := cfg
+	if loaded == nil {
+		loaded = config.DefaultConfig()
+	}
+	p := tea.NewProgram(tui.NewConfigModel(loaded, path), tea.WithAltScreen())
 	_, err := p.Run()
 	return err
 }
 
-func StartWebUI(projectDir string, hasProject bool) error {
-	// Locate web output
+func StartWebUI(projectDir string) error {
+	// Locate web output in the Ringmaster installation (never in the project,
+	// which may well have a web/.output of its own)
 	root := config.RootDir()
-	candidates := []string{
-		filepath.Join(projectDir, "web", ".output", "server", "index.mjs"),
-	}
+	var candidates []string
 	if root != "" {
 		candidates = append(candidates, filepath.Join(root, "web", ".output", "server", "index.mjs"))
 	}
@@ -236,6 +218,7 @@ func StartWebUI(projectDir string, hasProject bool) error {
 		"HOST=127.0.0.1",
 		"NITRO_HOST=127.0.0.1",
 		fmt.Sprintf("RINGMASTER_PROJECT_DIR=%s", projectDir),
+		fmt.Sprintf("RINGMASTER_VERSION=%s", version.Version),
 	)
 	if root != "" {
 		cmd.Env = append(cmd.Env, fmt.Sprintf("RINGMASTER_ROOT=%s", root))
@@ -255,9 +238,7 @@ func StartWebUI(projectDir string, hasProject bool) error {
 	}()
 
 	fmt.Println("\n🎪 Starting Ringmaster Web UI...")
-	if hasProject {
-		fmt.Printf("   Project Context: %s\n", projectDir)
-	}
+	fmt.Printf("   Project Context: %s\n", projectDir)
 	fmt.Println("   URL: http://localhost:12053")
 	fmt.Println("   Port: 12053 (Custom Dedicated Ringmaster Port)")
 	fmt.Println("   Status: Running. Press Ctrl+C to stop.")

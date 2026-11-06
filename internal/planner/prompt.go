@@ -2,18 +2,29 @@ package planner
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 
 	"ringmaster/internal/config"
 )
 
+// ActiveWorkers returns the sorted aliases of enabled worker agents.
+func ActiveWorkers(cfg *config.Config) []string {
+	var aliases []string
+	for alias, a := range cfg.Agents {
+		if a.Role == "worker" && !a.Disabled {
+			aliases = append(aliases, alias)
+		}
+	}
+	sort.Strings(aliases)
+	return aliases
+}
+
 // MasterSystemPrompt builds the system prompt for the planning agent.
 func MasterSystemPrompt(cfg *config.Config, defaultWorker string) string {
 	var workers []string
-	for alias, a := range cfg.Agents {
-		if a.Role == "worker" {
-			workers = append(workers, fmt.Sprintf("- %s (%s)", alias, a.Model))
-		}
+	for _, alias := range ActiveWorkers(cfg) {
+		workers = append(workers, fmt.Sprintf("- %s (%s)", alias, cfg.Agents[alias].Model))
 	}
 
 	workerListStr := strings.Join(workers, "\n")
@@ -39,9 +50,19 @@ INSTRUCTIONS:
 1. Decompose the project into sequential and parallel tasks (e.g. T01, T02, T03).
 2. Each task must have clear IDs matching pattern ^T[0-9]{2,3}$ (e.g. T01, T02).
 3. Specify explicit dependencies in "depends_on". Independent tasks have "depends_on": [].
-4. Assign an appropriate worker from the available workers list.
+4. Assign the best-fitting worker to each task, using ONLY aliases from the available workers list.
+   The same worker MAY be assigned to as many tasks as you like; do not spread tasks across workers just for variety.
 5. Provide at least one concrete, testable command in "acceptance" (e.g. ["go test ./...", "python -m pytest"]).
-6. OUTPUT FORMAT:
+   Each acceptance command may run for 5 minutes by default. For slower ones (docker build, large
+   integration suites) set "acceptance_timeout" on the task, in seconds (e.g. 900).
+   Acceptance commands are executed directly, NOT through a shell. Each entry must be ONE plain command with
+   space-separated arguments: no $(...), backticks, pipes, &&, ||, ;, redirects or quotes.
+   Use separate entries instead (e.g. ["go vet ./...", "go test -race ./..."]).
+6. OPEN QUESTIONS: if the brief leaves a decision open that materially changes the implementation
+   (storage engine, auth scheme, deployment target, ...), do NOT silently pick one. Add it to "open_questions"
+   with 2-4 short options and your "recommended" option; the user answers before approving the plan.
+   Record smaller defaults you chose yourself in "assumptions". Use [] for both when there are none.
+7. OUTPUT FORMAT:
 You MUST respond with a single, valid, raw JSON object matching this schema without any markdown formatting or commentary:
 
 {
@@ -57,7 +78,11 @@ You MUST respond with a single, valid, raw JSON object matching this schema with
       "acceptance": ["go test -v ./..."],
       "description": "Full detailed specification of what to implement."
     }
-  ]
+  ],
+  "open_questions": [
+    {"id": "Q1", "question": "Which storage backend?", "options": ["in-memory", "SQLite"], "recommended": "in-memory"}
+  ],
+  "assumptions": ["Server listens on :8080 unless PORT is set"]
 }
 `, workerListStr, defaultWorker, defaultWorker)
 }

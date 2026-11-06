@@ -35,7 +35,13 @@ type BudgetConfig struct {
 
 type SandboxConfig struct {
 	Allow []string `toml:"allow"`
+	// AcceptanceTimeout is how long each acceptance command may run, in seconds
+	// (0 = DefaultAcceptanceTimeout). A task's plan may set its own.
+	AcceptanceTimeout int `toml:"acceptance_timeout,omitempty"`
 }
+
+// DefaultAcceptanceTimeout fits a cold docker build or an integration suite.
+const DefaultAcceptanceTimeout = 300
 
 type EstimateConfig struct {
 	TokensIn  [2]int `toml:"tokens_in"`  // [min, max]
@@ -113,7 +119,7 @@ func Validate(cfg *Config) error {
 		}
 	}
 
-	// Note: Validation allows 0 agents initially so user can configure fleet in UI or project manifest
+	// Note: Validation allows 0 agents initially so the user can configure the fleet in the UI
 	for aName, a := range cfg.Agents {
 		if a.Provider == "" {
 			return fmt.Errorf("validation error [agents.%s.provider]: provider must be specified", aName)
@@ -182,40 +188,15 @@ func GlobalConfigPath() string {
 	return filepath.Join(root, "ringmaster.toml")
 }
 
-func FindConfigFile() (string, error) {
-	cwd, err := os.Getwd()
-	if err != nil {
-		return "", err
+// ConfigPath returns the fleet config to use: the explicit --config path when
+// given, otherwise the global <root>/ringmaster.toml. It never looks in the
+// working directory: inside a project, ringmaster.toml is the project
+// manifest, which does not define providers or agents.
+func ConfigPath(explicit string) string {
+	if explicit != "" {
+		return explicit
 	}
-
-	// 1. Search in current working directory
-	target := filepath.Join(cwd, "ringmaster.toml")
-	if _, err := os.Stat(target); err == nil {
-		return target, nil
-	}
-
-	// 2. Search upwards towards git root
-	dir := cwd
-	for {
-		parent := filepath.Dir(dir)
-		target = filepath.Join(dir, "ringmaster.toml")
-		if _, err := os.Stat(target); err == nil {
-			return target, nil
-		}
-		if parent == dir {
-			break
-		}
-		dir = parent
-	}
-
-	// 3. Fallback to global ringmaster root
-	if globalTarget := GlobalConfigPath(); globalTarget != "" {
-		if _, err := os.Stat(globalTarget); err == nil {
-			return globalTarget, nil
-		}
-	}
-
-	return "", fmt.Errorf("ringmaster.toml not found in %s or parent directories", cwd)
+	return GlobalConfigPath()
 }
 
 func LoadFile(path string) (*Config, error) {
@@ -227,27 +208,6 @@ func LoadFile(path string) (*Config, error) {
 	cfg := DefaultConfig()
 	if err := toml.Unmarshal(data, cfg); err != nil {
 		return nil, fmt.Errorf("failed to parse TOML from '%s': %w", path, err)
-	}
-
-	// If loaded config has no agents (e.g. project manifest), merge from global root config
-	globalPath := GlobalConfigPath()
-	if len(cfg.Agents) == 0 && globalPath != "" && path != globalPath {
-		if globalData, err := os.ReadFile(globalPath); err == nil {
-			globalCfg := DefaultConfig()
-			if err := toml.Unmarshal(globalData, globalCfg); err == nil {
-				cfg.Providers = globalCfg.Providers
-				cfg.Agents = globalCfg.Agents
-				if cfg.Routing.DefaultMaster == "" {
-					cfg.Routing.DefaultMaster = globalCfg.Routing.DefaultMaster
-				}
-				if cfg.Routing.DefaultWorker == "" {
-					cfg.Routing.DefaultWorker = globalCfg.Routing.DefaultWorker
-				}
-				if cfg.Routing.FallbackWorker == "" {
-					cfg.Routing.FallbackWorker = globalCfg.Routing.FallbackWorker
-				}
-			}
-		}
 	}
 
 	if len(cfg.Sandbox.Allow) == 0 {

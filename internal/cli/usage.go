@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"path/filepath"
+	"ringmaster/internal/config"
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
@@ -16,18 +17,15 @@ import (
 var usageJSON bool
 
 var usageCmd = &cobra.Command{
-	Use:   "usage [project_name]",
+	Use:   "usage",
 	Short: "Display accurate token usage breakdown per agent, role, and task vs estimates",
-	Args:  cobra.MaximumNArgs(1),
+	Args:  cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		projectName := ""
-		if len(args) > 0 {
-			projectName = args[0]
-		}
-		projectDir, err := ResolveProjectDir(projectName)
+		projectDir, err := ResolveProjectDir()
 		if err != nil {
 			return err
 		}
+		projectName := filepath.Base(projectDir)
 
 		output, err := buildUsageView(projectDir, projectName, usageJSON)
 		if err != nil {
@@ -39,7 +37,7 @@ var usageCmd = &cobra.Command{
 }
 
 func buildUsageView(projectDir, projectName string, asJSON bool) (string, error) {
-	planPath := filepath.Join(projectDir, "plan.json")
+	planPath := filepath.Join(projectDir, ".ringmaster", "plan.json")
 	plan, err := planner.ReadPlanFile(planPath)
 	if err != nil {
 		return "", fmt.Errorf("project '%s' has no plan.json. Run 'ringmaster plan' first", projectName)
@@ -51,7 +49,11 @@ func buildUsageView(projectDir, projectName string, asJSON bool) (string, error)
 		state = schemas.NewProjectState(projectName, "")
 	}
 
-	estimates := planner.CalculateEstimates(plan, cfg.Estimates)
+	var estimateCfg map[string]config.EstimateConfig
+	if cfg != nil {
+		estimateCfg = cfg.Estimates
+	}
+	estimates := planner.CalculateEstimates(plan, estimateCfg)
 	estMap := make(map[string]planner.TaskEstimate)
 	for _, e := range estimates.Tasks {
 		estMap[e.TaskID] = e

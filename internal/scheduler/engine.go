@@ -45,7 +45,7 @@ func NewEngine(
 	}
 
 	// 1. Load plan.json
-	planPath := filepath.Join(projectRoot, "plan.json")
+	planPath := filepath.Join(projectRoot, ".ringmaster", "plan.json")
 	plan, err := planner.ReadPlanFile(planPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed reading %s: %w", planPath, err)
@@ -66,8 +66,12 @@ func NewEngine(
 	}
 
 	// 4. Read BRIEF.md
-	briefPath := filepath.Join(projectRoot, "BRIEF.md")
+	briefPath := filepath.Join(projectRoot, ".ringmaster", "BRIEF.md")
 	briefBytes, _ := os.ReadFile(briefPath)
+	briefContent := string(briefBytes)
+	if decisions := plan.DecisionsMarkdown(); decisions != "" {
+		briefContent += "\n\n" + decisions
+	}
 
 	eventsPath := filepath.Join(projectRoot, ".ringmaster", "logs", "events.jsonl")
 
@@ -78,7 +82,7 @@ func NewEngine(
 		stateMgr:     stateMgr,
 		mergeQueue:   workspace.NewMergeQueue(projectRoot),
 		reg:          registry.NewRegistry(cfg),
-		briefContent: string(briefBytes),
+		briefContent: briefContent,
 		eventsPath:   eventsPath,
 		maxParallel:  maxParallel,
 	}, nil
@@ -95,8 +99,12 @@ func (e *Engine) Run(ctx context.Context) error {
 	}
 
 	for {
+		// Apply answers the user queued for tasks waiting on them
+		e.applyQueuedAnswers()
+
 		// 1. Check global context cancellation
 		if ctx.Err() != nil {
+			wg.Wait()
 			_ = e.stateMgr.UpdateProject(func(ps *schemas.ProjectState) {
 				ps.Status = "PAUSED"
 			})
@@ -106,6 +114,8 @@ func (e *Engine) Run(ctx context.Context) error {
 		// 2. Check project budget
 		consumed := e.stateMgr.TotalTokensConsumed()
 		if e.cfg.Budget.MaxTokensPerProject > 0 && consumed >= e.cfg.Budget.MaxTokensPerProject {
+			// Let in-flight tasks record their outcome instead of leaving them RUNNING
+			wg.Wait()
 			_ = e.stateMgr.UpdateProject(func(ps *schemas.ProjectState) {
 				ps.Status = "PAUSED"
 			})
@@ -151,7 +161,7 @@ func (e *Engine) Run(ctx context.Context) error {
 				if allCompleted {
 					ps.Status = "COMPLETED"
 				} else {
-					ps.Status = "HALTED"
+					ps.Status = haltStatus(ps)
 				}
 			})
 			break
@@ -167,7 +177,10 @@ func (e *Engine) Run(ctx context.Context) error {
 				}
 			}
 			if !hasRunning {
-				// Deadlock / halted because remaining tasks are blocked
+				// Halted: remaining tasks wait on paused or failed upstream tasks
+				_ = e.stateMgr.UpdateProject(func(ps *schemas.ProjectState) {
+					ps.Status = haltStatus(ps)
+				})
 				break
 			}
 			time.Sleep(200 * time.Millisecond)
@@ -233,7 +246,9 @@ func (e *Engine) executeTask(ctx context.Context, planTask schemas.PlanTask) {
 		return
 	}
 
-	// 5. Execute task attempt loop
+	// 5. Execute task attempt loop, with commands the user approved added to the sandbox
+	sandbox := e.cfg.Sandbox
+	sandbox.Allow = append(append([]string{}, e.cfg.Sandbox.Allow...), LoadApprovals(e.projectRoot).For(planTask.ID)...)
 	loopRes, err := verify.RunTaskLoop(
 		ctx,
 		*taskSpec,
@@ -241,10 +256,27 @@ func (e *Engine) executeTask(ctx context.Context, planTask schemas.PlanTask) {
 		*agentCfg,
 		provider,
 		e.cfg.Budget,
-		e.cfg.Sandbox,
+		sandbox,
 		e.briefContent,
 		e.eventsPath,
+		// One commit per attempt, tagged with the automaton that made it
+		func(attempt int, report *schemas.WorkerReport) {
+			subject := fmt.Sprintf("%s: attempt %d", planTask.ID, attempt)
+			if report != nil {
+				if line := firstLine(report.Summary); line != "" {
+					subject = fmt.Sprintf("%s: %s", planTask.ID, line)
+				}
+			}
+			if _, cErr := workspace.CommitAll(ctx, worktree, subject, taskTrailers(planTask.ID, workerAlias, attempt)); cErr != nil {
+				fmt.Printf("⚠ [Scheduler] Could not commit %s attempt %d: %v\n", planTask.ID, attempt, cErr)
+			}
+		},
 	)
+
+	// Keep the report and transcripts in the project; the worktree is removed after a merge
+	if aErr := archiveTaskArtifacts(e.projectRoot, worktree, planTask.ID); aErr != nil {
+		fmt.Printf("⚠ [Scheduler] Could not archive %s report/transcripts: %v\n", planTask.ID, aErr)
+	}
 
 	now := time.Now().UTC()
 	if err != nil {
@@ -255,7 +287,8 @@ func (e *Engine) executeTask(ctx context.Context, planTask schemas.PlanTask) {
 	// Record usage in state
 	_ = e.stateMgr.UpdateTaskState(planTask.ID, func(ts *schemas.TaskState) {
 		ts.Attempt = loopRes.TotalAttempts
-		ts.Usage = loopRes.TotalUsage
+		// Accumulate across runs so the project budget sees every resumed run
+		ts.Usage.Add(loopRes.TotalUsage)
 		ts.FinishAt = &now
 	})
 
@@ -264,17 +297,25 @@ func (e *Engine) executeTask(ctx context.Context, planTask schemas.PlanTask) {
 	case verify.DecisionDONE:
 		fmt.Printf("✓ [Scheduler] Task %s passed acceptance tests! Queuing git merge...\n", planTask.ID)
 		// Attempt to commit any uncommitted changes in worktree
-		_, _ = workspace.RunGit(ctx, worktree, "add", "-A")
-		_, _ = workspace.RunGit(ctx, worktree, "commit", "-m", fmt.Sprintf("Complete task %s", planTask.ID))
+		_, _ = workspace.CommitAll(ctx, worktree, fmt.Sprintf("Complete task %s", planTask.ID), taskTrailers(planTask.ID, workerAlias, loopRes.TotalAttempts))
 
 		// Enqueue to serialized Merge Queue
 		mergeRes, mErr := e.mergeQueue.Enqueue(ctx, planTask.ID)
 		if mErr != nil || mergeRes == nil || !mergeRes.Merged {
-			// Merge conflict encountered -> set to NEEDS_REVIEW
-			fmt.Printf("⚠ [Scheduler] Task %s merge conflict! Needs review.\n", planTask.ID)
+			// Not merged (conflict, the user's checkout in the way, or a git error) -> NEEDS_REVIEW
+			reason := "merge failed"
+			switch {
+			case mErr != nil:
+				reason = fmt.Sprintf("Merge failed: %v", mErr)
+			case mergeRes != nil && mergeRes.Conflict:
+				reason = fmt.Sprintf("Merge conflict: %s", strings.Join(mergeRes.ConflictedFiles, ", "))
+			case mergeRes != nil && mergeRes.Message != "":
+				reason = "Merge not applied: " + mergeRes.Message
+			}
+			fmt.Printf("⚠ [Scheduler] Task %s was not merged. Needs review: %s\n", planTask.ID, reason)
 			_ = e.stateMgr.UpdateTaskState(planTask.ID, func(ts *schemas.TaskState) {
 				ts.Status = schemas.TaskStateReview
-				ts.Error = fmt.Sprintf("Merge conflict: %s", strings.Join(mergeRes.ConflictedFiles, ", "))
+				ts.Error = reason
 			})
 			return
 		}
@@ -295,14 +336,38 @@ func (e *Engine) executeTask(ctx context.Context, planTask schemas.PlanTask) {
 		})
 
 	case verify.DecisionNEED_REVIEW:
+		reason := loopRes.Decision.Reason
+		if loopRes.Decision.FailureLogs != "" {
+			reason += "\n\n" + loopRes.Decision.FailureLogs
+		}
+		fmt.Printf("⚠ [Scheduler] Task %s needs review: %s\n", planTask.ID, reason)
+		fmt.Printf("   Transcript: %s\n", filepath.Join(worktree, ".ringmaster", "logs"))
 		_ = e.stateMgr.UpdateTaskState(planTask.ID, func(ts *schemas.TaskState) {
 			ts.Status = schemas.TaskStateReview
+			ts.Error = reason
+		})
+
+	case verify.DecisionAWAITING_INPUT:
+		fmt.Printf("🙋 [Scheduler] Task %s needs your input (%d request(s)):\n", planTask.ID, len(loopRes.Decision.Requests))
+		for _, r := range loopRes.Decision.Requests {
+			if r.Type == schemas.RequestApproval {
+				fmt.Printf("   [%s] approve command `%s`: %s\n", r.ID, r.Command, r.Reason)
+			} else {
+				fmt.Printf("   [%s] %s: %s\n", r.ID, r.Type, r.Question)
+			}
+		}
+		fmt.Println("   Answer in the Web UI task panel, or with 'ringmaster answer'.")
+		_ = e.stateMgr.UpdateTaskState(planTask.ID, func(ts *schemas.TaskState) {
+			ts.Status = schemas.TaskStateAwaiting
 			ts.Error = loopRes.Decision.Reason
+			ts.Requests = loopRes.Decision.Requests
 		})
 
 	case verify.DecisionPAUSED:
+		// PAUSED is terminal for this run; re-queuing it as PENDING would re-dispatch it at once
+		fmt.Printf("⏸ [Scheduler] Task %s paused: %s Run 'ringmaster resume' to continue.\n", planTask.ID, loopRes.Decision.Reason)
 		_ = e.stateMgr.UpdateTaskState(planTask.ID, func(ts *schemas.TaskState) {
-			ts.Status = schemas.TaskStatePending
+			ts.Status = schemas.TaskStatePaused
 			ts.Error = loopRes.Decision.Reason
 		})
 	}
@@ -328,6 +393,7 @@ func (e *Engine) updateSkippedTasks(state *schemas.ProjectState, taskMap map[str
 		for _, dep := range t.DependsOn {
 			upState := state.TaskStates[dep].Status
 			if upState == schemas.TaskStateFailed || upState == schemas.TaskStateBlocked || upState == schemas.TaskStateReview {
+				fmt.Printf("⤼ [Scheduler] Task %s skipped: upstream dependency '%s' is %s\n", t.ID, dep, upState)
 				_ = e.stateMgr.UpdateTaskState(t.ID, func(cur *schemas.TaskState) {
 					cur.Status = schemas.TaskStateFailed
 					cur.Error = fmt.Sprintf("Skipped because upstream dependency '%s' is %s", dep, upState)
@@ -348,6 +414,7 @@ func (e *Engine) UpdateTaskState(taskID string, fn func(*schemas.TaskState)) err
 	return e.stateMgr.UpdateTaskState(taskID, fn)
 }
 func (e *Engine) failTask(taskID, errMsg string) {
+	fmt.Printf("✗ [Scheduler] Task %s failed: %s\n", taskID, errMsg)
 	now := time.Now().UTC()
 	_ = e.stateMgr.UpdateTaskState(taskID, func(ts *schemas.TaskState) {
 		ts.Status = schemas.TaskStateFailed
@@ -358,7 +425,7 @@ func (e *Engine) failTask(taskID, errMsg string) {
 
 func (e *Engine) loadTaskSpec(t schemas.PlanTask) (*schemas.TaskSpec, error) {
 	// Search in tasks/ for matching Txx-*.md file
-	tasksDir := filepath.Join(e.projectRoot, "tasks")
+	tasksDir := filepath.Join(e.projectRoot, ".ringmaster", "tasks")
 	entries, err := os.ReadDir(tasksDir)
 	if err == nil {
 		for _, entry := range entries {
@@ -380,5 +447,45 @@ func (e *Engine) loadTaskSpec(t schemas.PlanTask) (*schemas.TaskSpec, error) {
 		Worker:     t.Worker,
 		MaxRetries: t.MaxRetries,
 		Acceptance: t.Acceptance,
+
+		AcceptanceTimeout: t.AcceptanceTimeout,
 	}, nil
+}
+
+// TaskIDs returns the plan's task IDs in plan order.
+func (e *Engine) TaskIDs() []string {
+	ids := make([]string, 0, len(e.plan.Tasks))
+	for _, t := range e.plan.Tasks {
+		ids = append(ids, t.ID)
+	}
+	return ids
+}
+
+// taskTrailers identifies a task commit's task, automaton and attempt in git.
+func taskTrailers(taskID, automaton string, attempt int) []workspace.Trailer {
+	return []workspace.Trailer{
+		{Key: "Ringmaster-Task", Value: taskID},
+		{Key: "Ringmaster-Automaton", Value: automaton},
+		{Key: "Ringmaster-Attempt", Value: fmt.Sprintf("%d", attempt)},
+	}
+}
+
+// firstLine returns the first line of prose in a markdown summary (headings
+// skipped), trimmed to fit a commit subject.
+func firstLine(s string) string {
+	for _, line := range strings.Split(s, "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		line = strings.TrimSpace(strings.TrimLeft(line, "*- "))
+		if line == "" {
+			continue
+		}
+		if r := []rune(line); len(r) > 72 {
+			line = string(r[:71]) + "…"
+		}
+		return line
+	}
+	return ""
 }

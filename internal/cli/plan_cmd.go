@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -22,25 +23,21 @@ var (
 )
 
 var planCmd = &cobra.Command{
-	Use:   "plan [project_name]",
+	Use:   "plan",
 	Short: "Generate, preview, or approve DAG plan for a project",
-	Args:  cobra.MaximumNArgs(1),
+	Args:  cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		if cfg == nil {
-			return fmt.Errorf("configuration not loaded. Please create ringmaster.toml or pass --config")
-		}
-
-		projectName := ""
-		if len(args) > 0 {
-			projectName = args[0]
-		}
-
-		projectDir, err := ResolveProjectDir(projectName)
+		projectDir, err := ResolveProjectDir()
 		if err != nil {
 			return err
 		}
+		cfg, err := projectConfig(projectDir)
+		if err != nil {
+			return err
+		}
+		projectName := filepath.Base(projectDir)
 
-		planPath := filepath.Join(projectDir, "plan.json")
+		planPath := filepath.Join(projectDir, ".ringmaster", "plan.json")
 		var p *schemas.Plan
 
 		// If plan.json doesn't exist, generate it using master agent
@@ -86,7 +83,7 @@ var planCmd = &cobra.Command{
 				return fmt.Errorf("failed to approve plan: %w", err)
 			}
 			fmt.Printf("✓ Plan APPROVED successfully!\n  Canonical Hash: %s\n  Saved to: %s\n",
-				hash, filepath.Join(projectDir, "plan.approved.json"))
+				hash, filepath.Join(projectDir, ".ringmaster", "plan.approved.json"))
 			return nil
 		}
 
@@ -99,6 +96,7 @@ var planCmd = &cobra.Command{
 		// Render interactive preview gate
 		estimates := planner.CalculateEstimates(p, cfg.Estimates)
 		fmt.Print(planner.RenderPreview(p, estimates, cfg.Budget))
+		printOpenQuestions(p)
 
 		// Check approval status
 		isApproved, _ := planner.VerifyPlanApproval(projectDir, p)
@@ -110,7 +108,7 @@ var planCmd = &cobra.Command{
 
 		reader := bufio.NewReader(os.Stdin)
 		for {
-			fmt.Print("\nAction: [y] approve · [a] assign worker · [e] edit in $EDITOR · [q] quit > ")
+			fmt.Print("\nAction: [y] approve · [o] answer open questions · [a] assign worker · [e] edit in $EDITOR · [q] quit > ")
 			input, err := reader.ReadString('\n')
 			if err != nil {
 				break
@@ -121,11 +119,41 @@ var planCmd = &cobra.Command{
 			case "y":
 				hash, err := planner.ApprovePlan(projectDir, p)
 				if err != nil {
-					return fmt.Errorf("failed to approve plan: %w", err)
+					fmt.Printf("✗ Cannot approve: %v\n", err)
+					continue
 				}
 				fmt.Printf("✓ Plan APPROVED successfully!\n  Canonical Hash: %s\n  Saved to: %s\n",
-					hash, filepath.Join(projectDir, "plan.approved.json"))
+					hash, filepath.Join(projectDir, ".ringmaster", "plan.approved.json"))
 				return nil
+
+			case "o":
+				for i := range p.OpenQuestions {
+					q := &p.OpenQuestions[i]
+					fmt.Printf("\n%s: %s\n", q.ID, q.Question)
+					for n, opt := range q.Options {
+						marker := ""
+						if opt == q.Recommended {
+							marker = " (recommended)"
+						}
+						fmt.Printf("  [%d] %s%s\n", n+1, opt, marker)
+					}
+					if q.Answer != "" {
+						fmt.Printf("  Current answer: %s\n", q.Answer)
+					}
+					fmt.Print("Answer (number, free text, or empty to keep): ")
+					ans, _ := reader.ReadString('\n')
+					ans = strings.TrimSpace(ans)
+					if ans == "" {
+						continue
+					}
+					if n, err := strconv.Atoi(ans); err == nil && n >= 1 && n <= len(q.Options) {
+						ans = q.Options[n-1]
+					}
+					q.Answer = ans
+				}
+				_ = storage.WriteJSONAtomic(planPath, p)
+				_ = planner.RevokeApproval(projectDir)
+				printOpenQuestions(p)
 
 			case "a":
 				fmt.Print("Enter Task ID to assign (e.g. T01): ")
@@ -180,6 +208,24 @@ var planCmd = &cobra.Command{
 
 		return nil
 	},
+}
+
+// printOpenQuestions lists the master's open questions and assumptions, if any.
+func printOpenQuestions(p *schemas.Plan) {
+	if len(p.OpenQuestions) == 0 && len(p.Assumptions) == 0 {
+		return
+	}
+	fmt.Println("\n❓ Open questions (answer all before approving):")
+	for _, q := range p.OpenQuestions {
+		answer := "UNANSWERED"
+		if q.Answer != "" {
+			answer = "→ " + q.Answer
+		}
+		fmt.Printf("   %s %s  %s\n", q.ID, q.Question, answer)
+	}
+	for _, a := range p.Assumptions {
+		fmt.Printf("   • Assumption: %s\n", a)
+	}
 }
 
 func init() {

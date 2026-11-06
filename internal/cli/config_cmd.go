@@ -14,16 +14,11 @@ var configCmd = &cobra.Command{
 	Use:   "config",
 	Short: "Interactive TUI to configure providers and model registry",
 	Long: `Open an interactive Terminal User Interface (TUI) to add, view,
-edit, and remove LLM Providers and Agent Models in ringmaster.toml.`,
+edit, and remove LLM Providers and Agent Models in the global ringmaster.toml.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		path := cfgFile
+		path := config.ConfigPath(cfgFile)
 		if path == "" {
-			found, err := config.FindConfigFile()
-			if err != nil {
-				path = "ringmaster.toml"
-			} else {
-				path = found
-			}
+			return fmt.Errorf("cannot locate the Ringmaster install root; pass --config")
 		}
 
 		loadedCfg := cfg

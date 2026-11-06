@@ -88,7 +88,8 @@ func TestApproveAndVerifyPlan(t *testing.T) {
 
 func TestGeneratePlan(t *testing.T) {
 	tempDir := t.TempDir()
-	briefFile := filepath.Join(tempDir, "BRIEF.md")
+	briefFile := filepath.Join(tempDir, ".ringmaster", "BRIEF.md")
+	_ = os.MkdirAll(filepath.Dir(briefFile), 0755)
 	_ = os.WriteFile(briefFile, []byte("# Brief\nBuild a REST API in Go\n"), 0644)
 
 	rawPlan := map[string]any{
@@ -159,15 +160,42 @@ func TestGeneratePlan(t *testing.T) {
 	}
 
 	// Verify plan.json exists
-	savedPlan, err := storage.ReadJSON[schemas.Plan](filepath.Join(tempDir, "plan.json"))
+	savedPlan, err := storage.ReadJSON[schemas.Plan](filepath.Join(tempDir, ".ringmaster", "plan.json"))
 	if err != nil || len(savedPlan.Tasks) != 2 {
 		t.Errorf("failed reading saved plan.json: %v", err)
 	}
 
 	// Verify task files created
-	tasksDir := filepath.Join(tempDir, "tasks")
+	tasksDir := filepath.Join(tempDir, ".ringmaster", "tasks")
 	entries, _ := os.ReadDir(tasksDir)
 	if len(entries) != 2 {
 		t.Errorf("expected 2 task files in tasks/, got %d", len(entries))
+	}
+}
+
+func TestApproveRequiresAnsweredQuestions(t *testing.T) {
+	dir := t.TempDir()
+	plan := &schemas.Plan{
+		Project:       "q",
+		Tasks:         []schemas.PlanTask{{ID: "T01", Title: "x", Type: schemas.TaskTypeBackend, Acceptance: []string{"go test ./..."}}},
+		OpenQuestions: []schemas.PlanQuestion{{ID: "Q1", Question: "Which DB?", Options: []string{"sqlite", "postgres"}}},
+	}
+	if _, err := ApprovePlan(dir, plan); err == nil {
+		t.Fatal("expected approval to be refused while Q1 is unanswered")
+	}
+
+	plan.OpenQuestions[0].Answer = "sqlite"
+	before, _ := plan.PlanHash()
+	if _, err := ApprovePlan(dir, plan); err != nil {
+		t.Fatalf("expected approval once answered, got %v", err)
+	}
+
+	// Changing an answer after approval invalidates it
+	plan.OpenQuestions[0].Answer = "postgres"
+	if after, _ := plan.PlanHash(); after == before {
+		t.Error("expected plan hash to cover question answers")
+	}
+	if ok, _ := VerifyPlanApproval(dir, plan); ok {
+		t.Error("expected approval to be invalid after changing an answer")
 	}
 }

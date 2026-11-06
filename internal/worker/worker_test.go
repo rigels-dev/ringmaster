@@ -152,7 +152,7 @@ func TestRunnerAttemptExecution(t *testing.T) {
 									"type": "function",
 									"function": map[string]any{
 										"name":      "write_file",
-										"arguments": fmt.Sprintf(`{"path":"outputs/T01.md","content":%q}`, reportYAML),
+										"arguments": fmt.Sprintf(`{"path":".ringmaster/outputs/T01.md","content":%q}`, reportYAML),
 									},
 								},
 							},
@@ -175,7 +175,7 @@ func TestRunnerAttemptExecution(t *testing.T) {
 				{
 					"message": map[string]any{
 						"role":    "assistant",
-						"content": "All done! Final report written to outputs/T01.md",
+						"content": "All done! Final report written to .ringmaster/outputs/T01.md",
 					},
 				},
 			},
@@ -196,7 +196,7 @@ func TestRunnerAttemptExecution(t *testing.T) {
 		Title:       "Implement Auth Module",
 		Type:        schemas.TaskTypeBackend,
 		Description: "Create authentication logic",
-		Acceptance:  []string{"outputs/T01.md exists"},
+		Acceptance:  []string{".ringmaster/outputs/T01.md exists"},
 	}
 
 	agent := config.AgentConfig{

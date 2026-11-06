@@ -8,16 +8,66 @@ interface RunProcessState {
   pid: number | null
   isRunning: boolean
   startedAt: string | null
-  logs: string[]
 }
 
-// In-memory reference for the running background orchestration
+// The run started from this server, if any. Its output is not kept here:
+// `ringmaster run` persists every line to .ringmaster/logs/run.jsonl, which
+// also covers runs started from the CLI and survives server restarts.
 const globalState: RunProcessState = {
   process: null,
   pid: null,
   isRunning: false,
-  startedAt: null,
-  logs: []
+  startedAt: null
+}
+
+// How much of the run log the Logs page receives (the newest part)
+const MAX_LOG_LINES = 3000
+const MAX_TAIL_BYTES = 4 * 1024 * 1024
+
+function runLogPath(projectDir: string) {
+  return path.join(projectDir, '.ringmaster', 'logs', 'run.jsonl')
+}
+
+// Messages from the UI itself go into the same log, so they sort with the run output
+function appendRunLog(projectDir: string, line: string) {
+  try {
+    fs.mkdirSync(path.dirname(runLogPath(projectDir)), { recursive: true })
+    fs.appendFileSync(runLogPath(projectDir), JSON.stringify({ ts: new Date().toISOString(), line }) + '\n')
+  } catch {}
+}
+
+// Newest MAX_LOG_LINES entries of run.jsonl, reading only the file's tail
+function readRunLog(projectDir: string): { logs: string[]; logTimes: string[] } {
+  const logs: string[] = []
+  const logTimes: string[] = []
+  let text = ''
+  try {
+    const file = runLogPath(projectDir)
+    const size = fs.statSync(file).size
+    const start = Math.max(0, size - MAX_TAIL_BYTES)
+    const fd = fs.openSync(file, 'r')
+    try {
+      const buf = Buffer.alloc(size - start)
+      fs.readSync(fd, buf, 0, buf.length, start)
+      text = buf.toString('utf-8')
+    } finally {
+      fs.closeSync(fd)
+    }
+    // A tail read may start mid-line; drop the partial first line
+    if (start > 0) text = text.slice(text.indexOf('\n') + 1)
+  } catch {
+    return { logs, logTimes }
+  }
+
+  const lines = text.split('\n').filter(Boolean).slice(-MAX_LOG_LINES)
+  for (const raw of lines) {
+    try {
+      const entry = JSON.parse(raw)
+      logs.push(entry.stream === 'err' ? `[stderr] ${entry.line}` : entry.line)
+      logTimes.push(entry.ts || '')
+    } catch {}
+  }
+  return { logs, logTimes }
 }
 
 // PID of a `ringmaster run` started outside this server (CLI, or before a
@@ -41,9 +91,9 @@ export default defineEventHandler(async (event) => {
   const ringmasterBin = ringmasterBinPath()
   const rootConfig = rootTomlPath()
   const stateFile = path.join(projectDir, '.ringmaster', 'state.json')
-  const approvedFile = path.join(projectDir, 'plan.approved.json')
+  const approvedFile = path.join(projectDir, '.ringmaster', 'plan.approved.json')
 
-  // GET: poll current run status & recent output logs
+  // GET: poll current run status & the persisted run log
   if (event.node.req.method === 'GET') {
     let projectState = null
     if (fs.existsSync(stateFile)) {
@@ -53,6 +103,7 @@ export default defineEventHandler(async (event) => {
     }
 
     const extPid = globalState.isRunning ? null : externalRunPid(projectDir)
+    const { logs, logTimes } = readRunLog(projectDir)
 
     return {
       ok: true,
@@ -60,7 +111,8 @@ export default defineEventHandler(async (event) => {
       external: extPid !== null,
       pid: extPid ?? globalState.pid,
       startedAt: globalState.startedAt,
-      logs: globalState.logs,
+      logs,
+      logTimes,
       projectState
     }
   }
@@ -77,7 +129,7 @@ export default defineEventHandler(async (event) => {
           globalState.process.kill('SIGTERM')
         } catch {}
         globalState.isRunning = false
-        globalState.logs.push('[Ringmaster UI] Received user stop request. Orchestration halted gracefully.')
+        appendRunLog(projectDir, '[Ringmaster UI] Received user stop request. Orchestration halted gracefully.')
         return { ok: true, message: 'Execution stopping gracefully.' }
       }
       const extPid = externalRunPid(projectDir)
@@ -85,16 +137,21 @@ export default defineEventHandler(async (event) => {
         try {
           process.kill(extPid, 'SIGTERM')
         } catch {}
-        globalState.logs.push(`[Ringmaster UI] Sent stop request to external orchestration (PID ${extPid}).`)
+        appendRunLog(projectDir, `[Ringmaster UI] Sent stop request to external orchestration (PID ${extPid}).`)
         return { ok: true, message: 'Execution stopping gracefully.' }
       }
       return { ok: true, message: 'No active execution running.' }
     }
 
-    // CLEAR LOGS ACTION
+    // CLEAR LOGS ACTION: archive the log rather than deleting it
     if (action === 'clear_logs') {
-      if (!globalState.isRunning) {
-        globalState.logs = []
+      if (globalState.isRunning || externalRunPid(projectDir) !== null) {
+        return { ok: false, error: 'Logs can be cleared once the run has exited.' }
+      }
+      const file = runLogPath(projectDir)
+      if (fs.existsSync(file)) {
+        const stamp = new Date().toISOString().replace(/[-:]/g, '').replace('T', '-').slice(0, 15)
+        fs.renameSync(file, path.join(path.dirname(file), `run-${stamp}.jsonl`))
       }
       return { ok: true }
     }
@@ -110,9 +167,8 @@ export default defineEventHandler(async (event) => {
         return { ok: false, error: 'Plan is not approved yet. Please review and approve plan first.' }
       }
 
-      // Check if project state is blocked, or fresh start
       const parallel = body.parallel || 4
-      globalState.logs = [`[Ringmaster UI] Launching orchestration in '${projectDir}' (parallel=${parallel})...`]
+      appendRunLog(projectDir, `[Ringmaster UI] Launching orchestration in '${projectDir}' (parallel=${parallel})...`)
       globalState.startedAt = new Date().toISOString()
       globalState.isRunning = true
 
@@ -125,32 +181,26 @@ export default defineEventHandler(async (event) => {
         globalState.process = child
         globalState.pid = child.pid || null
 
-        child.stdout.on('data', (data) => {
-          const lines = data.toString().split('\n').filter(Boolean)
-          for (const line of lines) {
-            globalState.logs.push(line)
-            if (globalState.logs.length > 200) globalState.logs.shift()
-          }
-        })
-
+        // The run writes its own log file; drain the pipes, keeping only the
+        // last stderr line for errors printed after the run log is closed
+        let lastErr = ''
+        child.stdout.on('data', () => {})
         child.stderr.on('data', (data) => {
-          const lines = data.toString().split('\n').filter(Boolean)
-          for (const line of lines) {
-            globalState.logs.push(`[stderr] ${line}`)
-            if (globalState.logs.length > 200) globalState.logs.shift()
-          }
+          const lines = data.toString().split('\n').map((l: string) => l.trim()).filter(Boolean)
+          if (lines.length) lastErr = lines[lines.length - 1]
         })
 
         child.on('close', (code) => {
           globalState.isRunning = false
           globalState.pid = null
-          globalState.logs.push(`[Ringmaster UI] Orchestration process exited with code ${code}.`)
+          if (code !== 0 && lastErr) appendRunLog(projectDir, `[Ringmaster UI] ${lastErr}`)
+          appendRunLog(projectDir, `[Ringmaster UI] Orchestration process exited with code ${code}.`)
         })
 
         child.on('error', (err) => {
           globalState.isRunning = false
           globalState.pid = null
-          globalState.logs.push(`[Ringmaster UI] Process error: ${err.message}`)
+          appendRunLog(projectDir, `[Ringmaster UI] Process error: ${err.message}`)
         })
 
         return {

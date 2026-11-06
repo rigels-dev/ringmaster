@@ -23,8 +23,8 @@ func setupE2EProject(t *testing.T, ms *mockserver.MockServer) (string, *config.C
 	projectRoot := t.TempDir()
 
 	// 1. Git repository setup
-	repoDir := filepath.Join(projectRoot, "repo")
-	_ = os.MkdirAll(repoDir, 0755)
+	repoDir := projectRoot
+	_ = os.MkdirAll(filepath.Join(projectRoot, ".ringmaster"), 0755)
 	ctx := context.Background()
 	_, _ = workspace.RunGit(ctx, repoDir, "init", "-b", "main")
 	_ = workspace.EnsureGitIdentity(ctx, repoDir)
@@ -33,7 +33,7 @@ func setupE2EProject(t *testing.T, ms *mockserver.MockServer) (string, *config.C
 	_, _ = workspace.RunGit(ctx, repoDir, "commit", "-m", "init commit")
 
 	// 2. Brief setup
-	_ = os.WriteFile(filepath.Join(projectRoot, "BRIEF.md"), []byte("# E2E Project Brief\nBuild Auth and User modules.\n"), 0644)
+	_ = os.WriteFile(filepath.Join(projectRoot, ".ringmaster", "BRIEF.md"), []byte("# E2E Project Brief\nBuild Auth and User modules.\n"), 0644)
 
 	// 3. Config setup
 	t.Setenv("E2E_MOCK_KEY", "super-secret-key-12345")
@@ -119,7 +119,7 @@ func TestE2ELifecycleHappyPath(t *testing.T) {
 	}
 
 	// 5. MERGE VERIFICATION: check git repo on main has both committed files
-	repoDir := filepath.Join(projectRoot, "repo")
+	repoDir := projectRoot
 	logOut, _ := workspace.RunGit(ctx, repoDir, "log", "--oneline")
 	if !strings.Contains(logOut, "Merge task T01") || !strings.Contains(logOut, "Merge task T02") {
 		t.Errorf("main repo log missing merge commits:\n%s", logOut)
@@ -165,11 +165,11 @@ func TestE2EBlockedAndHumanAnswer(t *testing.T) {
 			},
 		},
 	}
-	_ = storage.WriteJSONAtomic(filepath.Join(projectRoot, "plan.json"), plan)
+	_ = storage.WriteJSONAtomic(filepath.Join(projectRoot, ".ringmaster", "plan.json"), plan)
 	_, _ = planner.ApprovePlan(projectRoot, plan)
 
 	// Create task file
-	tasksDir := filepath.Join(projectRoot, "tasks")
+	tasksDir := filepath.Join(projectRoot, ".ringmaster", "tasks")
 	_ = os.MkdirAll(tasksDir, 0755)
 	_ = os.WriteFile(filepath.Join(tasksDir, "T01-needs-database.md"), []byte(`---
 id: T01

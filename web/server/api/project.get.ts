@@ -8,7 +8,7 @@ export default defineEventHandler((event) => {
 
   // 1. Read BRIEF.md
   let brief = ''
-  const briefPath = path.join(projectDir, 'BRIEF.md')
+  const briefPath = path.join(projectDir, '.ringmaster', 'BRIEF.md')
   if (fs.existsSync(briefPath)) {
     try {
       brief = fs.readFileSync(briefPath, 'utf-8')
@@ -17,11 +17,27 @@ export default defineEventHandler((event) => {
 
   // 2. Read plan.json / plan.approved.json
   let plan = null
-  const planPath = path.join(projectDir, 'plan.json')
+  const planPath = path.join(projectDir, '.ringmaster', 'plan.json')
   if (fs.existsSync(planPath)) {
     try {
       plan = JSON.parse(fs.readFileSync(planPath, 'utf-8'))
     } catch {}
+  }
+
+  // plan.json carries no descriptions; take them from the tasks/Txx-*.md bodies
+  const tasksDir = path.join(projectDir, '.ringmaster', 'tasks')
+  if (plan?.tasks && fs.existsSync(tasksDir)) {
+    const specFiles = fs.readdirSync(tasksDir).filter((f) => f.endsWith('.md'))
+    for (const t of plan.tasks) {
+      const file = specFiles.find((f) => f.startsWith(t.id))
+      if (!t.description && file) {
+        try {
+          const content = fs.readFileSync(path.join(tasksDir, file), 'utf-8').trim()
+          const body = content.startsWith('---') ? content.slice(3).split('---').slice(1).join('---') : content
+          t.description = body.split('## Human Answers')[0].trim()
+        } catch {}
+      }
+    }
   }
 
   // 3. Read state.json
@@ -33,9 +49,9 @@ export default defineEventHandler((event) => {
     } catch {}
   }
 
-  // 4. Resolve Master Planner & Workers configuration:
-  // Global fleet config is in <ringmaster root>/ringmaster.toml
-  // Local project manifest is in <projectDir>/ringmaster.toml
+  // 4. Resolve Master Planner & Workers from the global fleet config
+  // (<ringmaster root>/ringmaster.toml). The project's own ringmaster.toml is
+  // its manifest and never defines agents.
   let master = 'none'
   let workers: string[] = []
 
@@ -84,17 +100,7 @@ export default defineEventHandler((event) => {
     } catch {}
   }
 
-  // Read root fleet first (where providers & agents are configured)
   parseFleet(rootToml)
-  // If local project toml has specific overrides, apply them ONLY if it defines default_master or agents
-  if (projectToml !== rootToml && fs.existsSync(projectToml)) {
-    try {
-      const localContent = fs.readFileSync(projectToml, 'utf-8')
-      if (localContent.includes('default_master') || localContent.includes('[agents')) {
-        parseFleet(projectToml)
-      }
-    } catch {}
-  }
 
   const isInitialized = fs.existsSync(briefPath) || fs.existsSync(projectToml)
   const isBlank = !plan || !plan.tasks || plan.tasks.length === 0
@@ -102,6 +108,8 @@ export default defineEventHandler((event) => {
   return {
     name: projectName,
     path: projectDir,
+    // Release name (v{major}.{mid}.{minor}-{codename}), passed in by the launcher
+    version: process.env.RINGMASTER_VERSION || 'dev',
     isInitialized,
     isBlank,
     brief,

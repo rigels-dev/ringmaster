@@ -27,7 +27,7 @@ func setupStatusTestProject(t *testing.T) string {
 			{ID: "T03", Title: "Task Three", Type: schemas.TaskTypeTest, Worker: "coder", MaxRetries: 2},
 		},
 	}
-	_ = storage.WriteJSONAtomic(filepath.Join(projectDir, "plan.json"), plan)
+	_ = storage.WriteJSONAtomic(filepath.Join(projectDir, ".ringmaster", "plan.json"), plan)
 
 	// 2. Create state.json with diverse statuses
 	state := schemas.NewProjectState("status_test", "test-hash")

@@ -8,11 +8,11 @@ import (
 	"testing"
 )
 
-// setupTestRepo initializes a git repo inside tempDir/repo with an initial commit on main
+// setupTestRepo initializes a git repo in tempDir with an initial commit on main
 func setupTestRepo(t *testing.T) string {
 	t.Helper()
 	projectRoot := t.TempDir()
-	repoPath := filepath.Join(projectRoot, "repo")
+	repoPath := projectRoot
 	if err := os.MkdirAll(repoPath, 0755); err != nil {
 		t.Fatalf("failed to create repo dir: %v", err)
 	}
@@ -74,7 +74,7 @@ func TestCreateAndRemoveWorktreeIdempotent(t *testing.T) {
 func TestMergeQueueSuccess(t *testing.T) {
 	projectRoot := setupTestRepo(t)
 	ctx := context.Background()
-	repoPath := filepath.Join(projectRoot, "repo")
+	repoPath := projectRoot
 
 	// Branch 1: Task T01 writes file_a.txt
 	wtA, err := CreateWorktree(ctx, projectRoot, "T01", "main")
@@ -126,7 +126,7 @@ func TestMergeQueueSuccess(t *testing.T) {
 func TestMergeQueueConflictAbortsCleanly(t *testing.T) {
 	projectRoot := setupTestRepo(t)
 	ctx := context.Background()
-	repoPath := filepath.Join(projectRoot, "repo")
+	repoPath := projectRoot
 
 	// Both branches modify the SAME file with conflicting content
 	wt1, _ := CreateWorktree(ctx, projectRoot, "T01", "main")
@@ -168,5 +168,107 @@ func TestMergeQueueConflictAbortsCleanly(t *testing.T) {
 	}
 	if strings.Contains(status, "You have unmerged paths") || strings.Contains(status, "All conflicts fixed") {
 		t.Errorf("main repository was left in dirty merging state: %s", status)
+	}
+}
+
+func TestCreateWorktreeRefusesNestedProject(t *testing.T) {
+	outer := setupTestRepo(t)
+	nested := filepath.Join(outer, "examples", "app")
+	_ = os.MkdirAll(nested, 0755)
+
+	if _, err := CreateWorktree(context.Background(), nested, "T01", "main"); err == nil {
+		t.Fatalf("expected CreateWorktree to refuse a project nested in another repo")
+	}
+}
+
+// taskCommit makes a worktree for taskID that writes file with content.
+func taskCommit(t *testing.T, ctx context.Context, projectRoot, taskID, file, content string) {
+	t.Helper()
+	wt, err := CreateWorktree(ctx, projectRoot, taskID, "main")
+	if err != nil {
+		t.Fatalf("CreateWorktree %s: %v", taskID, err)
+	}
+	_ = os.WriteFile(filepath.Join(wt, file), []byte(content), 0644)
+	if _, err := CommitAll(ctx, wt, taskID+": work", nil); err != nil {
+		t.Fatalf("commit %s: %v", taskID, err)
+	}
+}
+
+// The project is the user's working tree: merging must not switch their
+// branch or touch their uncommitted files.
+func TestMergeQueueLeavesUserCheckoutAlone(t *testing.T) {
+	projectRoot := setupTestRepo(t)
+	ctx := context.Background()
+	taskCommit(t, ctx, projectRoot, "T01", "feature.txt", "from task\n")
+
+	// The user works on their own branch with an uncommitted change
+	if _, err := RunGit(ctx, projectRoot, "checkout", "-b", "my-feature"); err != nil {
+		t.Fatal(err)
+	}
+	_ = os.WriteFile(filepath.Join(projectRoot, "README.md"), []byte("user edit\n"), 0644)
+
+	res, err := NewMergeQueue(projectRoot).Enqueue(ctx, "T01")
+	if err != nil || !res.Merged {
+		t.Fatalf("expected merge into main, got %+v, %v", res, err)
+	}
+
+	head, _ := RunGit(ctx, projectRoot, "rev-parse", "--abbrev-ref", "HEAD")
+	if strings.TrimSpace(head) != "my-feature" {
+		t.Errorf("user's branch was switched to %q", strings.TrimSpace(head))
+	}
+	if data, _ := os.ReadFile(filepath.Join(projectRoot, "README.md")); string(data) != "user edit\n" {
+		t.Errorf("user's uncommitted change was lost: %q", data)
+	}
+	if _, err := RunGit(ctx, projectRoot, "cat-file", "-e", "main:feature.txt"); err != nil {
+		t.Errorf("main does not contain the task's file")
+	}
+	parents, _ := RunGit(ctx, projectRoot, "log", "-1", "--format=%P", "main")
+	if len(strings.Fields(parents)) != 2 {
+		t.Errorf("expected a two-parent merge commit on main, parents: %q", parents)
+	}
+}
+
+func TestMergeQueueOnCheckedOutMainKeepsLocalChanges(t *testing.T) {
+	projectRoot := setupTestRepo(t)
+	ctx := context.Background()
+	taskCommit(t, ctx, projectRoot, "T01", "feature.txt", "from task\n")
+
+	// On main, with an unrelated uncommitted edit
+	_ = os.WriteFile(filepath.Join(projectRoot, "README.md"), []byte("user edit\n"), 0644)
+
+	res, err := NewMergeQueue(projectRoot).Enqueue(ctx, "T01")
+	if err != nil || !res.Merged {
+		t.Fatalf("expected merge, got %+v, %v", res, err)
+	}
+	if _, err := os.Stat(filepath.Join(projectRoot, "feature.txt")); err != nil {
+		t.Errorf("checked-out main was not updated with the task's file")
+	}
+	if data, _ := os.ReadFile(filepath.Join(projectRoot, "README.md")); string(data) != "user edit\n" {
+		t.Errorf("user's uncommitted change was lost: %q", data)
+	}
+}
+
+func TestMergeQueueRefusesToOverwriteUserChanges(t *testing.T) {
+	projectRoot := setupTestRepo(t)
+	ctx := context.Background()
+	taskCommit(t, ctx, projectRoot, "T01", "README.md", "from task\n")
+	before, _ := RunGit(ctx, projectRoot, "rev-parse", "main")
+
+	// On main, editing the same file the task changed
+	_ = os.WriteFile(filepath.Join(projectRoot, "README.md"), []byte("user edit\n"), 0644)
+
+	res, err := NewMergeQueue(projectRoot).Enqueue(ctx, "T01")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if res.Merged || !strings.Contains(res.Message, "uncommitted changes") {
+		t.Errorf("expected the merge to be refused with an explanation, got %+v", res)
+	}
+	after, _ := RunGit(ctx, projectRoot, "rev-parse", "main")
+	if before != after {
+		t.Errorf("main moved although the merge was refused")
+	}
+	if data, _ := os.ReadFile(filepath.Join(projectRoot, "README.md")); string(data) != "user edit\n" {
+		t.Errorf("user's uncommitted change was overwritten: %q", data)
 	}
 }

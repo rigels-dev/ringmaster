@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"sort"
+	"strings"
 )
 
 type PlanTask struct {
@@ -16,11 +17,53 @@ type PlanTask struct {
 	Worker     string   `json:"worker"`
 	MaxRetries int      `json:"max_retries"`
 	Acceptance []string `json:"acceptance"`
+	// AcceptanceTimeout overrides how long each acceptance command may run, in seconds
+	AcceptanceTimeout int `json:"acceptance_timeout,omitempty"`
+}
+
+// PlanQuestion is a decision the master could not settle from the brief; it must be
+// answered before the plan can be approved.
+type PlanQuestion struct {
+	ID          string   `json:"id"`
+	Question    string   `json:"question"`
+	Options     []string `json:"options,omitempty"`
+	Recommended string   `json:"recommended,omitempty"`
+	Answer      string   `json:"answer,omitempty"`
 }
 
 type Plan struct {
-	Project string     `json:"project"`
-	Tasks   []PlanTask `json:"tasks"`
+	Project       string         `json:"project"`
+	Tasks         []PlanTask     `json:"tasks"`
+	OpenQuestions []PlanQuestion `json:"open_questions,omitempty"`
+	Assumptions   []string       `json:"assumptions,omitempty"`
+}
+
+// UnansweredQuestions returns the open questions that still need an answer.
+func (p *Plan) UnansweredQuestions() []PlanQuestion {
+	var res []PlanQuestion
+	for _, q := range p.OpenQuestions {
+		if strings.TrimSpace(q.Answer) == "" {
+			res = append(res, q)
+		}
+	}
+	return res
+}
+
+// DecisionsMarkdown renders answered questions and assumptions for worker context.
+func (p *Plan) DecisionsMarkdown() string {
+	var sb strings.Builder
+	for _, q := range p.OpenQuestions {
+		if strings.TrimSpace(q.Answer) != "" {
+			sb.WriteString(fmt.Sprintf("- %s → %s\n", q.Question, q.Answer))
+		}
+	}
+	for _, a := range p.Assumptions {
+		sb.WriteString(fmt.Sprintf("- Assumption: %s\n", a))
+	}
+	if sb.Len() == 0 {
+		return ""
+	}
+	return "# DECISIONS CONFIRMED BY THE USER:\n" + sb.String()
 }
 
 func ValidatePlan(plan *Plan) error {
@@ -157,12 +200,17 @@ func (p *Plan) PlanHash() (string, error) {
 		sort.Strings(tasksCopy[i].Acceptance)
 	}
 
+	// Questions and assumptions are omitted when empty, so older plan hashes stay stable
 	normalized := struct {
-		Project string     `json:"project"`
-		Tasks   []PlanTask `json:"tasks"`
+		Project       string         `json:"project"`
+		Tasks         []PlanTask     `json:"tasks"`
+		OpenQuestions []PlanQuestion `json:"open_questions,omitempty"`
+		Assumptions   []string       `json:"assumptions,omitempty"`
 	}{
-		Project: p.Project,
-		Tasks:   tasksCopy,
+		Project:       p.Project,
+		Tasks:         tasksCopy,
+		OpenQuestions: p.OpenQuestions,
+		Assumptions:   p.Assumptions,
 	}
 
 	canonicalJSON, err := json.Marshal(normalized)
