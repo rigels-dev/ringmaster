@@ -22,7 +22,9 @@ dist: web
 	scripts/dist.sh $(VERSION)
 
 # Tag the current commit with the release name from VERSION
+# Refuses while anything is uncommitted, so the tagged commit carries this VERSION
 tag:
+	@git diff --quiet HEAD || { echo "Commit your changes (including VERSION) before tagging" >&2; exit 1; }
 	git tag -a $(VERSION) -m "Ringmaster $(VERSION)"
 
 clean:
