@@ -3,7 +3,7 @@
 VERSION ?= $(shell cat VERSION)
 LDFLAGS := -s -w -X ringmaster/internal/version.Version=$(VERSION)
 
-.PHONY: all build web test tag clean
+.PHONY: all build web test tag dist clean
 
 all: build web
 
@@ -17,9 +17,13 @@ test:
 	go vet ./...
 	go test ./...
 
+# Release archives for every platform, plus checksums, in dist/
+dist: web
+	scripts/dist.sh $(VERSION)
+
 # Tag the current commit with the release name from VERSION
 tag:
 	git tag -a $(VERSION) -m "Ringmaster $(VERSION)"
 
 clean:
-	rm -rf bin web/.output
+	rm -rf bin dist web/.output

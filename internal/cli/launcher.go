@@ -186,24 +186,15 @@ func StartTUI() error {
 }
 
 func StartWebUI(projectDir string) error {
-	// Locate web output in the Ringmaster installation (never in the project,
+	// Locate the web UI in the Ringmaster installation (never in the project,
 	// which may well have a web/.output of its own)
 	root := config.RootDir()
-	var candidates []string
-	if root != "" {
-		candidates = append(candidates, filepath.Join(root, "web", ".output", "server", "index.mjs"))
-	}
-
-	var serverScript string
-	for _, c := range candidates {
-		if fi, err := os.Stat(c); err == nil && !fi.IsDir() {
-			serverScript = c
-			break
-		}
-	}
-
+	serverScript := findWebServer(root)
 	if serverScript == "" {
-		return fmt.Errorf("Ringmaster Web UI build not found. Run 'npm run build' inside web/ first")
+		return fmt.Errorf("Ringmaster web UI not found: set RINGMASTER_WEB_DIR, or run 'make web' in a source checkout")
+	}
+	if _, err := exec.LookPath("node"); err != nil {
+		return fmt.Errorf("the web UI needs Node.js 22 or newer on your PATH: %w", err)
 	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
@@ -219,6 +210,7 @@ func StartWebUI(projectDir string) error {
 		"NITRO_HOST=127.0.0.1",
 		fmt.Sprintf("RINGMASTER_PROJECT_DIR=%s", projectDir),
 		fmt.Sprintf("RINGMASTER_VERSION=%s", version.Version),
+		fmt.Sprintf("RINGMASTER_CONFIG=%s", config.ConfigPath(cfgFile)),
 	)
 	if root != "" {
 		cmd.Env = append(cmd.Env, fmt.Sprintf("RINGMASTER_ROOT=%s", root))
@@ -249,4 +241,27 @@ func StartWebUI(projectDir string) error {
 		return nil
 	}
 	return err
+}
+
+// findWebServer returns the web UI's server entry: $RINGMASTER_WEB_DIR, a
+// packaged install (<prefix>/share/ringmaster/web), or a source checkout
+// (<root>/web/.output). Returns "" when none exists.
+func findWebServer(root string) string {
+	var dirs []string
+	if dir := os.Getenv("RINGMASTER_WEB_DIR"); dir != "" {
+		dirs = append(dirs, dir)
+	}
+	if root != "" {
+		dirs = append(dirs,
+			filepath.Join(root, "share", "ringmaster", "web"),
+			filepath.Join(root, "web", ".output"),
+		)
+	}
+	for _, dir := range dirs {
+		script := filepath.Join(dir, "server", "index.mjs")
+		if fi, err := os.Stat(script); err == nil && !fi.IsDir() {
+			return script
+		}
+	}
+	return ""
 }

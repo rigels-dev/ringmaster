@@ -63,25 +63,41 @@ There is a light and a dark theme.
 
 ## Install
 
+**Install script** (Linux and macOS):
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/rigels-dev/ringmaster/main/install.sh | sh
+```
+
+It downloads the latest release for your platform, checks its SHA-256, installs it in `~/.local/share/ringmaster` and links `ringmaster` into `~/.local/bin`. Run it again to upgrade. Set `RINGMASTER_VERSION` (e.g. `v0.2.0-bellatrix`) to pick a release.
+
+**Homebrew** (macOS and Linux):
+
+```bash
+brew install rigels-dev/tap/ringmaster
+```
+
+**From source:**
+
 ```bash
 git clone https://github.com/rigels-dev/ringmaster.git
 cd ringmaster
 make build web        # bin/ringmaster and the web UI
 ln -s "$PWD/bin/ringmaster" ~/.local/bin/ringmaster
-ringmaster --version  # ringmaster version v0.1.0-antares
 ```
 
-Keep the binary in the repository's `bin/`: Ringmaster finds its global config and web UI relative to it.
+Check the install with `ringmaster --version`. The web UI needs Node.js 22 or newer at run time; the CLI does not.
 
 ## Configure your fleet
 
-The fleet lives in `ringmaster.toml` at the root of the Ringmaster install. Start from the example, or use the interactive editor:
+The fleet lives in `~/.config/ringmaster/ringmaster.toml` (or `$XDG_CONFIG_HOME/ringmaster/`), outside the install, so upgrades keep it. Set it up with the interactive editor, or start from the example:
 
 ```bash
-cp ringmaster.example.toml ringmaster.toml
 ringmaster config        # TUI: add providers, pick models, set master (m) and default worker (w)
 ringmaster agents list   # check what is registered
 ```
+
+A config left next to an older install (`<install>/ringmaster.toml`) is copied to the new location the first time you run a newer version.
 
 ```toml
 [providers.claude_sub]
@@ -190,6 +206,7 @@ Releases are named `v{major}.{mid}.{minor}-{codename}`. Codenames are stars in a
 ```bash
 make test     # go vet and the test suite
 make build    # binary, stamped with the version from VERSION
+make dist     # release archives for linux/darwin × amd64/arm64, with checksums
 make web      # web UI (Nuxt)
 make tag      # tag the current commit with the version from VERSION
 ```

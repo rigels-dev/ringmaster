@@ -1,5 +1,6 @@
-# Binaries
+# Binaries and release archives
 bin/
+dist/
 *.exe
 *.exe~
 *.dll
