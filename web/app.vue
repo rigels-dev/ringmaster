@@ -4,15 +4,27 @@
     <aside class="w-64 flex flex-col bg-slate-dark border-r border-steel z-20">
       <!-- Brand Header with Kinematic Rotating Cog Icon -->
       <div class="h-14 flex items-center gap-3 px-4 border-b border-steel bg-slate-deep">
-        <RingmasterEmblem :status="currentKinematicStatus" size="sm" />
+        <RingmasterEmblem :status="currentKinematicStatus" size="sm" class="shrink-0" />
         <div>
           <h1 class="font-cinzel font-black tracking-wider text-gear-gold text-sm flex items-center gap-1.5">
             <span>RINGMASTER</span>
-            <span v-if="isThinking || isGeneratingPlan" class="text-[8px] px-1 py-0.2 rounded bg-gear-dark/40 text-gear-gold animate-pulse">PLANNING</span>
-            <span v-else-if="activeWorkersList.length > 0" class="text-[8px] px-1 py-0.2 rounded bg-green-950 text-green-400 border border-green-800">RUNNING</span>
           </h1>
           <p class="text-[9px] text-zinc-400 tracking-tight font-outfit uppercase">Agent Control Plane</p>
         </div>
+        <button
+          @click="toggleTheme"
+          class="ml-auto w-7 h-7 flex items-center justify-center rounded border border-steel text-zinc-400 hover:text-gear-gold hover:border-gear-dark transition"
+          :title="theme === 'light' ? 'Switch to dark theme' : 'Switch to light theme'"
+          :aria-label="theme === 'light' ? 'Switch to dark theme' : 'Switch to light theme'"
+        >
+          <svg v-if="theme === 'light'" class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z" />
+          </svg>
+          <svg v-else class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="4" />
+            <path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" />
+          </svg>
+        </button>
       </div>
 
       <!-- Navigation Links -->
@@ -83,7 +95,7 @@
     </aside>
 
     <!-- Global Floating Toast Notification System (Replaces browser alert) -->
-    <div class="fixed bottom-5 right-5 z-50 flex flex-col gap-2 pointer-events-none max-w-sm">
+    <div class="fixed top-5 right-5 z-50 flex flex-col gap-2 pointer-events-none max-w-sm">
       <div 
         v-for="toast in toastList" 
         :key="toast.id"
@@ -144,8 +156,14 @@
       <TasksView v-else-if="activeView === 'tasks'" />
       <ProvidersView v-else-if="activeView === 'providers'" />
       <LogsView v-else-if="activeView === 'logs'" />
+      <BranchesView v-else-if="activeView === 'branches'" />
       <AnalyticsView v-else-if="activeView === 'analytics'" />
     </main>
+
+    <!-- Integrated terminal (floating window behind a bottom-right bubble) -->
+    <ClientOnly>
+      <TerminalDock />
+    </ClientOnly>
   </div>
 </template>
 
@@ -170,6 +188,8 @@ const {
   start,
   stop
 } = useRingmaster()
+
+const { theme, toggleTheme } = useTheme()
 
 onMounted(start)
 onUnmounted(stop)

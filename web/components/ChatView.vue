@@ -14,6 +14,28 @@
               </p>
             </div>
             
+            <div class="flex items-center gap-2">
+            <!-- Master Planner activity, shown here rather than next to the sidebar logo -->
+            <span
+              v-if="isThinking || isGeneratingPlan"
+              class="px-2 py-1 rounded border border-gear-dark/60 bg-gear-dark/20 text-gear-gold text-[10px] font-bold uppercase tracking-wide flex items-center gap-1.5 whitespace-nowrap"
+            >
+              <span class="w-1.5 h-1.5 rounded-full bg-gear-gold animate-pulse"></span>
+              {{ isGeneratingPlan ? 'Generating plan' : 'Planning' }}
+            </span>
+            <!-- Orchestration activity; click through to the live logs -->
+            <button
+              v-if="isRunActive"
+              @click="activeView = 'logs'"
+              class="px-2 py-1 rounded border border-cyan-700 bg-cyan-950 text-cyan-300 hover:border-cyan-500 text-[10px] font-bold uppercase tracking-wide flex items-center gap-1.5 whitespace-nowrap transition"
+              title="Open live logs"
+            >
+              <span class="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse"></span>
+              Running
+              <span class="font-normal normal-case text-cyan-200/80">
+                · {{ activeWorkersList.length }} worker{{ activeWorkersList.length === 1 ? '' : 's' }} · {{ completedTasksCount }}/{{ tasks.length }} done
+              </span>
+            </button>
             <button 
               v-if="!project.isBlank"
               @click="activeView = 'tasks'" 
@@ -22,6 +44,7 @@
               <span>View Tasks Pipeline ({{ tasks.length }})</span>
               <span>▸</span>
             </button>
+            </div>
           </div>
 
           <!-- Messages Stream -->
@@ -73,7 +96,7 @@
                 <div v-if="msg.role === 'master' && msg.text && msg.text.includes('DAG Plan successfully generated')" class="mt-3 pt-2.5 border-t border-gear-dark/40 flex items-center gap-2">
                   <button 
                     @click="setView('tasks')"
-                    class="px-3.5 py-1.5 bg-gradient-to-r from-gear-gold to-amber-500 hover:from-amber-400 hover:to-gear-gold text-slate-deep font-bold text-xs rounded transition flex items-center gap-1.5 shadow"
+                    class="px-3.5 py-1.5 bg-gradient-to-r from-gear-gold to-amber-500 hover:from-amber-400 hover:to-gear-gold text-ink font-bold text-xs rounded transition flex items-center gap-1.5 shadow"
                   >
                     <span>📋 View & Review Tasks Pipeline</span>
                     <span>▸</span>
@@ -83,16 +106,10 @@
                 <!-- Actionable Buttons if worker needs review -->
                 <div v-if="msg.actionable" class="mt-3 pt-3 border-t border-steel/60 flex items-center gap-2">
                   <button 
-                    @click="instructWorker(msg, 'approve')" 
+                    @click="instructWorker(msg, 'answer')" 
                     class="px-2.5 py-1 bg-green-950 hover:bg-green-900 text-green-400 border border-green-800 rounded text-[10px] font-bold transition"
                   >
-                    ✓ Approve & Continue
-                  </button>
-                  <button 
-                    @click="instructWorker(msg, 'direct')" 
-                    class="px-2.5 py-1 bg-slate-dark hover:bg-slate-panel text-cyan-energy border border-steel rounded text-[10px] font-semibold transition"
-                  >
-                    💬 Direct {{ msg.workerId }}
+                    🙋 Answer in task panel
                   </button>
                   <button 
                     @click="instructWorker(msg, 'via_master')" 
@@ -126,14 +143,27 @@
           </div>
 
           <!-- Input Bar with Dynamic Target Selector -->
-          <div class="p-4 border-t border-steel bg-slate-panel">
+          <div class="relative p-4 border-t border-steel bg-slate-panel">
+            <!-- Drag handle: pull the top edge to resize the input, double-click to reset -->
+            <div
+              class="group absolute -top-1.5 left-0 right-0 h-3 cursor-row-resize z-10 flex items-center justify-center touch-none"
+              title="Drag to resize · double-click to reset"
+              @pointerdown="startResize"
+              @dblclick="resetInputHeight"
+            >
+              <div
+                class="h-1 w-12 rounded-full transition-colors"
+                :class="isResizing ? 'bg-gear-gold' : 'bg-steel group-hover:bg-gear-dark'"
+              ></div>
+            </div>
+
             <!-- Warning if no Master Planner is configured -->
             <div v-if="!hasMasterPlanner" class="mb-3 p-3 bg-amber-950/60 border border-amber-800 rounded flex items-center justify-between text-xs">
               <div class="flex items-center gap-2 text-amber-300">
                 <span>⚠</span>
                 <span>No Master Planner configured. Project briefing chat is disabled.</span>
               </div>
-              <button @click="activeView = 'providers'" class="px-2.5 py-1 bg-gear-gold text-slate-deep font-bold rounded text-[10px]">
+              <button @click="activeView = 'providers'" class="px-2.5 py-1 bg-gear-gold text-ink font-bold rounded text-[10px]">
                 Assign Master in Providers ▸
               </button>
             </div>
@@ -147,7 +177,7 @@
                   @click="selectedTarget = 'master'"
                   :disabled="!hasMasterPlanner"
                   class="px-2.5 py-1 rounded text-[10px] font-bold transition flex items-center gap-1 whitespace-nowrap disabled:opacity-40 disabled:cursor-not-allowed"
-                  :class="selectedTarget === 'master' ? 'bg-gear-gold text-slate-deep' : 'bg-slate-inner text-zinc-400 border border-steel hover:text-zinc-200'"
+                  :class="selectedTarget === 'master' ? 'bg-gear-gold text-ink' : 'bg-slate-inner text-zinc-400 border border-steel hover:text-zinc-200'"
                 >
                   <span>🎪 Master Planner</span>
                   <span v-if="!hasMasterPlanner" class="text-[8px] text-amber-300">(None)</span>
@@ -159,7 +189,7 @@
                   :key="worker.taskId"
                   @click="selectedTarget = worker.id"
                   class="px-2.5 py-1 rounded text-[10px] font-bold transition flex items-center gap-1.5 whitespace-nowrap"
-                  :class="selectedTarget === worker.id ? 'bg-cyan-energy text-slate-deep' : 'bg-slate-inner text-zinc-400 border border-steel hover:text-zinc-200'"
+                  :class="selectedTarget === worker.id ? 'bg-cyan-energy text-ink' : 'bg-slate-inner text-zinc-400 border border-steel hover:text-zinc-200'"
                 >
                   <span class="w-1.5 h-1.5 rounded-full bg-green-400 animate-ping"></span>
                   <span>🤖 {{ worker.name }} (Task {{ worker.taskId }})</span>
@@ -179,7 +209,7 @@
                   :disabled="isGeneratingPlan || !hasMasterPlanner || !canGeneratePlan"
                   class="px-3.5 py-1.5 rounded flex items-center gap-1.5 shadow transition font-bold text-[11px] whitespace-nowrap"
                   :class="canGeneratePlan 
-                    ? 'bg-gradient-to-r from-gear-gold to-amber-500 hover:from-amber-400 hover:to-gear-gold text-slate-deep animate-pulse shadow-[0_0_15px_rgba(222,170,59,0.5)] cursor-pointer' 
+                    ? 'bg-gradient-to-r from-gear-gold to-amber-500 hover:from-amber-400 hover:to-gear-gold text-ink animate-pulse shadow-[0_0_15px_rgba(222,170,59,0.5)] cursor-pointer' 
                     : 'bg-slate-dark text-zinc-500 border border-steel/60 opacity-60 cursor-not-allowed'"
                   :title="canGeneratePlan ? 'Master has sufficient info! Click to decompose into DAG tasks.' : 'Master is still evaluating requirements with you. Keep discussing to unlock.'"
                 >
@@ -200,18 +230,19 @@
                   v-model="inputMsg"
                   :disabled="selectedTarget === 'master' && !hasMasterPlanner"
                   rows="2"
+                  :style="{ height: inputHeight + 'px' }"
                   @keydown.enter.exact.prevent="sendMessage"
                   @keydown.enter.shift.exact="inputMsg += '\n'"
                   :placeholder="selectedTarget === 'master' 
                     ? (hasMasterPlanner ? 'Message Master Planner (e.g. features to implement in ' + (project.name || 'project') + ')...\nPress Enter to send, Shift+Enter for newline' : 'Chat disabled: Set an agent as Master Planner in Providers menu first.')
                     : `Direct instruction to automaton '${selectedTarget}'...\nPress Enter to send, Shift+Enter for newline`"
-                  class="w-full bg-slate-inner border border-steel text-parchment text-xs px-4 py-2.5 rounded focus:outline-none focus:border-gear-gold disabled:opacity-40 disabled:cursor-not-allowed resize-y min-h-[52px] max-h-48 leading-relaxed font-mono"
+                  class="w-full bg-slate-inner border border-steel text-parchment text-xs px-4 py-2.5 rounded focus:outline-none focus:border-gear-gold disabled:opacity-40 disabled:cursor-not-allowed resize-none leading-relaxed font-mono"
                 ></textarea>
               </div>
               <button 
                 type="submit" 
                 :disabled="(selectedTarget === 'master' && !hasMasterPlanner) || !inputMsg.trim()"
-                class="px-5 py-3 bg-cyan-dim hover:bg-cyan-energy text-slate-deep font-bold text-xs rounded transition flex items-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed h-[52px] shadow-sm mb-1"
+                class="px-5 py-3 bg-cyan-dim hover:bg-cyan-energy text-ink font-bold text-xs rounded transition flex items-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed h-[52px] shadow-sm mb-1"
               >
                 <span>Send</span>
                 <span>↑</span>
@@ -287,9 +318,64 @@ const {
   canGeneratePlan,
   tasks,
   activeWorkersList,
+  isRunActive,
+  completedTasksCount,
   isGeneratingPlan,
   triggerGeneratePlan,
   sendMessage,
   instructWorker
 } = useRingmaster()
+
+// Resizable input: dragging the panel's top edge up grows the textarea and
+// shrinks the message list. Height is remembered per browser.
+const INPUT_HEIGHT_KEY = 'rm-chat-input-height'
+const MIN_INPUT_HEIGHT = 52
+const DEFAULT_INPUT_HEIGHT = 64
+
+const inputHeight = ref(DEFAULT_INPUT_HEIGHT)
+const isResizing = ref(false)
+
+const maxInputHeight = () => Math.max(MIN_INPUT_HEIGHT, Math.round(window.innerHeight * 0.7))
+const clampHeight = (h) => Math.min(maxInputHeight(), Math.max(MIN_INPUT_HEIGHT, Math.round(h)))
+
+const saveInputHeight = () => {
+  try {
+    localStorage.setItem(INPUT_HEIGHT_KEY, String(inputHeight.value))
+  } catch {}
+}
+
+const startResize = (e) => {
+  e.preventDefault()
+  const startY = e.clientY
+  const startHeight = inputHeight.value
+  isResizing.value = true
+  document.body.style.cursor = 'row-resize'
+  document.body.style.userSelect = 'none'
+
+  const onMove = (ev) => {
+    inputHeight.value = clampHeight(startHeight + (startY - ev.clientY))
+  }
+  const onUp = () => {
+    isResizing.value = false
+    document.body.style.cursor = ''
+    document.body.style.userSelect = ''
+    window.removeEventListener('pointermove', onMove)
+    window.removeEventListener('pointerup', onUp)
+    saveInputHeight()
+  }
+  window.addEventListener('pointermove', onMove)
+  window.addEventListener('pointerup', onUp)
+}
+
+const resetInputHeight = () => {
+  inputHeight.value = DEFAULT_INPUT_HEIGHT
+  saveInputHeight()
+}
+
+onMounted(() => {
+  try {
+    const saved = Number(localStorage.getItem(INPUT_HEIGHT_KEY))
+    if (saved) inputHeight.value = clampHeight(saved)
+  } catch {}
+})
 </script>

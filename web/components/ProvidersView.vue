@@ -91,7 +91,7 @@
               <button 
                 @click="saveProvider" 
                 :disabled="!isProviderFormValid"
-                class="flex-1 py-2 bg-gear-gold hover:bg-gear-glow text-slate-deep rounded text-xs font-bold transition disabled:opacity-40 disabled:cursor-not-allowed"
+                class="flex-1 py-2 bg-gear-gold hover:bg-gear-glow text-ink rounded text-xs font-bold transition disabled:opacity-40 disabled:cursor-not-allowed"
                 :title="isProviderFormValid ? 'Save provider configuration' : 'Fill in all required fields to save'"
               >
                 💾 Save Provider
@@ -147,7 +147,7 @@
             </div>
             <button 
               @click="showAddAgentModal = true" 
-              class="px-3 py-1.5 bg-cyan-dim hover:bg-cyan-energy text-slate-deep font-bold text-xs rounded transition flex items-center gap-1.5"
+              class="px-3 py-1.5 bg-cyan-dim hover:bg-cyan-energy text-ink font-bold text-xs rounded transition flex items-center gap-1.5"
             >
               <span>+ Register New Agent</span>
             </button>
@@ -213,7 +213,7 @@
                   <span>{{ isPingingNewAgent ? 'Testing Model...' : 'Ping Model' }}</span>
                 </button>
                 <button @click="showAddAgentModal = false" class="px-3 py-1 bg-slate-panel hover:bg-slate-dark text-zinc-400 text-xs rounded border border-steel">Cancel</button>
-                <button @click="saveNewAgent" class="px-4 py-1 bg-gear-gold hover:bg-gear-glow text-slate-deep font-bold text-xs rounded">Save Agent</button>
+                <button @click="saveNewAgent" class="px-4 py-1 bg-gear-gold hover:bg-gear-glow text-ink font-bold text-xs rounded">Save Agent</button>
               </div>
             </div>
           </div>
@@ -261,7 +261,7 @@
                   <td class="py-3">
                     <span 
                       class="text-[9px] font-bold px-2 py-0.5 rounded uppercase font-mono"
-                      :class="a.role === 'master' ? 'bg-gear-gold text-slate-deep' : 'bg-slate-inner text-cyan-energy border border-cyan-dim/40'"
+                      :class="a.role === 'master' ? 'bg-gear-gold text-ink' : 'bg-slate-inner text-cyan-energy border border-cyan-dim/40'"
                     >
                       {{ a.role === 'master' ? 'MASTER' : 'AUTOMATON' }}
                     </span>
@@ -286,7 +286,7 @@
                     <button 
                       v-if="a.role !== 'master'" 
                       @click="setAgentRole(a.id, 'master')" 
-                      class="px-2 py-0.5 rounded text-[10px] bg-gear-dark/40 hover:bg-gear-gold hover:text-slate-deep text-gear-gold border border-gear-dark transition"
+                      class="px-2 py-0.5 rounded text-[10px] bg-gear-dark/40 hover:bg-gear-gold hover:text-ink text-gear-gold border border-gear-dark transition"
                       title="Promote to Master Planner"
                     >
                       ★ Set Master
@@ -295,7 +295,7 @@
                     <button 
                       v-if="a.role !== 'worker'" 
                       @click="setAgentRole(a.id, 'worker')" 
-                      class="px-2 py-0.5 rounded text-[10px] bg-slate-inner hover:bg-cyan-energy hover:text-slate-deep text-cyan-energy border border-steel transition"
+                      class="px-2 py-0.5 rounded text-[10px] bg-slate-inner hover:bg-cyan-energy hover:text-ink text-cyan-energy border border-steel transition"
                       title="Designate as Automaton"
                     >
                       🤖 Set Automaton

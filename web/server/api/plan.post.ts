@@ -5,9 +5,9 @@ import { ringmasterBinPath, rootTomlPath, resolveProjectDir, runCommand } from '
 export default defineEventHandler(async (event) => {
   const projectDir = resolveProjectDir()
   const ringmasterBin = ringmasterBinPath()
-  const briefPath = path.join(projectDir, 'BRIEF.md')
-  const planFile = path.join(projectDir, 'plan.json')
-  const approvedFile = path.join(projectDir, 'plan.approved.json')
+  const briefPath = path.join(projectDir, '.ringmaster', 'BRIEF.md')
+  const planFile = path.join(projectDir, '.ringmaster', 'plan.json')
+  const approvedFile = path.join(projectDir, '.ringmaster', 'plan.approved.json')
   const dotRingmaster = path.join(projectDir, '.ringmaster')
   const chatFile = path.join(dotRingmaster, 'chat_history.json')
 
@@ -70,6 +70,28 @@ export default defineEventHandler(async (event) => {
         }
       }
 
+      // ACTION: ANSWER AN OPEN QUESTION FROM THE MASTER
+      if (action === 'answer_question') {
+        const { questionId } = body
+        const answer = typeof body.answer === 'string' ? body.answer.trim() : ''
+        if (!questionId || !fs.existsSync(planFile)) {
+          return { ok: false, error: 'questionId and an existing plan.json are required' }
+        }
+        const plan = JSON.parse(fs.readFileSync(planFile, 'utf-8'))
+        const q = (plan.open_questions || []).find((x: any) => x.id === questionId)
+        if (!q) {
+          return { ok: false, error: `Question ${questionId} not found` }
+        }
+        if (answer) q.answer = answer
+        else delete q.answer
+        fs.writeFileSync(planFile, JSON.stringify(plan, null, 2), 'utf-8')
+        // Answers are part of the plan hash, so any change needs a fresh approval
+        if (fs.existsSync(approvedFile)) {
+          try { fs.unlinkSync(approvedFile) } catch {}
+        }
+        return { ok: true, plan, isApproved: false }
+      }
+
       // 2. ACTION: UPDATE TASK WORKER
       if (action === 'update_worker') {
         const { taskId, worker } = body
@@ -127,6 +149,7 @@ export default defineEventHandler(async (event) => {
             // Join all user requirements chronologically so no prompt instruction is lost
             const consolidatedBrief = `# Project Requirements & Specifications\n\n` + 
               userMsgs.map((msg: string, idx: number) => `### Instruction / Requirement #${idx + 1}\n${msg}`).join('\n\n')
+            fs.mkdirSync(path.dirname(briefPath), { recursive: true })
             fs.writeFileSync(briefPath, consolidatedBrief, 'utf-8')
           }
         } catch {}

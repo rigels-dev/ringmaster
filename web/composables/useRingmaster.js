@@ -17,7 +17,7 @@ function createRingmaster() {
   function syncViewFromHash() {
     if (typeof window === 'undefined') return
     const hash = window.location.hash.replace(/^#\/?/, '').toLowerCase()
-    if (['chat', 'tasks', 'providers', 'logs', 'analytics'].includes(hash)) {
+    if (['chat', 'tasks', 'branches', 'providers', 'logs', 'analytics'].includes(hash)) {
       activeView.value = hash
     }
   }
@@ -150,9 +150,14 @@ function createRingmaster() {
       id: 'tasks', 
       label: 'Tasks', 
       icon: '📋',
-      badge: tasks.value.length > 0 && !planApprovalState.value.isApproved ? 'Needs Approval' : null,
-      badgeClass: 'bg-amber-950 text-amber-300 border border-amber-700'
+      badge: needsYouCount.value > 0
+        ? `🙋 Needs you (${needsYouCount.value})`
+        : tasks.value.length > 0 && !planApprovalState.value.isApproved ? 'Needs Approval' : null,
+      badgeClass: needsYouCount.value > 0
+        ? 'bg-rose-950 text-rose-300 border border-rose-700 animate-pulse'
+        : 'bg-amber-950 text-amber-300 border border-amber-700'
     },
+    { id: 'branches', label: 'Branches', icon: '🌿' },
     { id: 'providers', label: 'Providers', icon: '🤖' },
     { id: 'logs', label: 'Logs', icon: '📜', badge: isRunActive.value ? 'Live' : null, badgeClass: 'bg-cyan-950 text-cyan-300 border border-cyan-800' },
     { id: 'analytics', label: 'Analytics', icon: '📈' }
@@ -167,6 +172,8 @@ function createRingmaster() {
   })
 
   const messages = ref([])
+  // Set once saved chat history is loaded; alerts must not be saved over it before then
+  const chatLoaded = ref(false)
   const isThinking = ref(false)
   const chatContainerRef = ref(null)
   const canGeneratePlan = ref(false)
@@ -254,6 +261,7 @@ function createRingmaster() {
 
       // Check if there is saved chat history first
       const hasHistory = await loadChatHistory()
+      chatLoaded.value = true
 
       // If blank project and no prior chat history, initialize welcoming chat
       if (!hasHistory && data.isBlank) {
@@ -298,10 +306,108 @@ function createRingmaster() {
         depends_on: t.depends_on || [],
         status: ts.status || 'PENDING',
         error: ts.error || '',
+        requests: ts.requests || [],
         retries: `${ts.attempt || 0}/${t.max_retries || 2}`
       }
     })
   })
+
+  // Statuses where a task can only move on after the user acts
+  const NEEDS_YOU_STATUSES = ['AWAITING_INPUT', 'BLOCKED', 'NEEDS_REVIEW', 'PAUSED']
+
+  const unansweredQuestions = computed(() =>
+    (project.value.plan?.open_questions || []).filter(q => !(q.answer || '').trim())
+  )
+
+  const needsYouCount = computed(() =>
+    tasks.value.filter(t => NEEDS_YOU_STATUSES.includes(t.status)).length + unansweredQuestions.value.length
+  )
+
+  // Task whose detail modal is open (shared so Chat can open it too)
+  const openTaskId = ref(null)
+  function openTaskDetail(id) {
+    openTaskId.value = id
+    setView('tasks')
+  }
+
+  // Post a chat alert when a task starts waiting on the user; clear it once it moves on
+  watch([tasks, chatLoaded], ([list, loaded]) => {
+    if (!loaded) return
+    let changed = false
+    for (const t of list) {
+      const waiting = NEEDS_YOU_STATUSES.includes(t.status)
+      const alertKey = `${t.id}:${t.status}:${t.error}`
+      for (const m of messages.value) {
+        if (m.alertTaskId === t.id && m.actionable && (!waiting || m.alertKey !== alertKey)) {
+          m.actionable = false
+          changed = true
+        }
+      }
+      if (!waiting || messages.value.some(m => m.alertKey === alertKey)) continue
+      const lines = t.requests.map(r => r.type === 'approval'
+        ? `• [${r.id}] Approve command: ${r.command}${r.reason ? ` (${r.reason})` : ''}`
+        : `• [${r.id}] ${r.question}${r.options?.length ? ` (${r.options.join(' / ')})` : ''}`)
+      const reason = t.error.length > 400 ? `${t.error.slice(0, 400)}…` : t.error
+      messages.value.push({
+        role: 'worker',
+        workerId: t.worker,
+        taskId: t.id,
+        taskBranch: `rm/${t.id}`,
+        statusTitle: `🙋 ${t.status.replace('_', ' ')}: needs you`,
+        text: lines.length ? `${reason}\n\n${lines.join('\n')}` : reason,
+        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        actionable: true,
+        alertTaskId: t.id,
+        alertKey
+      })
+      changed = true
+    }
+    if (changed) saveChatHistory()
+  })
+
+  async function answerTask(id, payload) {
+    try {
+      const res = await fetch('/api/task', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, ...payload })
+      })
+      const data = await res.json()
+      if (!data.ok) {
+        showToast('Answer Failed', data.error, 'error')
+        return false
+      }
+      if (data.resumeError) {
+        showToast('Answer Saved', `Could not resume automatically: ${data.resumeError}`, 'error')
+      } else {
+        showToast('Answer Sent', `${id} is re-queued; the automaton continues with your answer.`, 'success')
+      }
+      await refreshProject()
+      return true
+    } catch (err) {
+      showToast('Answer Failed', err.message, 'error')
+      return false
+    }
+  }
+
+  async function answerPlanQuestion(questionId, answer) {
+    try {
+      const res = await fetch('/api/plan', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'answer_question', questionId, answer })
+      })
+      const data = await res.json()
+      if (!data.ok) {
+        showToast('Answer Failed', data.error, 'error')
+        return
+      }
+      planApprovalState.value.isApproved = false
+      await refreshProject()
+    } catch (err) {
+      showToast('Answer Failed', err.message, 'error')
+    }
+  }
 
   const activeWorkersList = computed(() => {
     // Only return active if run process is actually alive OR status is truly RUNNING
@@ -327,8 +433,9 @@ function createRingmaster() {
   const totalTokensConsumed = computed(() => {
     if (!project.value.state) return '0'
     let total = 0
-    if (project.value.state.planning) {
-      total += (project.value.state.planning.tokens_in || 0) + (project.value.state.planning.tokens_out || 0)
+    const planning = project.value.state.planning_usage
+    if (planning) {
+      total += (planning.tokens_in || 0) + (planning.tokens_out || 0)
     }
     if (project.value.state.task_states) {
       for (const ts of Object.values(project.value.state.task_states)) {
@@ -341,7 +448,7 @@ function createRingmaster() {
   })
 
   const completedTasksCount = computed(() => {
-    return tasks.value.filter(t => t.status === 'DONE').length
+    return tasks.value.filter(t => t.status === 'DONE' || t.status === 'COMPLETED').length
   })
 
   async function saveNewAgent() {
@@ -882,17 +989,8 @@ function createRingmaster() {
   }
 
   function instructWorker(msg, action) {
-    if (action === 'approve') {
-      messages.value.push({
-        role: 'user',
-        targetLabel: msg.workerId,
-        text: `Approved report for ${msg.taskId}. Lanjutkan ke langkah berikutnya.`,
-        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-      })
-      msg.actionable = false
-    } else if (action === 'direct') {
-      selectedTarget.value = msg.workerId
-      inputMsg.value = `Untuk task ${msg.taskId}: `
+    if (action === 'answer') {
+      openTaskDetail(msg.taskId)
     } else if (action === 'via_master') {
       selectedTarget.value = 'master'
       inputMsg.value = `Master, tolong bantu arahkan ${msg.workerId} di task ${msg.taskId}.`
@@ -904,6 +1002,7 @@ function createRingmaster() {
   const isRunExternal = ref(false)
   const runPid = ref(null)
   const runLogs = ref([])
+  const runLogTimes = ref([])
   let runPollTimer = null
 
   const runConsoleRef = ref(null)
@@ -927,10 +1026,10 @@ function createRingmaster() {
         const logs = data.logs || []
         if (logs.length !== runLogs.value.length || logs[logs.length - 1] !== runLogs.value[runLogs.value.length - 1]) {
           runLogs.value = logs
+          runLogTimes.value = data.logTimes || []
+          // The Logs page manages its own scrolling (it pauses when you scroll up)
           nextTick(() => {
-            for (const el of [runConsoleRef.value, logsPageRef.value]) {
-              if (el) el.scrollTop = el.scrollHeight + 100
-            }
+            if (runConsoleRef.value) runConsoleRef.value.scrollTop = runConsoleRef.value.scrollHeight + 100
           })
         }
         if (data.projectState) {
@@ -985,6 +1084,7 @@ function createRingmaster() {
         body: JSON.stringify({ action: 'clear_logs' })
       })
       runLogs.value = []
+      runLogTimes.value = []
     } catch (err) {
       showToast('Failed to clear logs', err.message, 'error')
     }
@@ -1038,6 +1138,12 @@ function createRingmaster() {
     inputMsg,
     syncViewFromHash,
     setView,
+    unansweredQuestions,
+    openTaskId,
+    openTaskDetail,
+    needsYouCount,
+    answerTask,
+    answerPlanQuestion,
     project,
     providersData,
     newProv,
@@ -1103,6 +1209,7 @@ function createRingmaster() {
     isRunExternal,
     runPid,
     runLogs,
+    runLogTimes,
     runConsoleRef,
     logsPageRef,
     logLineClass,

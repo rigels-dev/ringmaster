@@ -26,26 +26,10 @@ export function rootTomlPath(): string {
   return path.join(ringmasterRoot(), 'ringmaster.toml')
 }
 
-// Resolve project directory in priority:
-// a. Environment variable RINGMASTER_PROJECT_DIR
-// b. Global active project file (~/.ringmaster/active_project)
-// c. Process CWD
+// Project directory: set by the Go launcher, which only starts inside a
+// project. Falls back to the process CWD when the server is run by hand.
 export function resolveProjectDir(): string {
-  let projectDir = process.env.RINGMASTER_PROJECT_DIR
-
-  if (!projectDir) {
-    const activeFile = path.join(os.homedir(), '.ringmaster', 'active_project')
-    if (fs.existsSync(activeFile)) {
-      try {
-        const stored = fs.readFileSync(activeFile, 'utf-8').trim()
-        if (stored && fs.existsSync(stored)) {
-          projectDir = stored
-        }
-      } catch {}
-    }
-  }
-
-  return projectDir || process.cwd()
+  return process.env.RINGMASTER_PROJECT_DIR || process.cwd()
 }
 
 // Run a command without a shell (args are passed verbatim), optionally piping

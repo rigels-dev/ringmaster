@@ -17,7 +17,7 @@ export default defineEventHandler((event) => {
   }> = []
 
   // Check worktrees
-  const worktreesDir = path.join(projectDir, '.worktrees')
+  const worktreesDir = path.join(projectDir, '.ringmaster', 'worktrees')
   if (fs.existsSync(worktreesDir)) {
     try {
       const entries = fs.readdirSync(worktreesDir)
@@ -51,13 +51,14 @@ export default defineEventHandler((event) => {
     try {
       const files = fs.readdirSync(centralLogs)
       for (const f of files) {
-        if (f.endsWith('.jsonl') && f !== 'events.jsonl') {
+        // Archived task transcripts only; events.jsonl and run*.jsonl are not per-task logs
+        if (/^T\d+-attempt\d+\.jsonl$/.test(f)) {
           const fullPath = path.join(centralLogs, f)
           const stat = fs.statSync(fullPath)
-          const taskMatch = f.match(/(T\d+)/)
-          const tId = taskMatch ? taskMatch[1] : 'SYSTEM'
-          const attemptMatch = f.match(/attempt(\d+)/)
-          const attempt = attemptMatch ? parseInt(attemptMatch[1], 10) : 1
+          const tId = f.match(/^(T\d+)/)![1]
+          const attempt = parseInt(f.match(/attempt(\d+)/)![1], 10)
+          // A live worktree copy is newer than the archive
+          if (items.some((it) => it.taskId === tId && it.attempt === attempt)) continue
           items.push({
             taskId: tId,
             attempt,

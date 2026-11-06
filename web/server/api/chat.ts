@@ -6,9 +6,9 @@ export default defineEventHandler(async (event) => {
   const projectDir = resolveProjectDir()
   const dotRingmaster = path.join(projectDir, '.ringmaster')
   const chatFile = path.join(dotRingmaster, 'chat_history.json')
-  const briefPath = path.join(projectDir, 'BRIEF.md')
+  const briefPath = path.join(projectDir, '.ringmaster', 'BRIEF.md')
+  // Master agent and its provider come from the global fleet config only
   const rootToml = rootTomlPath()
-  const projectToml = path.join(projectDir, 'ringmaster.toml')
 
   if (event.node.req.method === 'GET') {
     if (fs.existsSync(chatFile)) {
@@ -61,11 +61,7 @@ export default defineEventHandler(async (event) => {
           } catch {}
         }
 
-        // Check project-specific TOML first, then fallback to global root TOML
-        inspectConfig(projectToml)
-        if (!masterModel) {
-          inspectConfig(rootToml)
-        }
+        inspectConfig(rootToml)
 
         // Fallbacks if not set
         if (!masterModel) {
@@ -95,10 +91,7 @@ export default defineEventHandler(async (event) => {
           } catch {}
         }
 
-        inspectProvider(projectToml, masterProvider)
-        if (!provBaseURL && provType !== 'claude_subscription' && provType !== 'claude-sub' && provType !== 'claude_sub') {
-          inspectProvider(rootToml, masterProvider)
-        }
+        inspectProvider(rootToml, masterProvider)
 
         // Resolve API key environment variable or literal
         let apiKey = ''
@@ -114,8 +107,9 @@ export default defineEventHandler(async (event) => {
 You are currently engaged in a live planning discussion with the project lead/developer.
 Your goals:
 1. Discuss requirements, clarify architecture, verify tech stack, and structure the implementation.
-2. Outline recommended task breakdown, testing strategy, and worker assignment.
+2. Outline recommended task breakdown, testing strategy, and automaton assignment.
 3. Keep answers concise, authoritative, structured, and helpful.
+   TERMINOLOGY: the execution agents that implement tasks are called "automatons" (e.g. "Automaton A", "dikerjakan oleh 2 automaton"). Never call them "workers" in your replies, in any language.
 4. READINESS DECISION (CRITICAL):
    - If the project scope, requirements, or architecture are still vague, ask clarifying questions. DO NOT append the readiness signal.
    - ONLY when you have evaluated that you have sufficient, actionable information (clear tech stack, clear endpoints/logic, and a viable task breakdown), you MUST append this exact signal at the very end of your response:

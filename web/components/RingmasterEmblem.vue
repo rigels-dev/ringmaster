@@ -7,7 +7,8 @@
     <svg 
       xmlns="http://www.w3.org/2000/svg" 
       viewBox="0 0 800 800" 
-      class="w-full h-full drop-shadow-[0_0_12px_rgba(222,170,59,0.35)]"
+      class="w-full h-full"
+      :class="status === 'overdrive' ? 'rm-glow-running' : 'drop-shadow-[0_0_12px_rgba(222,170,59,0.35)]'"
     >
       <defs>
         <component :is="'style'">
@@ -258,7 +259,8 @@ const containerClass = computed(() => {
 const animDurations = computed(() => {
   switch (props.status) {
     case 'overdrive':
-      return { gearDur: '8.3s', ringDur: '18.3s', handDur: '1.2s', pulseDur: '0.3s' }
+      // Running tasks: the spin itself is the activity indicator, so make it obvious
+      return { gearDur: '2.4s', ringDur: '5.5s', handDur: '0.8s', pulseDur: '0.2s' }
     case 'dag':
     case 'planning':
       return { gearDur: '14.0s', ringDur: '30.0s', handDur: '1.8s', pulseDur: '0.45s' }
@@ -282,3 +284,20 @@ const statusTooltip = computed(() => {
   }
 })
 </script>
+
+<style scoped>
+/* Running tasks: a pulsing blue glow replaces the idle gold one */
+.rm-glow-running {
+  animation: rmGlowRunning 1.6s ease-in-out infinite;
+}
+@keyframes rmGlowRunning {
+  0%, 100% { filter: drop-shadow(0 0 6px rgb(var(--c-cyan-energy) / 0.55)); }
+  50% { filter: drop-shadow(0 0 16px rgb(var(--c-cyan-energy) / 0.95)); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .rm-glow-running {
+    animation: none;
+    filter: drop-shadow(0 0 12px rgb(var(--c-cyan-energy) / 0.8));
+  }
+}
+</style>

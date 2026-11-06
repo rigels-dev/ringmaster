@@ -20,7 +20,7 @@
               :class="[
                 isRunActive
                   ? 'bg-cyan-950/90 hover:bg-cyan-900 border-cyan-400 text-cyan-300 ring-2 ring-cyan-400/40 shadow-[0_0_15px_rgba(41,242,236,0.3)] animate-pulse'
-                  : 'bg-gear-gold hover:bg-amber-400 border-amber-500 text-slate-deep shadow-[0_0_12px_rgba(222,170,59,0.25)] active:scale-95'
+                  : 'bg-gear-gold hover:bg-amber-400 border-amber-500 text-ink shadow-[0_0_12px_rgba(222,170,59,0.25)] active:scale-95'
               ]"
               :title="isRunActive ? 'Automatons are running in worktrees. Click to ping status.' : 'Dispatch approved plan to automatons.'"
             >
@@ -77,7 +77,7 @@
           <div class="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
             <div>
               <div class="flex items-center gap-2 mb-1">
-                <span class="text-xs font-black uppercase tracking-wider px-2 py-0.5 rounded" :class="planApprovalState.isApproved ? 'bg-green-500 text-slate-deep' : 'bg-amber-500 text-slate-deep'">
+                <span class="text-xs font-black uppercase tracking-wider px-2 py-0.5 rounded" :class="planApprovalState.isApproved ? 'bg-green-500 text-ink' : 'bg-amber-500 text-ink'">
                   {{ planApprovalState.isApproved ? '★ PLAN APPROVED' : '⚠ APPROVAL REQUIRED' }}
                 </span>
                 <span class="text-xs font-mono text-zinc-300 font-bold">{{ tasks.length }} Tasks Synthesized</span>
@@ -94,14 +94,15 @@
               <button 
                 v-if="!planApprovalState.isApproved"
                 @click="approvePlanAction"
-                :disabled="isApproving"
-                class="px-4 py-2 bg-emerald-500 hover:bg-emerald-400 text-slate-deep font-bold text-xs rounded shadow flex items-center gap-1.5 transition cursor-pointer"
+                :disabled="isApproving || unansweredQuestions.length > 0"
+                :title="unansweredQuestions.length ? 'Answer the open questions first' : ''"
+                class="px-4 py-2 bg-emerald-500 hover:bg-emerald-400 text-ink font-bold text-xs rounded shadow flex items-center gap-1.5 transition cursor-pointer"
               >
                 <span>✓</span>
                 <span>{{ isApproving ? 'Hashing & Locking...' : 'Approve & Lock Plan' }}</span>
               </button>
               <button 
-                @click="triggerGeneratePlan"
+                @click="replanInChat"
                 :disabled="isGeneratingPlan"
                 class="px-3.5 py-2 bg-slate-panel hover:bg-slate-dark text-gear-gold border border-gear-dark rounded text-xs font-bold transition flex items-center gap-1.5"
                 title="Regenerate plan with Master AI"
@@ -118,6 +119,51 @@
               </button>
             </div>
           </div>
+
+          <!-- Master's open questions: all must be answered before approval -->
+          <div v-if="openQuestions.length || assumptions.length" class="mt-3 pt-2 border-t border-amber-700/40 text-xs divide-y divide-steel/40">
+            <!-- Questions accordion: open while anything is unanswered, collapses to a one-line summary once done -->
+            <div v-if="openQuestions.length" class="py-1.5">
+              <button @click="questionsOpen = !questionsOpen" class="w-full flex items-center gap-2 py-1 text-left">
+                <span class="text-zinc-500 text-[10px] w-3">{{ questionsOpen ? '▾' : '▸' }}</span>
+                <span class="font-bold text-amber-200">❓ Questions ({{ openQuestions.length }})</span>
+                <span v-if="unansweredQuestions.length" class="text-rose-300 font-bold">· {{ unansweredQuestions.length }} unanswered</span>
+                <span v-else class="text-emerald-400 font-bold">· all answered</span>
+                <span v-if="!questionsOpen" class="flex-1 min-w-0 truncate text-[10px] text-zinc-500">
+                  {{ openQuestions.map(q => `${q.id}: ${q.answer || '—'}`).join(' · ') }}
+                </span>
+              </button>
+              <div v-if="questionsOpen" class="mt-2 space-y-2">
+                <div v-for="q in openQuestions" :key="q.id" class="bg-slate-inner/70 border border-steel/60 rounded p-2.5 space-y-2">
+                  <div class="text-zinc-200"><span class="text-zinc-500 font-mono">{{ q.id }}</span> {{ q.question }}</div>
+                  <div class="flex flex-wrap gap-2">
+                    <button v-for="opt in q.options || []" :key="opt" @click="answerPlanQuestion(q.id, opt)"
+                      class="px-2.5 py-1 rounded border text-[10px] font-bold"
+                      :class="q.answer === opt ? 'bg-cyan-950 border-cyan-500 text-cyan-200' : 'border-steel text-zinc-400 hover:text-zinc-200'">
+                      {{ opt }}<span v-if="opt === q.recommended" class="text-emerald-400"> ★ recommended</span>
+                    </button>
+                  </div>
+                  <input :value="q.answer && !(q.options || []).includes(q.answer) ? q.answer : ''"
+                    @change="answerPlanQuestion(q.id, $event.target.value)"
+                    placeholder="…or type another answer and press Enter"
+                    class="w-full bg-slate-dark border border-steel rounded px-2 py-1 text-[11px] text-zinc-200" />
+                </div>
+              </div>
+            </div>
+
+            <!-- Assumptions accordion: collapsed by default -->
+            <div v-if="assumptions.length" class="py-1.5">
+              <button @click="assumptionsOpen = !assumptionsOpen" class="w-full flex items-center gap-2 py-1 text-left">
+                <span class="text-zinc-500 text-[10px] w-3">{{ assumptionsOpen ? '▾' : '▸' }}</span>
+                <span class="font-bold text-zinc-300">Assumptions ({{ assumptions.length }})</span>
+                <span class="text-[10px] text-zinc-500">· defaults the master picked</span>
+              </button>
+              <div v-if="assumptionsOpen" class="mt-1.5 pl-5 text-zinc-400 space-y-0.5">
+                <div v-for="(a, i) in assumptions" :key="i">• {{ a }}</div>
+                <div class="pt-1 text-[10px] text-zinc-500">Disagree? Tell the master in Chat and Re-Plan.</div>
+              </div>
+            </div>
+          </div>
         </div>
 
         <!-- If Blank Project -->
@@ -127,7 +173,7 @@
           <p class="text-xs text-zinc-400 max-w-md mb-4">
             This project has just been initialized. Head over to Chat to collaborate with Master Planner or run <code class="text-gear-gold">ringmaster plan</code> in your terminal to create the DAG task workflow.
           </p>
-          <button @click="activeView = 'chat'" class="px-4 py-2 bg-gear-gold text-slate-deep font-bold text-xs rounded">
+          <button @click="activeView = 'chat'" class="px-4 py-2 bg-gear-gold text-ink font-bold text-xs rounded">
             Start Collaboration in Chat ▸
           </button>
         </div>
@@ -137,7 +183,9 @@
           <div 
             v-for="task in tasks" 
             :key="task.id"
-            class="bg-slate-panel border p-4 rounded-lg flex flex-col justify-between transition-all duration-300 relative overflow-hidden"
+            @click="openTaskDetail(task.id)"
+            title="Click for task details, transcript and report"
+            class="bg-slate-panel border p-4 rounded-lg flex flex-col justify-between transition-all duration-300 relative overflow-hidden cursor-pointer"
             :class="{
               'border-cyan-energy/80 shadow-[0_0_20px_rgba(41,242,236,0.35)] ring-1 ring-cyan-energy/50': task.status === 'RUNNING',
               'border-steel hover:border-gear-gold': task.status !== 'RUNNING'
@@ -166,14 +214,18 @@
                   <span 
                     class="text-[9px] px-2 py-0.5 rounded font-bold uppercase flex items-center gap-1"
                     :class="{
-                      'bg-green-950 text-green-400 border border-green-800': task.status === 'DONE',
+                      'bg-green-950 text-green-400 border border-green-800': task.status === 'DONE' || task.status === 'COMPLETED',
                       'bg-cyan-950 text-cyan-300 border border-cyan-500 animate-pulse shadow-sm shadow-cyan-500/50': task.status === 'RUNNING',
                       'bg-red-950 text-red-400 border border-red-800': task.status === 'BLOCKED',
                       'bg-zinc-900 text-zinc-500 border border-zinc-700': task.status === 'FAILED',
+                      'bg-amber-950 text-amber-300 border border-amber-700': task.status === 'NEEDS_REVIEW',
+                      'bg-indigo-950 text-indigo-300 border border-indigo-700': task.status === 'PAUSED',
+                      'bg-rose-950 text-rose-300 border border-rose-700 animate-pulse': task.status === 'AWAITING_INPUT',
                       'bg-slate-inner text-zinc-400 border border-steel': task.status === 'PENDING'
                     }"
                   >
                     <span v-if="task.status === 'RUNNING'">🤖</span>
+                    <span v-else-if="task.status === 'DONE' || task.status === 'COMPLETED'">✓</span>
                     <span>{{ task.status }}</span>
                   </span>
                 </div>
@@ -184,7 +236,11 @@
               <!-- Blocker or Error Reason Alert Banner -->
               <div v-if="task.error" class="mb-3 p-2 bg-red-950/70 border border-red-800/80 rounded text-[10px] text-red-200 font-mono leading-tight">
                 <span class="font-bold text-red-300">⚠ Reason:</span>
-                <p class="mt-0.5 text-red-300/90 line-clamp-2" :title="task.error">{{ task.error }}</p>
+                <p class="mt-0.5 text-red-300/90 line-clamp-2">{{ task.error }}</p>
+                <p class="mt-1 text-[9px] text-red-300/60">Click for full details ▸</p>
+              </div>
+              <div v-if="['AWAITING_INPUT', 'BLOCKED', 'NEEDS_REVIEW', 'PAUSED'].includes(task.status)" class="mb-3 px-2 py-1.5 bg-rose-950/50 border border-rose-700/60 rounded text-[10px] text-rose-200 font-bold">
+                🙋 Needs you<span v-if="task.requests.length"> · {{ task.requests.length }} question(s)</span> · click to answer ▸
               </div>
             </div>
 
@@ -192,15 +248,18 @@
               <!-- Live Worktree & Working Feedback Indicator -->
               <div 
                 v-if="task.status === 'RUNNING'"
-                class="flex flex-col gap-1.5 bg-cyan-950/40 p-2 rounded border border-cyan-500/60 text-cyan-300"
+                class="flex flex-col gap-2 bg-cyan-950/40 px-3 py-2.5 rounded border border-cyan-500/60 text-cyan-300"
               >
-                <div class="flex items-center justify-between text-[10px]">
-                  <span class="flex items-center gap-1.5 font-bold">
-                    <span class="w-2 h-2 bg-cyan-400 rounded-full animate-ping"></span>
-                    <span>Automaton Working:</span>
-                    <code class="text-cyan-energy">rm/{{ task.id }}</code>
+                <div class="flex items-center justify-between gap-2 text-[10px]">
+                  <span class="flex items-center gap-1.5 font-bold whitespace-nowrap">
+                    <span class="w-2 h-2 bg-cyan-400 rounded-full animate-ping shrink-0"></span>
+                    Automaton Working
                   </span>
-                  <span class="text-[9px] font-mono text-zinc-400 animate-pulse">Running Code...</span>
+                  <span class="text-[9px] font-mono text-zinc-400 animate-pulse whitespace-nowrap">Running code…</span>
+                </div>
+                <div class="flex items-center justify-between gap-2 text-[9px] min-w-0">
+                  <code class="text-cyan-energy truncate" :title="`branch rm/${task.id}`">⎇ rm/{{ task.id }}</code>
+                  <span class="text-zinc-400 truncate" :title="task.worker">{{ task.worker }}</span>
                 </div>
                 <!-- Shimmering Activity Progress Bar -->
                 <div class="w-full h-1 bg-slate-900 rounded overflow-hidden relative">
@@ -217,14 +276,21 @@
               <!-- Interactive Automaton Selection Dropdown -->
               <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 text-[10px] bg-slate-inner p-2 rounded border border-steel/50">
                 <span class="text-zinc-400 font-semibold whitespace-nowrap">Assigned Automaton:</span>
-                <div class="relative w-full sm:w-auto flex-1 sm:max-w-[210px]">
+                <div class="relative w-full sm:w-auto flex-1 sm:max-w-[210px]" @click.stop>
                   <select 
                     :value="task.worker"
                     @change="updateTaskWorker(task.id, $event.target.value)"
                     class="w-full bg-slate-dark border border-steel rounded text-[10px] text-cyan-energy font-bold px-2 py-1 focus:outline-none focus:border-gear-gold truncate"
                   >
-                    <option 
-                      v-for="a in availableWorkers" 
+                    <option
+                      v-if="task.worker && !availableWorkers.some(a => a.id === task.worker)"
+                      :value="task.worker"
+                      disabled
+                    >
+                      ⚠ {{ task.worker }} (unavailable)
+                    </option>
+                    <option
+                      v-for="a in availableWorkers"
                       :key="a.id" 
                       :value="a.id"
                     >
@@ -236,6 +302,7 @@
             </div>
           </div>
         </div>
+        <TaskDetail v-if="openTask" :key="openTask.id" :task-id="openTask.id" :title="openTask.title" @close="openTaskId = null" />
       </section>
 </template>
 
@@ -258,6 +325,30 @@ const {
   logLineClass,
   handleExecuteOrSpur,
   clearRunLogs,
-  stopOrchestration
+  stopOrchestration,
+  setView,
+  unansweredQuestions,
+  answerPlanQuestion,
+  openTaskId,
+  openTaskDetail
 } = useRingmaster()
+
+const openQuestions = computed(() => project.value.plan?.open_questions || [])
+const assumptions = computed(() => project.value.plan?.assumptions || [])
+
+// Keep the questions open only while they block approval, so the task grid stays in focus
+const questionsOpen = ref(unansweredQuestions.value.length > 0)
+const assumptionsOpen = ref(false)
+watch(() => unansweredQuestions.value.length, (n, prev) => {
+  if (n > 0 && !prev) questionsOpen.value = true
+  else if (n === 0 && prev > 0) questionsOpen.value = false
+})
+
+const openTask = computed(() => tasks.value.find(t => t.id === openTaskId.value) || null)
+
+// Re-planning happens in the chat so its progress messages are visible there
+function replanInChat() {
+  setView('chat')
+  triggerGeneratePlan()
+}
 </script>
