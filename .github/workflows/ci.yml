@@ -18,6 +18,12 @@ jobs:
           node-version: 22
           cache: npm
           cache-dependency-path: web/package-lock.json
+      - name: Lockfile uses the public npm registry
+        run: |
+          if grep '"resolved": "' web/package-lock.json | grep -qv '"resolved": "https://registry.npmjs.org/'; then
+            echo "::error file=web/package-lock.json::It points at a private npm mirror; run 'make lockfile' and commit it."
+            exit 1
+          fi
       - name: Go tests
         run: make test
       - name: Web build

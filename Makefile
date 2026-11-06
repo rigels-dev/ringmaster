@@ -3,7 +3,7 @@
 VERSION ?= $(shell cat VERSION)
 LDFLAGS := -s -w -X ringmaster/internal/version.Version=$(VERSION)
 
-.PHONY: all build web test tag dist clean
+.PHONY: all build web test tag dist lockfile clean
 
 all: build web
 
@@ -16,6 +16,10 @@ web:
 test:
 	go vet ./...
 	go test ./...
+
+# Point web/package-lock.json at the public npm registry (after npm install via a mirror)
+lockfile:
+	scripts/normalize-lockfile.py web/package-lock.json
 
 # Release archives for every platform, plus checksums, in dist/
 dist: web
