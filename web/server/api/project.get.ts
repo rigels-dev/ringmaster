@@ -108,6 +108,8 @@ export default defineEventHandler((event) => {
   return {
     name: projectName,
     path: projectDir,
+    // Release name (v{major}.{mid}.{minor}-{codename}), passed in by the launcher
+    version: process.env.RINGMASTER_VERSION || 'dev',
     isInitialized,
     isBlank,
     brief,

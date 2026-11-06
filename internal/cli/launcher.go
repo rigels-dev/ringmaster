@@ -14,6 +14,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"ringmaster/internal/config"
 	"ringmaster/internal/tui"
+	"ringmaster/internal/version"
 )
 
 var (
@@ -217,6 +218,7 @@ func StartWebUI(projectDir string) error {
 		"HOST=127.0.0.1",
 		"NITRO_HOST=127.0.0.1",
 		fmt.Sprintf("RINGMASTER_PROJECT_DIR=%s", projectDir),
+		fmt.Sprintf("RINGMASTER_VERSION=%s", version.Version),
 	)
 	if root != "" {
 		cmd.Env = append(cmd.Env, fmt.Sprintf("RINGMASTER_ROOT=%s", root))

@@ -47,8 +47,9 @@
             </div>
           </div>
 
-          <!-- Messages Stream -->
-          <div ref="chatContainerRef" class="flex-1 p-6 overflow-y-auto space-y-4">
+          <!-- Messages Stream (opens at the newest message and follows new ones) -->
+          <div class="relative flex-1 min-h-0 flex flex-col">
+          <div ref="chatContainerRef" @scroll="onChatScroll" class="flex-1 p-6 overflow-y-auto space-y-4">
             <!-- Welcome Hero Animated SVG when chat is clean/blank -->
             <div v-if="messages.length <= 1" class="flex flex-col items-center justify-center py-6 text-center select-none">
               <img src="/icons/ringmaster-animated.svg" alt="Ringmaster Kinematics" class="w-44 h-44 object-contain drop-shadow-[0_0_25px_rgba(222,170,59,0.35)] mb-3" />
@@ -140,6 +141,13 @@
                 </div>
               </div>
             </div>
+          </div>
+
+            <button
+              v-if="!atBottom && unseen > 0"
+              @click="jumpToLatest"
+              class="absolute bottom-3 left-1/2 -translate-x-1/2 px-3 py-1 rounded-full bg-gear-gold text-ink text-[10px] font-bold shadow-lg"
+            >↓ {{ unseen }} new message{{ unseen === 1 ? '' : 's' }}</button>
           </div>
 
           <!-- Input Bar with Dynamic Target Selector -->
@@ -372,10 +380,39 @@ const resetInputHeight = () => {
   saveInputHeight()
 }
 
+// The chat opens at the newest message and follows new ones, unless the user
+// has scrolled up to read; then new messages are counted on a jump button.
+const atBottom = ref(true)
+const unseen = ref(0)
+
+function onChatScroll() {
+  const el = chatContainerRef.value
+  if (!el) return
+  atBottom.value = el.scrollHeight - el.scrollTop - el.clientHeight < 80
+  if (atBottom.value) unseen.value = 0
+}
+
+function jumpToLatest() {
+  const el = chatContainerRef.value
+  if (el) el.scrollTop = el.scrollHeight
+  atBottom.value = true
+  unseen.value = 0
+}
+
+watch(() => messages.value.length, (n, prev) => {
+  const last = messages.value[n - 1]
+  // Always follow your own message; otherwise only when already at the bottom
+  if (atBottom.value || last?.role === 'user') nextTick(jumpToLatest)
+  else if (n > prev) unseen.value += n - prev
+})
+watch(isThinking, () => { if (atBottom.value) nextTick(jumpToLatest) })
+watch(inputHeight, () => { if (atBottom.value) nextTick(jumpToLatest) })
+
 onMounted(() => {
   try {
     const saved = Number(localStorage.getItem(INPUT_HEIGHT_KEY))
     if (saved) inputHeight.value = clampHeight(saved)
   } catch {}
+  nextTick(jumpToLatest)
 })
 </script>

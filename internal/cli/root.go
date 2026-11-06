@@ -7,6 +7,7 @@ import (
 
 	"github.com/spf13/cobra"
 	"ringmaster/internal/config"
+	"ringmaster/internal/version"
 )
 
 var (
@@ -14,13 +15,10 @@ var (
 	cfg     *config.Config
 )
 
-// Version is set at build time: go build -ldflags "-X ringmaster/internal/cli.Version=v0.1.0"
-var Version = "dev"
-
 var RootCmd = &cobra.Command{
 	Use:     "ringmaster",
 	Short:   "Ringmaster — Local AI Agent Orchestration Tool (Control Plane)",
-	Version: Version,
+	Version: version.Version,
 	Long: `Ringmaster is an open-source, provider-agnostic Control Plane designed
 to orchestrate AI agent task workflows with a "cheap-by-default" philosophy.
 A smart planner decomposes specifications into DAG tasks executed by

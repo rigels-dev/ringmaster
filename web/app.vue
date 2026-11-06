@@ -91,6 +91,9 @@
             {{ activeWorkersList.length > 0 ? activeWorkersList.length + ' Running' : '0 Idle' }}
           </span>
         </div>
+        <div class="mt-2 pt-2 border-t border-steel/60 text-[9px] text-zinc-500 font-mono" :title="`Ringmaster ${project.version || 'dev'}`">
+          Ringmaster {{ project.version || 'dev' }}
+        </div>
       </div>
     </aside>
 
