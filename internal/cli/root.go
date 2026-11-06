@@ -38,7 +38,7 @@ func Execute() {
 
 func init() {
 	cobra.OnInitialize(initConfig)
-	RootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "fleet config file (default: ringmaster.toml in the Ringmaster install root)")
+	RootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "fleet config file (default: ~/.config/ringmaster/ringmaster.toml)")
 
 	RootCmd.AddCommand(initCmd)
 }
@@ -46,6 +46,13 @@ func init() {
 func initConfig() {
 	// The fleet (providers, agents, routing) always comes from the global config
 	// or an explicit --config; a project's ringmaster.toml is only its manifest.
+	if cfgFile == "" {
+		if moved, err := config.MigrateLegacyConfig(); err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: could not move the fleet config to %s: %v\n", config.ConfigDir(), err)
+		} else if moved != "" {
+			fmt.Fprintf(os.Stderr, "Fleet config copied to %s (from %s); edit it there from now on.\n", moved, config.LegacyConfigPath())
+		}
+	}
 	path := config.ConfigPath(cfgFile)
 	if path == "" {
 		return

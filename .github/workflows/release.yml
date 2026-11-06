@@ -1,0 +1,70 @@
+name: Release
+
+# Push a tag named after VERSION (make tag && git push origin <tag>) to build
+# the release archives, attach them to the GitHub release, and update the
+# Homebrew tap.
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    env:
+      TAG: ${{ github.ref_name }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Tag matches VERSION
+        run: |
+          if [ "$TAG" != "$(cat VERSION)" ]; then
+            echo "Tag $TAG does not match VERSION ($(cat VERSION))" >&2
+            exit 1
+          fi
+
+      - name: Test
+        run: make test
+
+      - name: Build archives
+        run: make web && scripts/dist.sh "$TAG"
+
+      - name: Publish to the GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # A release written by hand keeps its notes; only the files are added
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" dist/*.tar.gz dist/*-checksums.txt --clobber
+          else
+            gh release create "$TAG" dist/*.tar.gz dist/*-checksums.txt --title "$TAG" --generate-notes
+          fi
+
+      - name: Update the Homebrew tap
+        env:
+          TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+        if: env.TAP_TOKEN != ''
+        run: |
+          scripts/brew-formula.sh "$TAG" "dist/ringmaster-$TAG-checksums.txt" > ringmaster.rb
+          ruby -c ringmaster.rb
+          git clone "https://x-access-token:${TAP_TOKEN}@github.com/rigels-dev/homebrew-tap.git" tap
+          mkdir -p tap/Formula
+          cp ringmaster.rb tap/Formula/ringmaster.rb
+          cd tap
+          # The tap may still be empty (no branch yet): always write to main
+          git checkout -B main
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Formula/ringmaster.rb
+          git commit -m "ringmaster $TAG" || echo "Formula already up to date"
+          git push origin HEAD:main

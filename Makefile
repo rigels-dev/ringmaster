@@ -3,7 +3,7 @@
 VERSION ?= $(shell cat VERSION)
 LDFLAGS := -s -w -X ringmaster/internal/version.Version=$(VERSION)
 
-.PHONY: all build web test tag clean
+.PHONY: all build web test tag dist lockfile clean
 
 all: build web
 
@@ -17,9 +17,19 @@ test:
 	go vet ./...
 	go test ./...
 
+# Point web/package-lock.json at the public npm registry (after npm install via a mirror)
+lockfile:
+	scripts/normalize-lockfile.py web/package-lock.json
+
+# Release archives for every platform, plus checksums, in dist/
+dist: web
+	scripts/dist.sh $(VERSION)
+
 # Tag the current commit with the release name from VERSION
+# Refuses while anything is uncommitted, so the tagged commit carries this VERSION
 tag:
+	@git diff --quiet HEAD || { echo "Commit your changes (including VERSION) before tagging" >&2; exit 1; }
 	git tag -a $(VERSION) -m "Ringmaster $(VERSION)"
 
 clean:
-	rm -rf bin web/.output
+	rm -rf bin dist web/.output

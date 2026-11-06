@@ -178,9 +178,26 @@ func RootDir() string {
 	return dir
 }
 
-// GlobalConfigPath returns the path of the global fleet config
-// (<root>/ringmaster.toml), or "" when no root can be determined.
-func GlobalConfigPath() string {
+// ConfigDir is where the global fleet config lives: $RINGMASTER_CONFIG_DIR,
+// else $XDG_CONFIG_HOME/ringmaster, else ~/.config/ringmaster. It is outside
+// the install directory, so package-manager upgrades never touch it.
+func ConfigDir() string {
+	if dir := os.Getenv("RINGMASTER_CONFIG_DIR"); dir != "" {
+		return dir
+	}
+	if xdg := os.Getenv("XDG_CONFIG_HOME"); xdg != "" {
+		return filepath.Join(xdg, "ringmaster")
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return ""
+	}
+	return filepath.Join(home, ".config", "ringmaster")
+}
+
+// LegacyConfigPath is where versions before v0.2 kept the fleet config: next
+// to the install (<root>/ringmaster.toml).
+func LegacyConfigPath() string {
 	root := RootDir()
 	if root == "" {
 		return ""
@@ -188,8 +205,57 @@ func GlobalConfigPath() string {
 	return filepath.Join(root, "ringmaster.toml")
 }
 
+// GlobalConfigPath returns the global fleet config: the user config when it
+// exists, else a legacy one still next to the install, else the user config
+// path (where a new config is created).
+func GlobalConfigPath() string {
+	var user string
+	if dir := ConfigDir(); dir != "" {
+		user = filepath.Join(dir, "ringmaster.toml")
+		if fileExists(user) {
+			return user
+		}
+	}
+	if legacy := LegacyConfigPath(); legacy != "" && fileExists(legacy) {
+		return legacy
+	}
+	return user
+}
+
+// MigrateLegacyConfig copies a pre-v0.2 config from the install directory to
+// the user config directory, once, and returns the new path ("" when there was
+// nothing to move). The old file is left in place.
+func MigrateLegacyConfig() (string, error) {
+	dir := ConfigDir()
+	legacy := LegacyConfigPath()
+	if dir == "" || legacy == "" || !fileExists(legacy) {
+		return "", nil
+	}
+	user := filepath.Join(dir, "ringmaster.toml")
+	if fileExists(user) || filepath.Clean(user) == filepath.Clean(legacy) {
+		return "", nil
+	}
+	data, err := os.ReadFile(legacy)
+	if err != nil {
+		return "", err
+	}
+	if err := os.MkdirAll(dir, 0700); err != nil {
+		return "", err
+	}
+	// The fleet config can hold API keys
+	if err := os.WriteFile(user, data, 0600); err != nil {
+		return "", err
+	}
+	return user, nil
+}
+
+func fileExists(path string) bool {
+	fi, err := os.Stat(path)
+	return err == nil && !fi.IsDir()
+}
+
 // ConfigPath returns the fleet config to use: the explicit --config path when
-// given, otherwise the global <root>/ringmaster.toml. It never looks in the
+// given, otherwise the global config (see GlobalConfigPath). It never looks in the
 // working directory: inside a project, ringmaster.toml is the project
 // manifest, which does not define providers or agents.
 func ConfigPath(explicit string) string {

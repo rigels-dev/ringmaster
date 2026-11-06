@@ -21,9 +21,17 @@ export function ringmasterBinPath(): string {
   return process.env.RINGMASTER_BIN || path.join(ringmasterRoot(), 'bin', 'ringmaster')
 }
 
-// Global fleet config (providers & agents)
+// Global fleet config (providers & agents). The launcher passes the path it
+// resolved; otherwise follow the same rule as the CLI: the user config dir,
+// else a legacy config next to the install.
 export function rootTomlPath(): string {
-  return path.join(ringmasterRoot(), 'ringmaster.toml')
+  if (process.env.RINGMASTER_CONFIG) return process.env.RINGMASTER_CONFIG
+  const configDir = process.env.RINGMASTER_CONFIG_DIR
+    || (process.env.XDG_CONFIG_HOME ? path.join(process.env.XDG_CONFIG_HOME, 'ringmaster') : path.join(os.homedir(), '.config', 'ringmaster'))
+  const user = path.join(configDir, 'ringmaster.toml')
+  const legacy = path.join(ringmasterRoot(), 'ringmaster.toml')
+  if (!fs.existsSync(user) && fs.existsSync(legacy)) return legacy
+  return user
 }
 
 // Project directory: set by the Go launcher, which only starts inside a
