@@ -25,5 +25,10 @@ node_modules/
 .output/
 projects/
 examples/
+
 # Local design scratch (mockups, crops, reference renders)
 docs/mockups/
+
+# Markdown docs and notes are kept local only
+*.md
+*.markdown
