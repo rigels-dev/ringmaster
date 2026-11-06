@@ -2,10 +2,15 @@ name: Release
 
 # Push a tag named after VERSION (make tag && git push origin <tag>) to build
 # the release archives, attach them to the GitHub release, and update the
-# Homebrew tap.
+# Homebrew tap. "Run workflow" redoes this for an existing tag.
 on:
   push:
     tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag to (re)build, e.g. v0.2.0-bellatrix
+        required: true
 
 permissions:
   contents: write
@@ -14,9 +19,13 @@ jobs:
   release:
     runs-on: ubuntu-latest
     env:
-      TAG: ${{ github.ref_name }}
+      TAG: ${{ inputs.tag || github.ref_name }}
+      # A step's own env is not visible to its `if`, so the tap check lives here
+      HAS_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN != '' }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref }}
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
@@ -51,9 +60,9 @@ jobs:
           fi
 
       - name: Update the Homebrew tap
+        if: env.HAS_TAP_TOKEN == 'true'
         env:
           TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
-        if: env.TAP_TOKEN != ''
         run: |
           scripts/brew-formula.sh "$TAG" "dist/ringmaster-$TAG-checksums.txt" > ringmaster.rb
           ruby -c ringmaster.rb
