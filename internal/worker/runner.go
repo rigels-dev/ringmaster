@@ -101,7 +101,7 @@ Description:
 1. Explore the workspace with read_file, list_dir, search.
 2. Implement required code and tests using write_file.
 3. Validate your implementation using run_cmd (e.g. run test suites).
-4. When done, write your final structured report to 'outputs/%s.md'.
+4. When done, write your final structured report to '.ringmaster/outputs/%s.md'.
 The report must have YAML frontmatter:
 ---
 status: COMPLETED
@@ -117,11 +117,48 @@ Brief description of what was done.
 
 ## Verification
 Test command and results.
-`, task.ID, briefContent, task.ID, task.Title, task.Description, humanAnswersSection, strings.Join(task.Acceptance, "\n- "), task.ID, attemptNum)
+
+# WHEN YOU NEED THE USER:
+Allowed shell commands: %s.
+If you cannot continue without the user, do NOT guess or work around it. Cases:
+- a shell command outside the allowed list (request approval for the exact command),
+- a decision the brief, spec and human answers leave open and that materially changes the result,
+- a value only the user knows (port, domain, account name, credential).
+Finish whatever you can, then write '.ringmaster/outputs/%s.md' with status AWAITING_INPUT and stop:
+---
+status: AWAITING_INPUT
+attempts: %d
+calls: 0
+tokens_in: 0
+tokens_out: 0
+files_changed: []
+requests:
+  - id: r1
+    type: approval
+    command: docker build -t app .
+    reason: verify the Dockerfile builds
+  - id: r2
+    type: choice
+    question: Which base image?
+    options: [golang:alpine, distroless]
+    recommended: distroless
+  - id: r3
+    type: input
+    question: Which environment variable holds the API key?
+    secret: true
+---
+
+## Summary
+What is done so far and what is waiting on the user.
+
+Never ask for a secret's value; ask for the name of the environment variable that holds it.
+Do not ask about anything already answered under HUMAN ANSWERS & FEEDBACK.
+`, task.ID, briefContent, task.ID, task.Title, task.Description, humanAnswersSection, strings.Join(task.Acceptance, "\n- "), task.ID, attemptNum,
+		strings.Join(sandboxCfg.Allow, ", "), task.ID, attemptNum)
 
 	messages := []llm.Message{
 		{Role: "system", Content: systemPrompt},
-		{Role: "user", Content: fmt.Sprintf("Begin implementation for task %s. Write your final report to outputs/%s.md when finished.", task.ID, task.ID)},
+		{Role: "user", Content: fmt.Sprintf("Begin implementation for task %s. Write your final report to .ringmaster/outputs/%s.md when finished.", task.ID, task.ID)},
 	}
 
 	res := &AttemptResult{
@@ -134,6 +171,9 @@ Test command and results.
 	if maxTokens == 0 {
 		maxTokens = 300000
 	}
+
+	// Last non-empty assistant message, kept so a missing report still explains what happened
+	lastMessage := ""
 
 	for turn := 1; turn <= defaultMaxTurns; turn++ {
 		res.Turns = turn
@@ -152,9 +192,31 @@ Test command and results.
 			break
 		}
 
+		step := 0
 		req := llm.ChatRequest{
-			Messages: messages,
-			Tools:    tools,
+			Messages:        messages,
+			Tools:           tools,
+			WorkDir:         worktree,
+			AllowedCommands: sandboxCfg.Allow,
+			// Agentic providers run many steps inside one call; surface each
+			// one live in the run log and the transcript.
+			OnProgress: func(ev llm.ProgressEvent) {
+				step++
+				if ev.Kind == "tool" {
+					fmt.Printf("[%s] step %d: %s `%s`\n", task.ID, step, toolVerb(ev.Tool), ev.Detail)
+					recordLog(TranscriptEntry{
+						Turn: turn,
+						Role: "progress",
+						ToolCalls: []llm.ToolCall{{
+							Type:     "function",
+							Function: llm.FunctionCall{Name: ev.Tool, Arguments: string(ev.Input)},
+						}},
+					})
+					return
+				}
+				fmt.Printf("[%s] step %d: says %s\n", task.ID, step, oneLine(ev.Detail, 160))
+				recordLog(TranscriptEntry{Turn: turn, Role: "progress", Content: ev.Detail})
+			},
 		}
 
 		resp, err := provider.Chat(ctx, agent.Model, req)
@@ -166,6 +228,8 @@ Test command and results.
 
 		res.Usage.Calls++
 		res.Usage.TokensIn += resp.Usage.PromptTokens
+		res.Usage.TokensCached += resp.Usage.CachedTokens
+		res.Usage.CostUSD += resp.Usage.CostUSD
 		res.Usage.TokensOut += resp.Usage.CompletionTokens
 
 		// Check budget limit after turn tokens accumulated
@@ -181,6 +245,10 @@ Test command and results.
 			Content:   resp.Content,
 			ToolCalls: resp.ToolCalls,
 		})
+
+		if strings.TrimSpace(resp.Content) != "" {
+			lastMessage = strings.TrimSpace(resp.Content)
+		}
 
 		// Append assistant response to dialogue
 		messages = append(messages, llm.Message{
@@ -236,7 +304,7 @@ Test command and results.
 	res.Duration = time.Since(start)
 
 	// Attempt to read and parse output report written by worker
-	reportPath := filepath.Join(worktree, "outputs", fmt.Sprintf("%s.md", task.ID))
+	reportPath := filepath.Join(worktree, ".ringmaster", "outputs", fmt.Sprintf("%s.md", task.ID))
 	reportContent, err := os.ReadFile(reportPath)
 	if err == nil {
 		report, parseErr := schemas.ParseReportMarkdown(string(reportContent))
@@ -261,6 +329,40 @@ Test command and results.
 		TokensOut: res.Usage.TokensOut,
 		Summary:   fmt.Sprintf("Worker attempt ended with reason: %s. Report was generated by runner fallback.", res.Reason),
 	}
+	if lastMessage != "" {
+		res.Report.Summary += "\n\nLast worker message:\n" + lastMessage
+	}
 
 	return res, nil
+}
+
+// toolVerb maps an agentic provider's tool name onto the verbs used for
+// tool-calling workers, so every worker reads the same in the run log.
+func toolVerb(tool string) string {
+	switch tool {
+	case "Bash":
+		return "exec"
+	case "Read":
+		return "read"
+	case "Write":
+		return "write"
+	case "Edit", "MultiEdit", "NotebookEdit":
+		return "edit"
+	case "Glob", "Grep":
+		return "search"
+	default:
+		return strings.ToLower(tool)
+	}
+}
+
+// oneLine collapses s to its first line, truncated to max runes.
+func oneLine(s string, max int) string {
+	s = strings.TrimSpace(s)
+	if i := strings.IndexByte(s, '\n'); i >= 0 {
+		s = s[:i] + " …"
+	}
+	if r := []rune(s); len(r) > max {
+		s = string(r[:max]) + "…"
+	}
+	return s
 }

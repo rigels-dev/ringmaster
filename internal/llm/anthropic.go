@@ -33,8 +33,14 @@ func (c *AnthropicClient) getAPIKey() (string, error) {
 	if c.APIKeyEnv == "" || c.APIKeyEnv == "NONE" {
 		return "", nil
 	}
+	if strings.HasPrefix(c.APIKeyEnv, "sk-") {
+		return c.APIKeyEnv, nil
+	}
 	key := os.Getenv(c.APIKeyEnv)
 	if key == "" {
+		if len(c.APIKeyEnv) > 10 && !strings.Contains(c.APIKeyEnv, " ") {
+			return c.APIKeyEnv, nil
+		}
 		return "", fmt.Errorf("environment variable '%s' for Anthropic API key is not set or empty", c.APIKeyEnv)
 	}
 	return key, nil
@@ -219,8 +225,10 @@ func (c *AnthropicClient) Chat(ctx context.Context, model string, req ChatReques
 			} `json:"content"`
 			StopReason string `json:"stop_reason"`
 			Usage      struct {
-				InputTokens  int `json:"input_tokens"`
-				OutputTokens int `json:"output_tokens"`
+				InputTokens              int `json:"input_tokens"`
+				OutputTokens             int `json:"output_tokens"`
+				CacheCreationInputTokens int `json:"cache_creation_input_tokens"`
+				CacheReadInputTokens     int `json:"cache_read_input_tokens"`
 			} `json:"usage"`
 		}
 
@@ -252,9 +260,10 @@ func (c *AnthropicClient) Chat(ctx context.Context, model string, req ChatReques
 			ToolCalls:    toolCalls,
 			FinishReason: rawResp.StopReason,
 			Usage: TokenUsage{
-				PromptTokens:     rawResp.Usage.InputTokens,
+				PromptTokens:     rawResp.Usage.InputTokens + rawResp.Usage.CacheCreationInputTokens + rawResp.Usage.CacheReadInputTokens,
 				CompletionTokens: rawResp.Usage.OutputTokens,
-				TotalTokens:      rawResp.Usage.InputTokens + rawResp.Usage.OutputTokens,
+				TotalTokens:      rawResp.Usage.InputTokens + rawResp.Usage.CacheCreationInputTokens + rawResp.Usage.CacheReadInputTokens + rawResp.Usage.OutputTokens,
+				CachedTokens:     rawResp.Usage.CacheReadInputTokens,
 			},
 		}, nil
 	}

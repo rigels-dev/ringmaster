@@ -25,7 +25,7 @@ var agentsListCmd = &cobra.Command{
 	Short: "List all configured agents and their roles",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if cfg == nil {
-			return fmt.Errorf("configuration not loaded. Please create ringmaster.toml or pass --config")
+			return errNoConfig()
 		}
 
 		reg := registry.NewRegistry(cfg)
@@ -111,7 +111,7 @@ var agentsPingCmd = &cobra.Command{
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if cfg == nil {
-			return fmt.Errorf("configuration not loaded. Please create ringmaster.toml or pass --config")
+			return errNoConfig()
 		}
 
 		alias := args[0]
@@ -157,7 +157,7 @@ var agentsCheckCmd = &cobra.Command{
 	Short: "Verify tool-calling capabilities of configured worker agents",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if cfg == nil {
-			return fmt.Errorf("configuration not loaded. Please create ringmaster.toml or pass --config")
+			return errNoConfig()
 		}
 
 		reg := registry.NewRegistry(cfg)

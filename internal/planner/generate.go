@@ -23,20 +23,29 @@ func GeneratePlan(
 	masterAgent config.AgentConfig,
 	provider llm.Provider,
 ) (*schemas.Plan, schemas.Usage, error) {
-	briefPath := filepath.Join(projectRoot, "BRIEF.md")
+	briefPath := filepath.Join(projectRoot, ".ringmaster", "BRIEF.md")
 	briefBytes, err := os.ReadFile(briefPath)
 	if err != nil {
 		return nil, schemas.Usage{}, fmt.Errorf("failed to read %s: %w", briefPath, err)
 	}
 
 	projectName := filepath.Base(projectRoot)
-	defaultWorker := cfg.Routing.DefaultWorker
+	active := make(map[string]bool)
+	for _, alias := range ActiveWorkers(cfg) {
+		active[alias] = true
+	}
+
+	// Prefer the configured default, then the fallback, then the first enabled worker
+	defaultWorker := ""
+	for _, candidate := range []string{cfg.Routing.DefaultWorker, cfg.Routing.FallbackWorker} {
+		if active[candidate] {
+			defaultWorker = candidate
+			break
+		}
+	}
 	if defaultWorker == "" {
-		for aName, a := range cfg.Agents {
-			if a.Role == "worker" {
-				defaultWorker = aName
-				break
-			}
+		if workers := ActiveWorkers(cfg); len(workers) > 0 {
+			defaultWorker = workers[0]
 		}
 	}
 
@@ -62,6 +71,8 @@ func GeneratePlan(
 
 		totalUsage.Calls++
 		totalUsage.TokensIn += resp.Usage.PromptTokens
+		totalUsage.TokensCached += resp.Usage.CachedTokens
+		totalUsage.CostUSD += resp.Usage.CostUSD
 		totalUsage.TokensOut += resp.Usage.CompletionTokens
 
 		content := strings.TrimSpace(resp.Content)
@@ -78,8 +89,10 @@ func GeneratePlan(
 			Description string `json:"description"`
 		}
 		var raw struct {
-			Project string    `json:"project"`
-			Tasks   []rawTask `json:"tasks"`
+			Project       string                 `json:"project"`
+			Tasks         []rawTask              `json:"tasks"`
+			OpenQuestions []schemas.PlanQuestion `json:"open_questions"`
+			Assumptions   []string               `json:"assumptions"`
 		}
 
 		if err := json.Unmarshal([]byte(content), &raw); err != nil {
@@ -100,17 +113,28 @@ func GeneratePlan(
 		}
 
 		p := schemas.Plan{
-			Project: raw.Project,
-			Tasks:   make([]schemas.PlanTask, len(raw.Tasks)),
+			Project:       raw.Project,
+			Tasks:         make([]schemas.PlanTask, len(raw.Tasks)),
+			OpenQuestions: raw.OpenQuestions,
+			Assumptions:   raw.Assumptions,
+		}
+		// The master proposes questions; answers only ever come from the user
+		for i := range p.OpenQuestions {
+			p.OpenQuestions[i].Answer = ""
+			if p.OpenQuestions[i].ID == "" {
+				p.OpenQuestions[i].ID = fmt.Sprintf("Q%d", i+1)
+			}
 		}
 
 		for i, rt := range raw.Tasks {
 			if rt.MaxRetries <= 0 {
 				rt.MaxRetries = 2
 			}
-			if rt.Worker == "" {
+			// Replace missing, unknown or disabled workers with the default
+			if !active[rt.Worker] {
 				rt.Worker = defaultWorker
 			}
+			raw.Tasks[i] = rt
 			p.Tasks[i] = rt.PlanTask
 		}
 
@@ -129,13 +153,13 @@ func GeneratePlan(
 		plan = &p
 
 		// Write plan.json atomically
-		planPath := filepath.Join(projectRoot, "plan.json")
+		planPath := filepath.Join(projectRoot, ".ringmaster", "plan.json")
 		if err := storage.WriteJSONAtomic(planPath, plan); err != nil {
 			return nil, totalUsage, fmt.Errorf("failed to write plan.json: %w", err)
 		}
 
 		// Write tasks/Txx-title.md files
-		tasksDir := filepath.Join(projectRoot, "tasks")
+		tasksDir := filepath.Join(projectRoot, ".ringmaster", "tasks")
 		_ = os.MkdirAll(tasksDir, 0755)
 
 		for _, rt := range raw.Tasks {
@@ -148,6 +172,12 @@ func GeneratePlan(
 				MaxRetries:  rt.MaxRetries,
 				Acceptance:  rt.Acceptance,
 				Description: rt.Description,
+
+				AcceptanceTimeout: rt.AcceptanceTimeout,
+			}
+			timeoutLine := ""
+			if spec.AcceptanceTimeout > 0 {
+				timeoutLine = fmt.Sprintf("acceptance_timeout: %d\n", spec.AcceptanceTimeout)
 			}
 
 			mdContent := fmt.Sprintf(`---
@@ -159,10 +189,10 @@ worker: %q
 max_retries: %d
 acceptance:
 %s
----
+%s---
 
 %s
-`, spec.ID, spec.Title, spec.Type, formatSliceYAML(spec.DependsOn), spec.Worker, spec.MaxRetries, formatListYAML(spec.Acceptance), spec.Description)
+`, spec.ID, spec.Title, spec.Type, formatSliceYAML(spec.DependsOn), spec.Worker, spec.MaxRetries, formatListYAML(spec.Acceptance), timeoutLine, spec.Description)
 
 			slug := strings.ToLower(strings.ReplaceAll(spec.Title, " ", "-"))
 			slug = strings.Map(func(r rune) rune {

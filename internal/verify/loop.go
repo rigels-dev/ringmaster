@@ -35,6 +35,7 @@ type AuditEvent struct {
 }
 
 // RunTaskLoop executes attempts for task until DONE, BLOCKED, NEEDS_REVIEW, or PAUSED.
+// afterAttempt, when set, runs once each attempt has been verified.
 func RunTaskLoop(
 	ctx context.Context,
 	task schemas.TaskSpec,
@@ -45,6 +46,7 @@ func RunTaskLoop(
 	sandboxCfg config.SandboxConfig,
 	briefContent string,
 	eventsPath string,
+	afterAttempt func(attempt int, report *schemas.WorkerReport),
 ) (*TaskAttemptLoopResult, error) {
 	start := time.Now()
 	res := &TaskAttemptLoopResult{
@@ -114,7 +116,7 @@ func RunTaskLoop(
 		var checks []CheckResult
 		if attemptRes.Status == schemas.ReportStatusCompleted && !budgetExceeded {
 			var checkErr error
-			checks, checkErr = RunAcceptance(ctx, task, worktree, sandboxCfg.Allow)
+			checks, checkErr = RunAcceptance(ctx, task, worktree, sandboxCfg.Allow, acceptanceTimeout(task, sandboxCfg))
 			if checkErr != nil {
 				return nil, fmt.Errorf("failed to run acceptance criteria: %w", checkErr)
 			}
@@ -127,7 +129,7 @@ func RunTaskLoop(
 
 		appendEvent(attempt, "DECISION", decision)
 
-		// Render verification log to outputs/Txx.md if report exists
+		// Render verification log to .ringmaster/outputs/Txx.md if report exists
 		if attemptRes.Report != nil {
 			var verLines []string
 			for _, chk := range checks {
@@ -140,9 +142,14 @@ func RunTaskLoop(
 			attemptRes.Report.Verification = strings.Join(verLines, "\n")
 			rendered, rErr := attemptRes.Report.RenderMarkdown()
 			if rErr == nil {
-				outPath := filepath.Join(worktree, "outputs", fmt.Sprintf("%s.md", task.ID))
+				outPath := filepath.Join(worktree, ".ringmaster", "outputs", fmt.Sprintf("%s.md", task.ID))
 				_ = os.WriteFile(outPath, []byte(rendered), 0644)
 			}
+		}
+
+		// Let the caller record this attempt (the scheduler commits it) before a retry starts
+		if afterAttempt != nil {
+			afterAttempt(attempt, attemptRes.Report)
 		}
 
 		if decision.Type == DecisionRETRY {
@@ -159,4 +166,16 @@ func RunTaskLoop(
 
 	res.Duration = time.Since(start)
 	return res, nil
+}
+
+// acceptanceTimeout is the task's own limit, else the sandbox's, else the default.
+func acceptanceTimeout(task schemas.TaskSpec, sandboxCfg config.SandboxConfig) time.Duration {
+	seconds := task.AcceptanceTimeout
+	if seconds <= 0 {
+		seconds = sandboxCfg.AcceptanceTimeout
+	}
+	if seconds <= 0 {
+		seconds = config.DefaultAcceptanceTimeout
+	}
+	return time.Duration(seconds) * time.Second
 }

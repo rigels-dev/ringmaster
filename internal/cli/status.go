@@ -51,18 +51,15 @@ var (
 )
 
 var statusCmd = &cobra.Command{
-	Use:   "status [project_name]",
+	Use:   "status",
 	Short: "Display DAG visual execution tree, task status, and blockers",
-	Args:  cobra.MaximumNArgs(1),
+	Args:  cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		projectName := ""
-		if len(args) > 0 {
-			projectName = args[0]
-		}
-		projectDir, err := ResolveProjectDir(projectName)
+		projectDir, err := ResolveProjectDir()
 		if err != nil {
 			return err
 		}
+		projectName := filepath.Base(projectDir)
 
 		if statusWatch {
 			// Periodic loop
@@ -92,7 +89,7 @@ var statusCmd = &cobra.Command{
 }
 
 func buildStatusView(projectDir, projectName string, asJSON bool) (string, bool, error) {
-	planPath := filepath.Join(projectDir, "plan.json")
+	planPath := filepath.Join(projectDir, ".ringmaster", "plan.json")
 	plan, err := planner.ReadPlanFile(planPath)
 	if err != nil {
 		return "", false, fmt.Errorf("project '%s' has no plan.json. Run 'ringmaster plan' first", projectName)
@@ -147,7 +144,7 @@ func buildStatusView(projectDir, projectName string, asJSON bool) (string, bool,
 		} else if ts.Status == schemas.TaskStateBlocked {
 			blockers = append(blockers, fmt.Sprintf("  • Task %s: %s\n    Action: ringmaster answer %s --text \"<your answer>\"", t.ID, ts.Error, t.ID))
 		} else if ts.Status == schemas.TaskStateReview {
-			reviews = append(reviews, fmt.Sprintf("  • Task %s: %s (Check outputs/%s.md)", t.ID, ts.Error, t.ID))
+			reviews = append(reviews, fmt.Sprintf("  • Task %s: %s (Check .ringmaster/worktrees/%s/.ringmaster/outputs/%s.md)", t.ID, ts.Error, t.ID, t.ID))
 		}
 
 		row := fmt.Sprintf("  %-6s %-26s %-14s %-8s %-16s %-14s",

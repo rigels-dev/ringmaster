@@ -36,15 +36,10 @@ var configAPICmd = &cobra.Command{
 
 		targetPath := req.ConfigPath
 		if targetPath == "" {
-			targetPath = cfgFile
+			targetPath = config.ConfigPath(cfgFile)
 		}
 		if targetPath == "" {
-			found, err := config.FindConfigFile()
-			if err != nil {
-				targetPath = "ringmaster.toml"
-			} else {
-				targetPath = found
-			}
+			return outputJSON(false, "cannot locate the Ringmaster install root; pass config_path", nil)
 		}
 
 		absPath, err := filepath.Abs(targetPath)

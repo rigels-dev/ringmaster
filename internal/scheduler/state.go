@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -33,11 +34,18 @@ func NewStateManager(projectRoot, planHash string) (*StateManager, error) {
 	loaded, err := storage.ReadJSON[schemas.ProjectState](statePath)
 	if err == nil && loaded != nil {
 		sm.state = loaded
-		// Auto-reset any dangling RUNNING task back to PENDING (from unclean crash/poweroff)
+		// Auto-reset any dangling RUNNING task (unclean crash/poweroff) and any PAUSED task
+		// (a new run or resume is the human go-ahead) back to PENDING
 		for id, ts := range sm.state.TaskStates {
-			if ts.Status == schemas.TaskStateRunning {
+			if ts.Status == schemas.TaskStateRunning || ts.Status == schemas.TaskStatePaused {
 				ts.Status = schemas.TaskStatePending
 				ts.StartAt = nil
+				sm.state.TaskStates[id] = ts
+			}
+			// Tasks skipped for a failed upstream get another chance; they are skipped again if it still fails
+			if ts.Status == schemas.TaskStateFailed && strings.HasPrefix(ts.Error, skippedPrefix) {
+				ts.Status = schemas.TaskStatePending
+				ts.Error = ""
 				sm.state.TaskStates[id] = ts
 			}
 		}

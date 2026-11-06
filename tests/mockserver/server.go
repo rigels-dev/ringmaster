@@ -111,7 +111,8 @@ func NewMockServer(s Scenario) *MockServer {
 		turn := ms.calls[taskID]
 		ms.mu.Unlock()
 
-		hasHumanAnswers := strings.Contains(strings.ToLower(fullText), "human answers") || strings.Contains(strings.ToLower(fullText), "localhost:5432")
+		// The worker prompt always has a HUMAN ANSWERS section; only the answer itself unblocks
+		hasHumanAnswers := strings.Contains(fullText, "localhost:5432")
 
 		// Reset turn counter if human unblocked task
 		if hasHumanAnswers {
@@ -132,7 +133,7 @@ func NewMockServer(s Scenario) *MockServer {
 									"type": "function",
 									"function": map[string]any{
 										"name":      "write_file",
-										"arguments": fmt.Sprintf(`{"path":"outputs/%s.md","content":%q}`, taskID, reportBlocked),
+										"arguments": fmt.Sprintf(`{"path":".ringmaster/outputs/%s.md","content":%q}`, taskID, reportBlocked),
 									},
 								},
 							},
@@ -170,7 +171,7 @@ func NewMockServer(s Scenario) *MockServer {
 									"type": "function",
 									"function": map[string]any{
 										"name":      "write_file",
-										"arguments": fmt.Sprintf(`{"path":"outputs/%s.md","content":%q}`, taskID, reportYAML),
+										"arguments": fmt.Sprintf(`{"path":".ringmaster/outputs/%s.md","content":%q}`, taskID, reportYAML),
 									},
 								},
 							},

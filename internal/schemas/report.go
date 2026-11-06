@@ -13,11 +13,13 @@ const (
 	ReportStatusCompleted   ReportStatus = "COMPLETED"
 	ReportStatusBlocked     ReportStatus = "BLOCKED"
 	ReportStatusNeedsReview ReportStatus = "NEEDS_REVIEW"
+	// ReportStatusAwaitingInput means the worker stopped to ask the user something (see Requests).
+	ReportStatusAwaitingInput ReportStatus = "AWAITING_INPUT"
 )
 
 func (s ReportStatus) IsValid() bool {
 	switch s {
-	case ReportStatusCompleted, ReportStatusBlocked, ReportStatusNeedsReview:
+	case ReportStatusCompleted, ReportStatusBlocked, ReportStatusNeedsReview, ReportStatusAwaitingInput:
 		return true
 	default:
 		return false
@@ -25,12 +27,13 @@ func (s ReportStatus) IsValid() bool {
 }
 
 type WorkerReport struct {
-	Status       ReportStatus `yaml:"status" json:"status"`
-	Attempts     int          `yaml:"attempts" json:"attempts"`
-	Calls        int          `yaml:"calls" json:"calls"`
-	TokensIn     int          `yaml:"tokens_in" json:"tokens_in"`
-	TokensOut    int          `yaml:"tokens_out" json:"tokens_out"`
-	FilesChanged []string     `yaml:"files_changed" json:"files_changed"`
+	Status       ReportStatus   `yaml:"status" json:"status"`
+	Attempts     int            `yaml:"attempts" json:"attempts"`
+	Calls        int            `yaml:"calls" json:"calls"`
+	TokensIn     int            `yaml:"tokens_in" json:"tokens_in"`
+	TokensOut    int            `yaml:"tokens_out" json:"tokens_out"`
+	FilesChanged []string       `yaml:"files_changed" json:"files_changed"`
+	Requests     []HumanRequest `yaml:"requests,omitempty" json:"requests,omitempty"`
 
 	Summary      string `yaml:"-" json:"summary"`
 	Blockers     string `yaml:"-" json:"blockers,omitempty"`
@@ -39,7 +42,15 @@ type WorkerReport struct {
 
 func ValidateWorkerReport(r *WorkerReport) error {
 	if !r.Status.IsValid() {
-		return fmt.Errorf("invalid report status '%s': must be COMPLETED, BLOCKED, or NEEDS_REVIEW", r.Status)
+		return fmt.Errorf("invalid report status '%s': must be COMPLETED, BLOCKED, NEEDS_REVIEW, or AWAITING_INPUT", r.Status)
+	}
+	if r.Status == ReportStatusAwaitingInput && len(r.Requests) == 0 {
+		return fmt.Errorf("report status is AWAITING_INPUT, but 'requests' is empty")
+	}
+	for _, req := range r.Requests {
+		if err := ValidateHumanRequest(req); err != nil {
+			return err
+		}
 	}
 	if r.Status == ReportStatusBlocked && strings.TrimSpace(r.Blockers) == "" {
 		return fmt.Errorf("report status is BLOCKED, but '## Blockers' section is empty")

@@ -30,15 +30,17 @@ func (t TaskType) IsValid() bool {
 }
 
 type TaskSpec struct {
-	ID           string   `yaml:"id" json:"id"`
-	Title        string   `yaml:"title" json:"title"`
-	Type         TaskType `yaml:"type" json:"type"`
-	DependsOn    []string `yaml:"depends_on" json:"depends_on"`
-	Worker       string   `yaml:"worker" json:"worker"`
-	MaxRetries   int      `yaml:"max_retries" json:"max_retries"`
-	Acceptance   []string `yaml:"acceptance" json:"acceptance"`
-	Description  string   `yaml:"-" json:"description"`
-	HumanAnswers string   `yaml:"-" json:"human_answers,omitempty"`
+	ID         string   `yaml:"id" json:"id"`
+	Title      string   `yaml:"title" json:"title"`
+	Type       TaskType `yaml:"type" json:"type"`
+	DependsOn  []string `yaml:"depends_on" json:"depends_on"`
+	Worker     string   `yaml:"worker" json:"worker"`
+	MaxRetries int      `yaml:"max_retries" json:"max_retries"`
+	Acceptance []string `yaml:"acceptance" json:"acceptance"`
+	// AcceptanceTimeout overrides how long each acceptance command may run, in seconds
+	AcceptanceTimeout int    `yaml:"acceptance_timeout,omitempty" json:"acceptance_timeout,omitempty"`
+	Description       string `yaml:"-" json:"description"`
+	HumanAnswers      string `yaml:"-" json:"human_answers,omitempty"`
 }
 
 func ValidateTaskSpec(spec *TaskSpec) error {

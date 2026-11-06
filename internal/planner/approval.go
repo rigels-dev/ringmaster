@@ -22,6 +22,10 @@ type ApprovedPlan struct {
 
 // ApprovePlan creates plan.approved.json with the canonical PlanHash.
 func ApprovePlan(projectRoot string, plan *schemas.Plan) (string, error) {
+	if open := plan.UnansweredQuestions(); len(open) > 0 {
+		return "", fmt.Errorf("plan has %d unanswered open question(s), first: %q", len(open), open[0].Question)
+	}
+
 	hash, err := plan.PlanHash()
 	if err != nil {
 		return "", fmt.Errorf("failed to compute plan hash: %w", err)
@@ -32,7 +36,7 @@ func ApprovePlan(projectRoot string, plan *schemas.Plan) (string, error) {
 		Plan:     plan,
 	}
 
-	approvedPath := filepath.Join(projectRoot, "plan.approved.json")
+	approvedPath := filepath.Join(projectRoot, ".ringmaster", "plan.approved.json")
 	if err := storage.WriteJSONAtomic(approvedPath, approved); err != nil {
 		return "", fmt.Errorf("failed to write plan.approved.json: %w", err)
 	}
@@ -42,7 +46,7 @@ func ApprovePlan(projectRoot string, plan *schemas.Plan) (string, error) {
 
 // VerifyPlanApproval verifies that plan.approved.json exists and matches current plan.json.
 func VerifyPlanApproval(projectRoot string, currentPlan *schemas.Plan) (bool, error) {
-	approvedPath := filepath.Join(projectRoot, "plan.approved.json")
+	approvedPath := filepath.Join(projectRoot, ".ringmaster", "plan.approved.json")
 	approved, err := storage.ReadJSON[ApprovedPlan](approvedPath)
 	if err != nil {
 		return false, fmt.Errorf("plan is not approved (run 'ringmaster plan' first): %w", err)
@@ -63,7 +67,7 @@ func VerifyPlanApproval(projectRoot string, currentPlan *schemas.Plan) (bool, er
 
 // RevokeApproval removes plan.approved.json (e.g. after editing plan.json).
 func RevokeApproval(projectRoot string) error {
-	approvedPath := filepath.Join(projectRoot, "plan.approved.json")
+	approvedPath := filepath.Join(projectRoot, ".ringmaster", "plan.approved.json")
 	_ = os.Remove(approvedPath)
 	return nil
 }

@@ -47,12 +47,35 @@ type ChatRequest struct {
 	Messages    []Message        `json:"messages"`
 	Tools       []ToolDefinition `json:"tools,omitempty"`
 	Temperature *float64         `json:"temperature,omitempty"`
+
+	// Agentic providers (claude_subscription) run their own tools instead of Tools:
+	// WorkDir is the workspace they operate in, AllowedCommands the shell commands they may run.
+	WorkDir         string   `json:"-"`
+	AllowedCommands []string `json:"-"`
+
+	// OnProgress, when set, receives live activity from agentic providers while
+	// the request is still running (each tool call and message), so callers can
+	// stream what the worker is doing instead of waiting for the final result.
+	OnProgress func(ProgressEvent) `json:"-"`
+}
+
+// ProgressEvent is one step of an agentic provider's run.
+type ProgressEvent struct {
+	Kind   string          // "tool" or "text"
+	Tool   string          // tool name for Kind "tool" (Read, Edit, Bash, ...)
+	Detail string          // short human summary: a file path, a command, or message text
+	Input  json.RawMessage // raw tool input for Kind "tool"
 }
 
 type TokenUsage struct {
-	PromptTokens     int `json:"prompt_tokens"`
+	PromptTokens     int `json:"prompt_tokens"` // all input processed, including cache reads and writes
 	CompletionTokens int `json:"completion_tokens"`
 	TotalTokens      int `json:"total_tokens"`
+
+	// CachedTokens is the part of PromptTokens served from the prompt cache
+	CachedTokens int `json:"cached_tokens,omitempty"`
+	// CostUSD is the provider-reported cost of the request, when it reports one
+	CostUSD float64 `json:"cost_usd,omitempty"`
 }
 
 type ChatResponse struct {
@@ -101,8 +124,16 @@ func (c *OpenAICompatibleClient) getAPIKey() (string, error) {
 	if c.APIKeyEnv == "" {
 		return "", nil
 	}
+	// If the string starts with standard sk- prefix, treat it as the raw literal key directly
+	if strings.HasPrefix(c.APIKeyEnv, "sk-") {
+		return c.APIKeyEnv, nil
+	}
 	key := os.Getenv(c.APIKeyEnv)
 	if key == "" {
+		// Fallback: check if APIKeyEnv itself was passed as the literal key
+		if len(c.APIKeyEnv) > 10 && !strings.Contains(c.APIKeyEnv, " ") {
+			return c.APIKeyEnv, nil
+		}
 		return "", fmt.Errorf("environment variable '%s' for provider API key is not set or empty", c.APIKeyEnv)
 	}
 	return key, nil

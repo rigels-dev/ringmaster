@@ -957,10 +957,12 @@ func (m ConfigModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 				return m, nil
 			case "enter": // Enter: Confirm all checked models and put them on agent list!
+				// Walk the list in display order (not the map), so the first checked
+				// model reliably becomes the master when there is none yet
 				var selected []string
-				for id, checked := range m.checkedModels {
-					if checked {
-						selected = append(selected, id)
+				for _, mod := range m.fetchedModels {
+					if m.checkedModels[mod.ID] {
+						selected = append(selected, mod.ID)
 					}
 				}
 

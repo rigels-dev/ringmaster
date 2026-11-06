@@ -1,10 +1,14 @@
 package cli
 
 import (
+	"context"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
+	"strings"
+	"time"
+
+	"ringmaster/internal/workspace"
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/spf13/cobra"
@@ -30,8 +34,8 @@ func init() {
 }
 
 func RunInit(name string, force bool) error {
+	ctx := context.Background()
 	var projectDir string
-	var repoDir string
 	isCurrentDir := false
 
 	if name == "" || name == "." {
@@ -42,13 +46,19 @@ func RunInit(name string, force bool) error {
 		}
 		projectDir = cwd
 		name = filepath.Base(cwd)
-		repoDir = projectDir
 		isCurrentDir = true
+
+		// Refuse a subdirectory of an existing repo before writing anything:
+		// tasks would otherwise branch and merge into that outer repository.
+		if !workspace.IsRepoRoot(ctx, projectDir) {
+			if outer, err := workspace.RunGit(ctx, projectDir, "rev-parse", "--show-toplevel"); err == nil {
+				return fmt.Errorf("%s is inside git repository %s; run 'ringmaster init' at the repository root, or 'ringmaster init <name>' to create a separate project", projectDir, strings.TrimSpace(outer))
+			}
+		}
 	} else {
 		// Init target directory directly
 		cwd, _ := os.Getwd()
 		projectDir = filepath.Join(cwd, name)
-		repoDir = filepath.Join(projectDir, "repo")
 
 		if info, err := os.Stat(projectDir); err == nil && info.IsDir() {
 			if !force {
@@ -57,20 +67,13 @@ func RunInit(name string, force bool) error {
 		}
 	}
 
-	// Record this as the latest active project in user's global ringmaster profile
-	homeDir, _ := os.UserHomeDir()
-	if homeDir != "" {
-		activeFile := filepath.Join(homeDir, ".ringmaster", "active_project")
-		_ = os.MkdirAll(filepath.Dir(activeFile), 0755)
-		_ = os.WriteFile(activeFile, []byte(projectDir), 0644)
-	}
-
+	// The project directory is the git repository itself; Ringmaster only adds
+	// ringmaster.toml and the .ringmaster/ state directory to it.
+	stateDir := filepath.Join(projectDir, workspace.StateDirName)
 	dirsToCreate := []string{
 		projectDir,
-		filepath.Join(projectDir, "tasks"),
-		filepath.Join(projectDir, "outputs"),
-		filepath.Join(projectDir, ".ringmaster", "logs"),
-		repoDir,
+		filepath.Join(stateDir, "tasks"),
+		filepath.Join(stateDir, "logs"),
 	}
 
 	for _, d := range dirsToCreate {
@@ -85,15 +88,27 @@ func RunInit(name string, force bool) error {
 		manifestContent := fmt.Sprintf(`# Ringmaster Project Manifest
 name = %q
 version = "0.1.0"
-brief = "BRIEF.md"
-plan = "plan.json"
+brief = ".ringmaster/BRIEF.md"
+plan = ".ringmaster/plan.json"
 created_at = %q
-`, name, filepath.Base(projectDir))
+
+# Providers and agents are configured globally ('ringmaster config' or the
+# web UI); this project only assigns them to tasks in its plan.
+#
+# Optional overrides for this project:
+# [sandbox]
+# allow = ["go test", "go vet", "go build"]   # shell commands workers may run
+# acceptance_timeout = 600                     # seconds per acceptance command (default 300)
+#
+# [budget]
+# max_tokens_per_project = 2000000
+# max_tokens_per_task = 300000
+`, name, time.Now().UTC().Format(time.RFC3339))
 		_ = os.WriteFile(manifestPath, []byte(manifestContent), 0644)
 	}
 
 	// 2. Create BRIEF.md template if not present
-	briefPath := filepath.Join(projectDir, "BRIEF.md")
+	briefPath := filepath.Join(stateDir, "BRIEF.md")
 	if _, err := os.Stat(briefPath); os.IsNotExist(err) || force {
 		briefContent := fmt.Sprintf(`# BRIEF: %s
 
@@ -113,41 +128,29 @@ Write a concise description of the project goal and scope here.
 		}
 	}
 
-	// 3. Initialize git repository if not already a git repository
-	gitDir := filepath.Join(repoDir, ".git")
-	if _, err := os.Stat(gitDir); os.IsNotExist(err) {
-		cmd := exec.Command("git", "init", "-b", "main")
-		cmd.Dir = repoDir
-		if output, err := cmd.CombinedOutput(); err != nil {
-			cmdOld := exec.Command("git", "init")
-			cmdOld.Dir = repoDir
-			if _, errOld := cmdOld.CombinedOutput(); errOld != nil {
-				return fmt.Errorf("failed to initialize git repository: %s (err: %w)", string(output), errOld)
+	// 3. Make sure the project is a git repository with a main commit to branch
+	// task worktrees from. Existing files are never staged or committed.
+	// The project must be the root of its own repository (checked for the
+	// current-dir case above); a new project nested in another checkout gets
+	// its own repo so tasks never branch or merge into the outer one.
+	if !workspace.IsRepoRoot(ctx, projectDir) {
+		if _, err := workspace.RunGit(ctx, projectDir, "init", "-b", "main"); err != nil {
+			if _, errOld := workspace.RunGit(ctx, projectDir, "init"); errOld != nil {
+				return fmt.Errorf("failed to initialize git repository: %w", errOld)
 			}
-			branchCmd := exec.Command("git", "checkout", "-b", "main")
-			branchCmd.Dir = repoDir
-			_ = branchCmd.Run()
+			_, _ = workspace.RunGit(ctx, projectDir, "symbolic-ref", "HEAD", "refs/heads/main")
 		}
-
-		initialReadme := filepath.Join(repoDir, "README.md")
-		if _, err := os.Stat(initialReadme); os.IsNotExist(err) {
-			_ = os.WriteFile(initialReadme, []byte(fmt.Sprintf("# %s\nRepository managed by Ringmaster.\n", name)), 0644)
-		}
-
-		addCmd := exec.Command("git", "add", ".")
-		addCmd.Dir = repoDir
-		_ = addCmd.Run()
-
-		commitCmd := exec.Command("git", "commit", "-m", "chore: initial commit by ringmaster")
-		commitCmd.Dir = repoDir
-		commitCmd.Env = append(os.Environ(),
-			"GIT_AUTHOR_NAME=Ringmaster",
-			"GIT_AUTHOR_EMAIL=ringmaster@openclaw.local",
-			"GIT_COMMITTER_NAME=Ringmaster",
-			"GIT_COMMITTER_EMAIL=ringmaster@openclaw.local",
-		)
-		_ = commitCmd.Run()
 	}
+	if _, err := workspace.RunGit(ctx, projectDir, "rev-parse", "--verify", "HEAD"); err != nil {
+		if _, err := workspace.RunGit(ctx, projectDir, "commit", "--allow-empty", "-m", "chore: initial commit by ringmaster"); err != nil {
+			return fmt.Errorf("failed to create initial commit: %w", err)
+		}
+	}
+	if err := workspace.EnsureStateExcluded(ctx, projectDir); err != nil {
+		return fmt.Errorf("failed to exclude %s from git: %w", workspace.StateDirName, err)
+	}
+	branch, _ := workspace.RunGit(ctx, projectDir, "rev-parse", "--abbrev-ref", "HEAD")
+	branch = strings.TrimSpace(branch)
 
 	// Stylized Banner (Metro / Steampunk Circus theme)
 	bannerStyle := lipgloss.NewStyle().
@@ -190,19 +193,23 @@ Write a concise description of the project goal and scope here.
 	}
 	fmt.Printf("  • Manifest: %s\n", pathStyle.Render(manifestPath))
 	fmt.Printf("  • Brief:    %s\n", pathStyle.Render(briefPath))
-	fmt.Printf("  • Repo:     %s\n\n", pathStyle.Render(repoDir))
+	fmt.Printf("  • State:    %s %s\n", pathStyle.Render(stateDir), labelStyle.Render("(git-excluded)"))
+	if branch != "main" {
+		fmt.Printf("  ⚠ %s\n", labelStyle.Render(fmt.Sprintf("Current branch is '%s'; task branches are merged into 'main'", branch)))
+	}
+	fmt.Println()
 
 	// Next Steps Instructions Box
 	var nextSteps string
 	if isCurrentDir {
 		nextSteps = fmt.Sprintf("Next steps:\n  1. Run %s to launch control plane\n  2. Discuss or plan your project interactively with Ringmaster\n     (or edit %s directly if you already have a prompt)",
 			cmdHighlight.Render("ringmaster"),
-			cmdHighlight.Render("BRIEF.md"))
+			cmdHighlight.Render(".ringmaster/BRIEF.md"))
 	} else {
 		nextSteps = fmt.Sprintf("Next steps:\n  1. %s\n  2. Run %s to launch control plane\n  3. Discuss or plan your project interactively with Ringmaster\n     (or edit %s directly if you already have a prompt)",
 			cmdHighlight.Render(fmt.Sprintf("cd %s", name)),
 			cmdHighlight.Render("ringmaster"),
-			cmdHighlight.Render("BRIEF.md"))
+			cmdHighlight.Render(".ringmaster/BRIEF.md"))
 	}
 	fmt.Println(boxStyle.Render(nextSteps))
 	fmt.Println()

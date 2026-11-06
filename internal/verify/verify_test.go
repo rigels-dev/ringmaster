@@ -8,7 +8,9 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
+	"time"
 
 	"ringmaster/internal/config"
 	"ringmaster/internal/llm"
@@ -77,7 +79,7 @@ func TestAcceptanceRun(t *testing.T) {
 		Acceptance: []string{"echo pass_test", "false"},
 	}
 
-	results, err := RunAcceptance(context.Background(), task, tempDir, []string{"echo", "false"})
+	results, err := RunAcceptance(context.Background(), task, tempDir, []string{"echo", "false"}, time.Minute)
 	if err != nil {
 		t.Fatalf("RunAcceptance error: %v", err)
 	}
@@ -114,7 +116,7 @@ func TestRunTaskLoopSuccessAttempt1(t *testing.T) {
 								"type": "function",
 								"function": map[string]any{
 									"name":      "write_file",
-									"arguments": fmt.Sprintf(`{"path":"outputs/T01.md","content":%q}`, reportYAML),
+									"arguments": fmt.Sprintf(`{"path":".ringmaster/outputs/T01.md","content":%q}`, reportYAML),
 								},
 							},
 						},
@@ -145,7 +147,7 @@ func TestRunTaskLoopSuccessAttempt1(t *testing.T) {
 	sandboxCfg := config.SandboxConfig{Allow: []string{"echo"}}
 	eventsPath := filepath.Join(tempDir, ".ringmaster", "logs", "events.jsonl")
 
-	res, err := RunTaskLoop(context.Background(), task, tempDir, agent, provider, budget, sandboxCfg, "Demo Brief", eventsPath)
+	res, err := RunTaskLoop(context.Background(), task, tempDir, agent, provider, budget, sandboxCfg, "Demo Brief", eventsPath, nil)
 	if err != nil {
 		t.Fatalf("RunTaskLoop error: %v", err)
 	}
@@ -164,5 +166,82 @@ func TestRunTaskLoopSuccessAttempt1(t *testing.T) {
 	}
 	if len(eventsData) == 0 {
 		t.Errorf("events log was empty")
+	}
+}
+
+func TestAcceptanceRejectsShellSyntax(t *testing.T) {
+	task := schemas.TaskSpec{
+		ID:         "T01",
+		Acceptance: []string{`test -z "$(gofmt -l .)"`, "go test ./... || true"},
+	}
+	checks, err := RunAcceptance(context.Background(), task, t.TempDir(), nil, time.Minute)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, chk := range checks {
+		if chk.Passed || !chk.Unrunnable {
+			t.Errorf("expected %q to be rejected as unrunnable, got %+v", chk.Command, chk)
+		}
+	}
+
+	// Unrunnable criteria go straight to review instead of burning retries
+	d := Decide(&schemas.WorkerReport{Status: schemas.ReportStatusCompleted}, checks, 1, 2, false)
+	if d.Type != DecisionNEED_REVIEW {
+		t.Errorf("expected NEEDS_REVIEW, got %v", d.Type)
+	}
+}
+
+func TestDecideAwaitingInput(t *testing.T) {
+	report, err := schemas.ParseReportMarkdown("---\nstatus: AWAITING_INPUT\nrequests:\n  - id: r1\n    type: choice\n    question: Which DB?\n    options: [sqlite, postgres]\n---\n\n## Summary\nNeed a decision.")
+	if err != nil {
+		t.Fatalf("parse failed: %v", err)
+	}
+	d := Decide(report, nil, 1, 2, false)
+	if d.Type != DecisionAWAITING_INPUT || len(d.Requests) != 1 {
+		t.Errorf("expected AWAITING_INPUT with 1 request, got %+v", d)
+	}
+
+	// AWAITING_INPUT without requests is not a valid report
+	if _, err := schemas.ParseReportMarkdown("---\nstatus: AWAITING_INPUT\n---\n\nhelp"); err == nil {
+		t.Error("expected AWAITING_INPUT without requests to be rejected")
+	}
+}
+
+// A command stopped at the time limit is reported as a timeout, and the task
+// goes to review instead of burning another worker attempt on it.
+func TestAcceptanceTimeoutGoesToReview(t *testing.T) {
+	task := schemas.TaskSpec{ID: "T01", Acceptance: []string{"sleep 5"}}
+	checks, err := RunAcceptance(context.Background(), task, t.TempDir(), nil, 200*time.Millisecond)
+	if err != nil {
+		t.Fatalf("RunAcceptance: %v", err)
+	}
+	if len(checks) != 1 || !checks[0].TimedOut || checks[0].Passed {
+		t.Fatalf("expected a timed-out failed check, got %+v", checks)
+	}
+	if !strings.Contains(checks[0].StderrTail, "acceptance timeout") {
+		t.Errorf("timeout not explained in output: %q", checks[0].StderrTail)
+	}
+
+	report := &schemas.WorkerReport{Status: schemas.ReportStatusCompleted}
+	d := Decide(report, checks, 1, 2, false)
+	if d.Type != DecisionNEED_REVIEW || !strings.Contains(d.Reason, "acceptance_timeout") {
+		t.Errorf("expected NEEDS_REVIEW pointing at acceptance_timeout, got %+v", d)
+	}
+}
+
+func TestAcceptanceTimeoutPrecedence(t *testing.T) {
+	cases := []struct {
+		task, sandbox int
+		want          time.Duration
+	}{
+		{0, 0, time.Duration(config.DefaultAcceptanceTimeout) * time.Second},
+		{0, 120, 120 * time.Second},
+		{900, 120, 900 * time.Second},
+	}
+	for _, c := range cases {
+		got := acceptanceTimeout(schemas.TaskSpec{AcceptanceTimeout: c.task}, config.SandboxConfig{AcceptanceTimeout: c.sandbox})
+		if got != c.want {
+			t.Errorf("task=%d sandbox=%d: got %s, want %s", c.task, c.sandbox, got, c.want)
+		}
 	}
 }
