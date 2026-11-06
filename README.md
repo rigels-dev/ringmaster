@@ -142,21 +142,31 @@ ssh -N -L 12053:localhost:12053 user@your-server
 ## Project layout
 
 ```
-my-project/                        your code; the project is the git repository itself
-├── ringmaster.toml                project manifest
-└── .ringmaster/                   all Ringmaster state (excluded from git)
-    ├── BRIEF.md                   requirements
-    ├── plan.json                  the task DAG
-    ├── plan.approved.json         approval, bound to the plan hash
-    ├── tasks/Txx-*.md             task specs, including your answers
-    ├── state.json                 task status and token usage
-    ├── outputs/Txx.md             worker reports (kept after merge)
-    ├── worktrees/Txx/             a task's working copy while it is active
+my-project/                          your code; the project is the git repository itself
+├── ringmaster.toml                  project manifest (name, optional sandbox/budget overrides)
+└── .ringmaster/                     all Ringmaster state (excluded from git)
+    ├── BRIEF.md                     requirements
+    ├── chat_history.json            your conversation with the master planner
+    ├── plan.json                    the task DAG, open questions and assumptions
+    ├── plan.approved.json           approval, bound to the plan hash
+    ├── tasks/Txx-*.md               task specs, including your answers
+    ├── state.json                   task status, attempts and token usage
+    ├── answers/                     answers queued for waiting tasks
+    ├── approvals.json               commands you approved beyond the sandbox
+    ├── run.pid                      present while a run is active
+    ├── outputs/Txx.md               worker reports (archived, kept after merge)
+    ├── worktrees/Txx/               a task's checkout of branch rm/Txx while it is active
+    │   └── .ringmaster/
+    │       ├── outputs/Txx.md       the report as the worker writes it
+    │       └── logs/Txx-attemptN.jsonl   live transcript of each attempt
     └── logs/
-        ├── run.jsonl              output of every run
-        ├── events.jsonl           audit trail
-        └── Txx-attemptN.jsonl     per-attempt transcripts
+        ├── run.jsonl                output of every run, appended
+        ├── run-YYYYMMDD-HHMMSS.jsonl    earlier run logs (rotated at 10 MB or cleared in the UI)
+        ├── events.jsonl             audit trail: attempts, checks, decisions, answers
+        └── Txx-attemptN.jsonl       per-attempt transcripts (archived)
 ```
+
+Task worktrees are removed once their branch is merged; the `rm/Txx` branches stay, so the history can still be traced in the Branches view or with `git log`.
 
 The manifest can tune how this project's tasks run:
 
