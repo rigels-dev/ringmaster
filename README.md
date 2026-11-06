@@ -47,7 +47,7 @@ When a worker needs you (a decision, a value only you know, or approval for a co
 | **Providers** | Providers and agents; pick the master and default worker |
 | **Logs** | Live and past runs, colored per task, with a lane for each working automaton |
 | **Analytics** | Tokens, cost and time per task and per agent |
-| **Terminal** | A floating shell in the project directory (`Ctrl+\``), restricted to localhost |
+| **Terminal** | A floating shell in the project directory (toggle with ``Ctrl+` ``), restricted to localhost |
 
 There is a light and a dark theme.
 
@@ -64,7 +64,7 @@ There is a light and a dark theme.
 ## Install
 
 ```bash
-git clone <this repository> ringmaster
+git clone https://github.com/rigels-dev/ringmaster.git
 cd ringmaster
 make build web        # bin/ringmaster and the web UI
 ln -s "$PWD/bin/ringmaster" ~/.local/bin/ringmaster
