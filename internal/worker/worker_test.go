@@ -24,8 +24,14 @@ func TestSandboxResolvePath(t *testing.T) {
 	if err != nil {
 		t.Fatalf("expected valid path, got error: %v", err)
 	}
-	if !strings.HasPrefix(resolved, tempDir) {
-		t.Errorf("expected path to stay inside tempDir, got: %s", resolved)
+	// ResolvePath returns resolved paths, and the temp dir itself may sit
+	// under a symlink (on macOS, /var is one)
+	realTempDir, err := filepath.EvalSymlinks(tempDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.HasPrefix(resolved, realTempDir+string(filepath.Separator)) {
+		t.Errorf("expected path to stay inside %s, got: %s", realTempDir, resolved)
 	}
 
 	// Path traversal attempt
