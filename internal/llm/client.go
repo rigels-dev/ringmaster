@@ -52,6 +52,10 @@ type ChatRequest struct {
 	// WorkDir is the workspace they operate in, AllowedCommands the shell commands they may run.
 	WorkDir         string   `json:"-"`
 	AllowedCommands []string `json:"-"`
+	// CommandEnv is the environment those commands may see ("NAME=value").
+	// The provider's own process is started with it, plus what it needs to
+	// log in, since its commands inherit whatever it has. Nil keeps the caller's.
+	CommandEnv []string `json:"-"`
 
 	// OnProgress, when set, receives live activity from agentic providers while
 	// the request is still running (each tool call and message), so callers can
