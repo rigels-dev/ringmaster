@@ -206,7 +206,13 @@ func (ts *ToolSet) search(pattern, relPath string) string {
 		return fmt.Sprintf("Error: invalid regex pattern: %v", err)
 	}
 
-	searchRoot := ts.worktreeRoot
+	// Work from the resolved root so relative paths stay inside it even when
+	// the worktree is reached through a symlink
+	root, err := ResolvePath(ts.worktreeRoot, ".")
+	if err != nil {
+		return fmt.Sprintf("Error: %v", err)
+	}
+	searchRoot := root
 	if relPath != "" && relPath != "." {
 		target, err := ResolvePath(ts.worktreeRoot, relPath)
 		if err != nil {
@@ -226,7 +232,25 @@ func (ts *ToolSet) search(pattern, relPath string) string {
 			return nil
 		}
 
-		rel, _ := filepath.Rel(ts.worktreeRoot, p)
+		rel, _ := filepath.Rel(root, p)
+
+		// Walk does not follow symlinks but reading one would, so a link is
+		// read only if it resolves to a regular file inside the worktree.
+		// Anything else that is not a regular file (FIFO, socket, device) is skipped.
+		if !info.Mode().IsRegular() {
+			if info.Mode()&os.ModeSymlink == 0 {
+				return nil
+			}
+			resolved, err := ResolvePath(root, rel)
+			if err != nil {
+				return nil
+			}
+			if st, err := os.Stat(resolved); err != nil || !st.Mode().IsRegular() {
+				return nil
+			}
+			p = resolved
+		}
+
 		content, readErr := os.ReadFile(p)
 		if readErr != nil {
 			return nil
