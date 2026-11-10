@@ -116,7 +116,7 @@ func RunTaskLoop(
 		var checks []CheckResult
 		if attemptRes.Status == schemas.ReportStatusCompleted && !budgetExceeded {
 			var checkErr error
-			checks, checkErr = RunAcceptance(ctx, task, worktree, sandboxCfg.Allow, acceptanceTimeout(task, sandboxCfg))
+			checks, checkErr = RunAcceptance(ctx, task, worktree, sandboxCfg.Allow, sandboxCfg.PassEnv, acceptanceTimeout(task, sandboxCfg))
 			if checkErr != nil {
 				return nil, fmt.Errorf("failed to run acceptance criteria: %w", checkErr)
 			}

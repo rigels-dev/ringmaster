@@ -96,29 +96,83 @@ func CheckCommand(cmd string, allowlist []string) bool {
 	return false
 }
 
-// ScrubbedEnv filters out environment variables containing sensitive keywords
-// (KEY, TOKEN, SECRET, PASSWORD) to prevent credential leaks inside worker commands.
-func ScrubbedEnv() []string {
-	sensitive := []string{"KEY", "TOKEN", "SECRET", "PASSWORD"}
-	var scrubbed []string
+// defaultPassEnv names the environment variables a worker command gets without
+// being asked for: what a shell, the common toolchains and the network setup
+// need to work, and nothing that normally carries a credential. A trailing *
+// matches any name with that prefix.
+var defaultPassEnv = []string{
+	// Session and locale
+	"PATH", "HOME", "USER", "LOGNAME", "SHELL", "TERM", "TZ",
+	"LANG", "LANGUAGE", "LC_*", "TMPDIR", "TMP", "TEMP", "XDG_*",
+	"CI", "NO_COLOR", "FORCE_COLOR",
+	// Go
+	"GOPATH", "GOROOT", "GOBIN", "GOCACHE", "GOMODCACHE", "GOFLAGS", "GOPROXY",
+	"GOPRIVATE", "GONOPROXY", "GONOSUMDB", "GOSUMDB", "GOTOOLCHAIN", "GOWORK",
+	"GOOS", "GOARCH", "GOEXPERIMENT", "CGO_ENABLED", "CGO_CFLAGS", "CGO_LDFLAGS",
+	// Node.js
+	"NODE_PATH", "NODE_OPTIONS", "NODE_ENV", "NVM_DIR", "NVM_BIN", "VOLTA_HOME",
+	"COREPACK_HOME", "BUN_INSTALL", "DENO_DIR", "NPM_CONFIG_CACHE", "NPM_CONFIG_PREFIX", "npm_config_cache", "npm_config_prefix",
+	// Python
+	"PYTHONPATH", "PYTHONHOME", "VIRTUAL_ENV", "PYENV_ROOT", "PYENV_VERSION",
+	"CONDA_PREFIX", "CONDA_DEFAULT_ENV", "PIP_CACHE_DIR", "UV_CACHE_DIR",
+	// Rust, Java, Ruby and version managers
+	"CARGO_HOME", "RUSTUP_HOME", "RUSTUP_TOOLCHAIN", "JAVA_HOME", "MAVEN_HOME",
+	"GRADLE_USER_HOME", "GEM_HOME", "GEM_PATH", "RBENV_ROOT", "ASDF_DIR",
+	"ASDF_DATA_DIR", "MISE_DATA_DIR",
+	// Compilers and system libraries
+	"CC", "CXX", "LD_LIBRARY_PATH", "DYLD_LIBRARY_PATH", "PKG_CONFIG_PATH", "SDKROOT",
+	"DEVELOPER_DIR", "MACOSX_DEPLOYMENT_TARGET", "HOMEBREW_PREFIX", "HOMEBREW_CELLAR",
+	"HOMEBREW_REPOSITORY", "NIX_*",
+	// Network and containers
+	"HTTP_PROXY", "HTTPS_PROXY", "NO_PROXY", "ALL_PROXY",
+	"http_proxy", "https_proxy", "no_proxy", "all_proxy",
+	"SSL_CERT_FILE", "SSL_CERT_DIR", "NODE_EXTRA_CA_CERTS", "REQUESTS_CA_BUNDLE",
+	"CURL_CA_BUNDLE", "DOCKER_HOST", "DOCKER_CONTEXT", "DOCKER_CONFIG",
+}
 
-	for _, env := range os.Environ() {
-		parts := strings.SplitN(env, "=", 2)
-		if len(parts) == 0 {
+// sensitiveNameParts mark a variable as a likely credential. They only veto
+// names matched by a default wildcard; a name the user listed is passed as asked.
+var sensitiveNameParts = []string{"KEY", "TOKEN", "SECRET", "PASSWORD", "CREDENTIAL"}
+
+// CommandEnv is the environment for commands run on a worker's behalf: the
+// variables in defaultPassEnv plus those the user listed in [sandbox] pass_env.
+// Everything else in Ringmaster's own environment is left out, so a credential
+// reaches a worker command only if it was named. (An allowlist, because
+// secrets do not announce themselves: DATABASE_URL holds a password too.)
+func CommandEnv(passEnv []string) []string {
+	var env []string
+	for _, kv := range os.Environ() {
+		name, _, ok := strings.Cut(kv, "=")
+		if !ok || name == "" {
 			continue
 		}
-		keyUpper := strings.ToUpper(parts[0])
-		isSensitive := false
-		for _, s := range sensitive {
-			if strings.Contains(keyUpper, s) {
-				isSensitive = true
-				break
-			}
-		}
-		if !isSensitive {
-			scrubbed = append(scrubbed, env)
+		if matchesEnvName(passEnv, name) || (matchesEnvName(defaultPassEnv, name) && !looksSensitive(name)) {
+			env = append(env, kv)
 		}
 	}
+	return env
+}
 
-	return scrubbed
+func matchesEnvName(patterns []string, name string) bool {
+	for _, pattern := range patterns {
+		pattern = strings.TrimSpace(pattern)
+		if prefix, ok := strings.CutSuffix(pattern, "*"); ok {
+			if prefix != "" && strings.HasPrefix(name, prefix) {
+				return true
+			}
+		} else if pattern == name {
+			return true
+		}
+	}
+	return false
+}
+
+func looksSensitive(name string) bool {
+	upper := strings.ToUpper(name)
+	for _, part := range sensitiveNameParts {
+		if strings.Contains(upper, part) {
+			return true
+		}
+	}
+	return false
 }

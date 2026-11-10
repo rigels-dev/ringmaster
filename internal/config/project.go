@@ -66,5 +66,10 @@ func (c *Config) ForProject(m *ProjectManifest) *Config {
 	if m.Sandbox.AcceptanceTimeout > 0 {
 		out.Sandbox.AcceptanceTimeout = m.Sandbox.AcceptanceTimeout
 	}
+	// Unlike allow, a project's pass_env adds to the fleet's: what one project
+	// needs (its DATABASE_URL) does not replace what every project needs
+	if len(m.Sandbox.PassEnv) > 0 {
+		out.Sandbox.PassEnv = append(append([]string(nil), c.Sandbox.PassEnv...), m.Sandbox.PassEnv...)
+	}
 	return &out
 }

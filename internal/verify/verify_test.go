@@ -79,7 +79,7 @@ func TestAcceptanceRun(t *testing.T) {
 		Acceptance: []string{"echo pass_test", "false"},
 	}
 
-	results, err := RunAcceptance(context.Background(), task, tempDir, []string{"echo", "false"}, time.Minute)
+	results, err := RunAcceptance(context.Background(), task, tempDir, []string{"echo", "false"}, nil, time.Minute)
 	if err != nil {
 		t.Fatalf("RunAcceptance error: %v", err)
 	}
@@ -174,7 +174,7 @@ func TestAcceptanceRejectsShellSyntax(t *testing.T) {
 		ID:         "T01",
 		Acceptance: []string{`test -z "$(gofmt -l .)"`, "go test ./... || true"},
 	}
-	checks, err := RunAcceptance(context.Background(), task, t.TempDir(), nil, time.Minute)
+	checks, err := RunAcceptance(context.Background(), task, t.TempDir(), nil, nil, time.Minute)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -211,7 +211,7 @@ func TestDecideAwaitingInput(t *testing.T) {
 // goes to review instead of burning another worker attempt on it.
 func TestAcceptanceTimeoutGoesToReview(t *testing.T) {
 	task := schemas.TaskSpec{ID: "T01", Acceptance: []string{"sleep 5"}}
-	checks, err := RunAcceptance(context.Background(), task, t.TempDir(), nil, 200*time.Millisecond)
+	checks, err := RunAcceptance(context.Background(), task, t.TempDir(), nil, nil, 200*time.Millisecond)
 	if err != nil {
 		t.Fatalf("RunAcceptance: %v", err)
 	}
@@ -243,5 +243,25 @@ func TestAcceptanceTimeoutPrecedence(t *testing.T) {
 		if got != c.want {
 			t.Errorf("task=%d sandbox=%d: got %s, want %s", c.task, c.sandbox, got, c.want)
 		}
+	}
+}
+
+// Acceptance commands see the filtered environment: nothing unlisted, and
+// what [sandbox] pass_env names.
+func TestRunAcceptanceEnvironment(t *testing.T) {
+	t.Setenv("DATABASE_URL", "postgres://user:pass@db/app")
+	t.Setenv("RM_TEST_VISIBLE", "shown")
+
+	task := schemas.TaskSpec{ID: "T01", Acceptance: []string{"env"}}
+	checks, err := RunAcceptance(context.Background(), task, t.TempDir(), nil, []string{"RM_TEST_VISIBLE"}, time.Minute)
+	if err != nil || len(checks) != 1 || !checks[0].Passed {
+		t.Fatalf("RunAcceptance: err=%v checks=%+v", err, checks)
+	}
+	out := checks[0].StdoutTail
+	if strings.Contains(out, "DATABASE_URL") {
+		t.Errorf("an unlisted variable reached the acceptance command:\n%s", out)
+	}
+	if !strings.Contains(out, "RM_TEST_VISIBLE=shown") {
+		t.Errorf("a variable listed in pass_env did not reach the acceptance command:\n%s", out)
 	}
 }

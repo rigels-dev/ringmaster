@@ -75,6 +75,7 @@ func RunAttempt(
 	}
 
 	toolSet := NewToolSet(worktree, sandboxCfg.Allow)
+	toolSet.PassEnv = sandboxCfg.PassEnv
 	tools := toolSet.Definitions()
 
 	humanAnswersSection := ""

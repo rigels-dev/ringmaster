@@ -39,6 +39,9 @@ max_tokens_per_task = 300000
 
 [sandbox]
 acceptance_timeout = 300   # seconds each acceptance command may run
+# Commands see only a built-in set of environment variables (PATH, HOME,
+# toolchain paths, proxies). Name any others they need; a trailing * is a prefix.
+# pass_env = ["DATABASE_URL", "AWS_*"]
 allow = [
   "pytest",
   "ruff",

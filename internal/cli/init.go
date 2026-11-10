@@ -99,6 +99,7 @@ created_at = %q
 # [sandbox]
 # allow = ["go test", "go vet", "go build"]   # shell commands workers may run
 # acceptance_timeout = 600                     # seconds per acceptance command (default 300)
+# pass_env = ["DATABASE_URL", "AWS_*"]        # extra environment variables commands may see
 #
 # [budget]
 # max_tokens_per_project = 2000000

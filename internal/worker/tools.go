@@ -23,6 +23,10 @@ const (
 type ToolSet struct {
 	worktreeRoot string
 	allowlist    []string
+
+	// PassEnv lists extra environment variables run_cmd hands to commands,
+	// on top of the defaults (see CommandEnv)
+	PassEnv []string
 }
 
 // NewToolSet creates a ToolSet scoped to a specific worktree directory.
@@ -293,7 +297,7 @@ func (ts *ToolSet) runCmd(ctx context.Context, cmdStr string) string {
 
 	cmd := exec.CommandContext(timeoutCtx, c, args...)
 	cmd.Dir = ts.worktreeRoot
-	cmd.Env = ScrubbedEnv()
+	cmd.Env = CommandEnv(ts.PassEnv)
 
 	var outBuf bytes.Buffer
 	cmd.Stdout = &outBuf
