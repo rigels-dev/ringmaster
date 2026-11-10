@@ -188,10 +188,16 @@ func CreateWorktree(ctx context.Context, projectRoot, taskID, baseRef string) (s
 
 	// Check if target worktree directory already exists
 	if fi, err := os.Stat(targetDir); err == nil && fi.IsDir() {
-		// Verify if it is recognized as a worktree by git
+		// Verify if it is recognized as a worktree by git. Git lists resolved
+		// paths, so compare as paths: the project may sit under a symlink
+		// (on macOS, anything in /tmp or /var).
 		out, err := RunGit(ctx, repoPath, "worktree", "list", "--porcelain")
-		if err == nil && strings.Contains(out, targetDir) {
-			return targetDir, nil
+		if err == nil {
+			for _, line := range strings.Split(out, "\n") {
+				if listed, ok := strings.CutPrefix(line, "worktree "); ok && samePath(listed, targetDir) {
+					return targetDir, nil
+				}
+			}
 		}
 	}
 

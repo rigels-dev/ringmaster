@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"io"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"sync"
@@ -58,8 +59,13 @@ func TestPtyBridgeRunsShellInDirectory(t *testing.T) {
 	if !strings.Contains(s, "marker-42") {
 		t.Fatalf("shell output missing command result:\n%s", s)
 	}
-	if !strings.Contains(s, dir) {
-		t.Errorf("shell did not start in %s:\n%s", dir, s)
+	// pwd prints the resolved directory, and the temp dir may sit under a symlink
+	realDir, err := filepath.EvalSymlinks(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(s, realDir) {
+		t.Errorf("shell did not start in %s:\n%s", realDir, s)
 	}
 	if !strings.Contains(s, "40 120") {
 		t.Errorf("resize was not applied (want stty size 40 120):\n%s", s)
