@@ -26,5 +26,7 @@ jobs:
           fi
       - name: Go tests
         run: make test
+      - name: Web tests
+        run: make test-web
       - name: Web build
         run: make web
