@@ -6,7 +6,7 @@
 
 **A local control plane for teams of AI coding agents.** Ringmaster turns a project brief into a plan of tasks, hands each task to an AI worker in its own git worktree, checks the result with real commands, and merges what passes into `main`, while you watch, answer questions and approve from a terminal or a web UI.
 
-Current release: **v0.1.0-antares**. Ringmaster runs on Linux and macOS.
+Current release: **v0.2.0-bellatrix**. Ringmaster runs on Linux and macOS.
 
 ---
 
@@ -18,7 +18,7 @@ Current release: **v0.1.0-antares**. Ringmaster runs on Linux and macOS.
 4. **Verify.** Ringmaster runs the acceptance commands itself instead of trusting the worker's report. Failures go back to the worker for another attempt; problems an attempt cannot fix (a timeout, a command that cannot run) go to you instead.
 5. **Merge.** Passing tasks are merged into `main` one at a time. Every attempt is a commit tagged with the automaton that made it.
 
-When a worker needs you (a decision, a value only you know, or approval for a command outside its sandbox), the task waits until you answer.
+When a worker needs you (a decision, a value only you know, or approval for a command outside its allowlist), the task waits until you answer.
 
 ## Features
 
@@ -34,7 +34,7 @@ When a worker needs you (a decision, a value only you know, or approval for a co
   ```
 - **Any provider.** OpenAI-compatible APIs (OpenAI, OpenRouter, Ollama, vLLM, DeepSeek and others), the Anthropic API, and a local Claude subscription through the Claude Code CLI.
 - **One fleet for all projects.** Providers and agents are configured once, globally; a project only assigns agents to its tasks.
-- **Sandboxed workers.** Commands run from an allowlist with a scrubbed environment and path-traversal checks. Each acceptance command has a time limit (default 300 s), adjustable per project or per task.
+- **Guardrails for workers.** Workers run commands only from an allowlist, with credential-like variables (names containing `KEY`, `TOKEN`, `SECRET` or `PASSWORD`) removed from the environment, and their file tools are confined to the task's worktree. These are guardrails, not isolation: an allowed command such as `go test` still runs code the worker wrote, with your user's permissions. Run Ringmaster inside a container or VM if you need a hard boundary. Each acceptance command has a time limit (default 300 s), adjustable per project or per task.
 - **Live and lasting telemetry.** Worker steps stream to the logs as they happen. Every run is appended to `.ringmaster/logs/run.jsonl`, and reports and transcripts are kept after their worktree is removed. Token usage includes prompt-cache reads and writes, plus cost when the provider reports it.
 
 ### Web UI
@@ -168,7 +168,7 @@ my-project/                          your code; the project is the git repositor
     ├── tasks/Txx-*.md               task specs, including your answers
     ├── state.json                   task status, attempts and token usage
     ├── answers/                     answers queued for waiting tasks
-    ├── approvals.json               commands you approved beyond the sandbox
+    ├── approvals.json               commands you approved beyond the allowlist
     ├── run.pid                      present while a run is active
     ├── outputs/Txx.md               worker reports (archived, kept after merge)
     ├── worktrees/Txx/               a task's checkout of branch rm/Txx while it is active
