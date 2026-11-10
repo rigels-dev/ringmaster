@@ -1,9 +1,8 @@
 import { resolveProjectDir } from '../utils/ringmaster'
+import { isLoopbackAddress, isTrustedUpgrade } from '../utils/trust'
 import {
   createSession,
   getTerminalSession,
-  isLoopbackAddress,
-  isTrustedUpgrade,
   killSession,
   resize,
   resolveTerminalCwd,

@@ -3,7 +3,7 @@
 VERSION ?= $(shell cat VERSION)
 LDFLAGS := -s -w -X ringmaster/internal/version.Version=$(VERSION)
 
-.PHONY: all build web test tag dist lockfile clean
+.PHONY: all build web test test-web tag dist lockfile clean
 
 all: build web
 
@@ -16,6 +16,10 @@ web:
 test:
 	go vet ./...
 	go test ./...
+
+# Unit tests for the web server's own logic; needs only Node.js, no npm install
+test-web:
+	cd web && npm test
 
 # Point web/package-lock.json at the public npm registry (after npm install via a mirror)
 lockfile:

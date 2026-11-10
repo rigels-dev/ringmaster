@@ -111,33 +111,6 @@ export function killSession(id: string) {
   }, 1000)
 }
 
-const LOOPBACK_HOSTS = new Set(['localhost', '127.0.0.1', '::1', '[::1]'])
-const LOOPBACK_ADDRS = new Set(['127.0.0.1', '::1', '::ffff:127.0.0.1'])
-
-// The terminal is a full shell, so only the local machine may use it:
-// the Host must be loopback (no DNS rebinding), the Origin must be this same
-// host (no other website can open the socket), and the peer must be local.
-export function isTrustedUpgrade(headers: Headers): boolean {
-  const host = headers.get('host') || ''
-  const origin = headers.get('origin') || ''
-  let hostname = ''
-  try {
-    hostname = new URL(`http://${host}`).hostname
-  } catch {
-    return false
-  }
-  if (!LOOPBACK_HOSTS.has(hostname)) return false
-  try {
-    return new URL(origin).host === host
-  } catch {
-    return false
-  }
-}
-
-export function isLoopbackAddress(addr: string | undefined): boolean {
-  return Boolean(addr && LOOPBACK_ADDRS.has(addr))
-}
-
 // Sessions may only start inside the project (its root or a task worktree)
 export function resolveTerminalCwd(projectDir: string, requested?: string): string {
   const root = path.resolve(projectDir)
