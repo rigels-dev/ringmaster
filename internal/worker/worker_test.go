@@ -68,19 +68,6 @@ func TestSandboxCheckCommand(t *testing.T) {
 	}
 }
 
-func TestSandboxScrubbedEnv(t *testing.T) {
-	t.Setenv("SECRET_API_KEY", "sensitive_123")
-	t.Setenv("AUTH_TOKEN", "bearer_token")
-	t.Setenv("NORMAL_ENV", "safe_val")
-
-	scrubbed := ScrubbedEnv()
-	for _, env := range scrubbed {
-		if strings.Contains(env, "SECRET_API_KEY") || strings.Contains(env, "AUTH_TOKEN") {
-			t.Errorf("sensitive env was not scrubbed: %s", env)
-		}
-	}
-}
-
 func TestToolSetOperations(t *testing.T) {
 	tempDir := t.TempDir()
 	ts := NewToolSet(tempDir, []string{"echo"})

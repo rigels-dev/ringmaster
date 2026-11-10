@@ -158,3 +158,22 @@ func TestSaveFileCreatesPrivateConfig(t *testing.T) {
 		t.Errorf("config mode = %v, want 0600", fi.Mode().Perm())
 	}
 }
+
+// A project's pass_env adds to the fleet's instead of replacing it, and the
+// fleet config is left as it was.
+func TestProjectPassEnvAddsToFleet(t *testing.T) {
+	fleet := DefaultConfig()
+	fleet.Sandbox.PassEnv = []string{"AWS_*"}
+
+	merged := fleet.ForProject(&ProjectManifest{Sandbox: SandboxConfig{PassEnv: []string{"DATABASE_URL"}}})
+	if got := merged.Sandbox.PassEnv; len(got) != 2 || got[0] != "AWS_*" || got[1] != "DATABASE_URL" {
+		t.Errorf("merged pass_env = %v, want [AWS_* DATABASE_URL]", got)
+	}
+	if got := fleet.Sandbox.PassEnv; len(got) != 1 {
+		t.Errorf("fleet pass_env was changed by the project: %v", got)
+	}
+
+	if got := fleet.ForProject(&ProjectManifest{}).Sandbox.PassEnv; len(got) != 1 || got[0] != "AWS_*" {
+		t.Errorf("pass_env without a project override = %v, want [AWS_*]", got)
+	}
+}

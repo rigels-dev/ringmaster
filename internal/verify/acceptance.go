@@ -42,7 +42,8 @@ func hasShellSyntax(cmd string) bool {
 
 // RunAcceptance runs each command in task.Acceptance independently inside worktree,
 // each limited to timeout. All commands must exit with code 0 to pass.
-func RunAcceptance(ctx context.Context, task schemas.TaskSpec, worktree string, allowlist []string, timeout time.Duration) ([]CheckResult, error) {
+// They get the same environment as worker commands (worker.CommandEnv).
+func RunAcceptance(ctx context.Context, task schemas.TaskSpec, worktree string, allowlist, passEnv []string, timeout time.Duration) ([]CheckResult, error) {
 	var results []CheckResult
 
 	for _, cmdStr := range task.Acceptance {
@@ -81,7 +82,7 @@ func RunAcceptance(ctx context.Context, task schemas.TaskSpec, worktree string, 
 		tCtx, cancel := context.WithTimeout(ctx, timeout)
 		cmd := exec.CommandContext(tCtx, c, args...)
 		cmd.Dir = worktree
-		cmd.Env = worker.ScrubbedEnv()
+		cmd.Env = worker.CommandEnv(passEnv)
 
 		var stdout, stderr bytes.Buffer
 		cmd.Stdout = &stdout

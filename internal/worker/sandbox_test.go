@@ -1,6 +1,7 @@
 package worker
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"strings"
@@ -134,5 +135,76 @@ func TestSearchUnderSymlinkedRoot(t *testing.T) {
 		if got := ts.search("needle", sub); !strings.Contains(got, "src/main.go:1: package needle") {
 			t.Errorf("search(%q) under a symlinked root = %q", sub, got)
 		}
+	}
+}
+
+func envMap(env []string) map[string]string {
+	m := map[string]string{}
+	for _, kv := range env {
+		name, value, _ := strings.Cut(kv, "=")
+		m[name] = value
+	}
+	return m
+}
+
+func TestCommandEnvPassesOnlyNamedVariables(t *testing.T) {
+	t.Setenv("PATH", "/usr/bin")
+	t.Setenv("GOCACHE", "/cache/go")
+	t.Setenv("LC_TIME", "C")
+	// Credentials, with and without a telltale name
+	t.Setenv("SECRET_API_KEY", "sensitive")
+	t.Setenv("AUTH_TOKEN", "bearer")
+	t.Setenv("DATABASE_URL", "postgres://user:pass@db/app")
+	t.Setenv("SSH_AUTH_SOCK", "/run/agent.sock")
+	t.Setenv("SOME_APP_SETTING", "x")
+	// Caught by a default wildcard, but named like a credential
+	t.Setenv("XDG_SESSION_TOKEN", "t")
+
+	env := envMap(CommandEnv(nil))
+	for name, want := range map[string]string{"PATH": "/usr/bin", "GOCACHE": "/cache/go", "LC_TIME": "C"} {
+		if env[name] != want {
+			t.Errorf("%s = %q, want %q", name, env[name], want)
+		}
+	}
+	for _, name := range []string{"SECRET_API_KEY", "AUTH_TOKEN", "DATABASE_URL", "SSH_AUTH_SOCK", "SOME_APP_SETTING", "XDG_SESSION_TOKEN"} {
+		if _, ok := env[name]; ok {
+			t.Errorf("%s reached the command environment without being listed", name)
+		}
+	}
+}
+
+func TestCommandEnvAddsUserPassEnv(t *testing.T) {
+	t.Setenv("DATABASE_URL", "postgres://user:pass@db/app")
+	t.Setenv("AWS_REGION", "ap-southeast-3")
+	t.Setenv("AWS_SECRET_ACCESS_KEY", "listed-on-purpose")
+	t.Setenv("AWSOME", "not-a-match")
+	t.Setenv("OTHER_SECRET", "s")
+
+	env := envMap(CommandEnv([]string{"DATABASE_URL", " AWS_* ", "*", ""}))
+	for _, name := range []string{"DATABASE_URL", "AWS_REGION", "AWS_SECRET_ACCESS_KEY"} {
+		if _, ok := env[name]; !ok {
+			t.Errorf("%s was listed in pass_env but did not reach the command", name)
+		}
+	}
+	// A bare * is not "everything": it would undo the allowlist by accident
+	for _, name := range []string{"AWSOME", "OTHER_SECRET"} {
+		if _, ok := env[name]; ok {
+			t.Errorf("%s reached the command environment without being listed", name)
+		}
+	}
+}
+
+func TestRunCmdUsesCommandEnv(t *testing.T) {
+	t.Setenv("DATABASE_URL", "postgres://user:pass@db/app")
+	t.Setenv("RM_TEST_VISIBLE", "shown")
+
+	ts := NewToolSet(t.TempDir(), []string{"env"})
+	ts.PassEnv = []string{"RM_TEST_VISIBLE"}
+	out := ts.runCmd(context.Background(), "env")
+	if strings.Contains(out, "DATABASE_URL") {
+		t.Errorf("run_cmd leaked an unlisted variable:\n%s", out)
+	}
+	if !strings.Contains(out, "RM_TEST_VISIBLE=shown") {
+		t.Errorf("run_cmd dropped a variable listed in pass_env:\n%s", out)
 	}
 }

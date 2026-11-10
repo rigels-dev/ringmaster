@@ -38,6 +38,10 @@ type SandboxConfig struct {
 	// AcceptanceTimeout is how long each acceptance command may run, in seconds
 	// (0 = DefaultAcceptanceTimeout). A task's plan may set its own.
 	AcceptanceTimeout int `toml:"acceptance_timeout,omitempty"`
+	// PassEnv names environment variables handed to worker and acceptance
+	// commands on top of the built-in set (PATH, HOME, toolchain paths, ...).
+	// A trailing * matches a prefix. Everything not named stays out.
+	PassEnv []string `toml:"pass_env,omitempty"`
 }
 
 // DefaultAcceptanceTimeout fits a cold docker build or an integration suite.
