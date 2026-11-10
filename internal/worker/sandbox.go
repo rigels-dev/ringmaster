@@ -15,38 +15,55 @@ func ResolvePath(root, rel string) (string, error) {
 		return "", fmt.Errorf("absolute paths are not allowed: %s", rel)
 	}
 
-	// Normalize root
+	// Normalize root. Resolve its symlinks too, so it compares against resolved
+	// targets (on macOS /tmp is a symlink to /private/tmp)
 	cleanRoot, err := filepath.Abs(root)
 	if err != nil {
 		return "", fmt.Errorf("failed to resolve root directory: %w", err)
+	}
+	if realRoot, err := filepath.EvalSymlinks(cleanRoot); err == nil {
+		cleanRoot = realRoot
 	}
 
 	fullPath := filepath.Join(cleanRoot, cleanRel)
 
 	// Guard against path traversal like ../../etc/passwd
-	if !strings.HasPrefix(fullPath, cleanRoot) {
+	if !isWithin(cleanRoot, fullPath) {
 		return "", fmt.Errorf("path escapes sandbox boundary: %s", rel)
 	}
 
-	// Check if target or intermediate exists and resolves outside boundary via symlink
-	realPath, err := filepath.EvalSymlinks(fullPath)
-	if err == nil {
-		if !strings.HasPrefix(realPath, cleanRoot) {
-			return "", fmt.Errorf("symlink target escapes sandbox boundary: %s", rel)
+	// Resolve the deepest part of the path that exists and check where it really
+	// points. The rest (not created yet, e.g. for write_file) is appended as is.
+	existing, rest := fullPath, ""
+	for {
+		realPath, err := filepath.EvalSymlinks(existing)
+		if err == nil {
+			if !isWithin(cleanRoot, realPath) {
+				return "", fmt.Errorf("symlink target escapes sandbox boundary: %s", rel)
+			}
+			return filepath.Join(realPath, rest), nil
 		}
-		return realPath, nil
-	}
-
-	// If file doesn't exist yet (e.g. for write_file), check deepest existing parent directory
-	parent := filepath.Dir(fullPath)
-	realParent, err := filepath.EvalSymlinks(parent)
-	if err == nil {
-		if !strings.HasPrefix(realParent, cleanRoot) {
-			return "", fmt.Errorf("parent directory escapes sandbox boundary: %s", rel)
+		// Present but unresolvable: a dangling symlink, which a write would follow
+		if _, lerr := os.Lstat(existing); lerr == nil {
+			return "", fmt.Errorf("unresolvable symlink in path: %s", rel)
 		}
+		parent := filepath.Dir(existing)
+		if parent == existing {
+			return "", fmt.Errorf("path escapes sandbox boundary: %s", rel)
+		}
+		rest = filepath.Join(filepath.Base(existing), rest)
+		existing = parent
 	}
+}
 
-	return fullPath, nil
+// isWithin reports whether path is root itself or lies below it. It compares
+// whole path components, so /work/T01 does not contain /work/T010.
+func isWithin(root, path string) bool {
+	relPath, err := filepath.Rel(root, path)
+	if err != nil {
+		return false
+	}
+	return relPath != ".." && !strings.HasPrefix(relPath, ".."+string(filepath.Separator))
 }
 
 // CheckCommand checks if cmd string matches the allowlist by token prefix (not substring).
