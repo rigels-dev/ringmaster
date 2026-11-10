@@ -7,7 +7,13 @@ on:
 
 jobs:
   test:
-    runs-on: ubuntu-latest
+    # Both platforms Ringmaster ships for. Let each finish, so a failure on
+    # one does not hide the result on the other.
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
