@@ -199,6 +199,7 @@ Do not ask about anything already answered under HUMAN ANSWERS & FEEDBACK.
 			Tools:           tools,
 			WorkDir:         worktree,
 			AllowedCommands: sandboxCfg.Allow,
+			CommandEnv:      CommandEnv(sandboxCfg.PassEnv),
 			// Agentic providers run many steps inside one call; surface each
 			// one live in the run log and the transcript.
 			OnProgress: func(ev llm.ProgressEvent) {

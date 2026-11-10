@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
@@ -121,6 +122,9 @@ func (c *ClaudeSubscriptionClient) Chat(ctx context.Context, model string, req C
 
 	cmd := exec.CommandContext(ctx, c.CLIPath, args...)
 	cmd.Dir = req.WorkDir
+	if req.WorkDir != "" && req.CommandEnv != nil {
+		cmd.Env = claudeWorkerEnv(req.CommandEnv, os.Environ())
+	}
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
@@ -303,4 +307,35 @@ func (s *streamEvents) summarizeInput(input json.RawMessage) string {
 		return v
 	}
 	return ""
+}
+
+// claudeCLIEnvPrefixes are the variables Claude Code reads for its own login
+// and settings (CLAUDE_CONFIG_DIR, CLAUDE_CODE_OAUTH_TOKEN, ANTHROPIC_BASE_URL, ...).
+var claudeCLIEnvPrefixes = []string{"CLAUDE_", "ANTHROPIC_"}
+
+// claudeWorkerEnv is the environment for a Claude Code worker: the filtered
+// command environment, plus the CLI's own variables from the full one. The CLI
+// runs the worker's shell commands itself and hands them everything it was
+// started with, so this is the only place to keep the rest of the caller's
+// environment (cloud keys, database URLs) away from those commands.
+func claudeWorkerEnv(commandEnv, full []string) []string {
+	env := append([]string(nil), commandEnv...)
+	have := make(map[string]bool, len(env))
+	for _, kv := range env {
+		name, _, _ := strings.Cut(kv, "=")
+		have[name] = true
+	}
+	for _, kv := range full {
+		name, _, _ := strings.Cut(kv, "=")
+		if have[name] {
+			continue
+		}
+		for _, prefix := range claudeCLIEnvPrefixes {
+			if strings.HasPrefix(name, prefix) {
+				env = append(env, kv)
+				break
+			}
+		}
+	}
+	return env
 }

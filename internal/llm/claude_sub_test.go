@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -103,5 +104,57 @@ echo '{"type":"result","subtype":"success","is_error":false,"result":"Done.","st
 		if events[i].Kind != w.Kind || events[i].Tool != w.Tool || events[i].Detail != w.Detail {
 			t.Errorf("event %d = %+v, want %+v", i, events[i], w)
 		}
+	}
+}
+
+// A worker's CLI is started with the filtered command environment plus its own
+// login variables: its shell commands inherit whatever it has.
+func TestClaudeSubscriptionWorkerEnvironment(t *testing.T) {
+	t.Setenv("DATABASE_URL", "postgres://user:pass@db/app")
+	t.Setenv("CLAUDE_CONFIG_DIR", "/home/me/.claude-work")
+	t.Setenv("ANTHROPIC_BASE_URL", "https://gateway.example")
+
+	tempDir := t.TempDir()
+	workDir := t.TempDir()
+	envDump := filepath.Join(tempDir, "env.txt")
+	mockClaudePath := filepath.Join(tempDir, "claude")
+	script := `#!/bin/sh
+env > ` + envDump + `
+echo '{"type":"result","subtype":"success","is_error":false,"result":"Done.","stop_reason":"end_turn","usage":{"input_tokens":1,"output_tokens":1}}'
+`
+	if err := os.WriteFile(mockClaudePath, []byte(script), 0755); err != nil {
+		t.Fatal(err)
+	}
+	client := &ClaudeSubscriptionClient{CLIPath: mockClaudePath}
+	run := func(req ChatRequest) string {
+		t.Helper()
+		req.Messages = []Message{{Role: "user", Content: "work"}}
+		if _, err := client.Chat(context.Background(), "haiku", req); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		data, err := os.ReadFile(envDump)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return string(data)
+	}
+
+	got := run(ChatRequest{WorkDir: workDir, CommandEnv: []string{"PATH=" + os.Getenv("PATH"), "RM_LISTED=yes"}})
+	for _, want := range []string{"RM_LISTED=yes", "CLAUDE_CONFIG_DIR=/home/me/.claude-work", "ANTHROPIC_BASE_URL=https://gateway.example"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("worker environment is missing %s:\n%s", want, got)
+		}
+	}
+	if strings.Contains(got, "DATABASE_URL") {
+		t.Errorf("an unlisted variable reached the worker's CLI:\n%s", got)
+	}
+
+	// Without a command environment (a caller that sets none) nothing is filtered
+	if got := run(ChatRequest{WorkDir: workDir}); !strings.Contains(got, "DATABASE_URL") {
+		t.Errorf("expected the caller's environment when CommandEnv is nil:\n%s", got)
+	}
+	// The planner (no WorkDir) runs no commands and keeps the caller's environment
+	if got := run(ChatRequest{CommandEnv: []string{"PATH=" + os.Getenv("PATH")}}); !strings.Contains(got, "DATABASE_URL") {
+		t.Errorf("expected the caller's environment for a plain chat:\n%s", got)
 	}
 }
