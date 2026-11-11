@@ -19,9 +19,10 @@ type ProjectManifest struct {
 	Plan      string `toml:"plan"`
 	CreatedAt string `toml:"created_at"`
 
-	// Optional overrides of the global [budget] and [sandbox] for this project
+	// Optional overrides of the global [budget], [sandbox] and [web] for this project
 	Budget  BudgetConfig  `toml:"budget"`
 	Sandbox SandboxConfig `toml:"sandbox"`
+	Web     WebConfig     `toml:"web,omitempty"`
 }
 
 // ProjectManifestPath is where a project's manifest lives.
@@ -70,6 +71,9 @@ func (c *Config) ForProject(m *ProjectManifest) *Config {
 	// needs (its DATABASE_URL) does not replace what every project needs
 	if len(m.Sandbox.PassEnv) > 0 {
 		out.Sandbox.PassEnv = append(append([]string(nil), c.Sandbox.PassEnv...), m.Sandbox.PassEnv...)
+	}
+	if m.Web.Port > 0 {
+		out.Web.Port = m.Web.Port
 	}
 	return &out
 }

@@ -155,6 +155,15 @@ Project commands work from any subdirectory of a project, the way `go` finds `go
 ssh -N -L 12053:localhost:12053 user@your-server
 ```
 
+**Port taken, or two projects open at once?** The web UI listens on port 12053 by default. Pick another for one run with `ringmaster --port 4000` or `RINGMASTER_PORT=4000`, or keep it in the project's `ringmaster.toml` (or in the fleet config, for every project):
+
+```toml
+[web]
+port = 4000
+```
+
+The most specific setting wins: the flag, then the environment variable, then the project, then the fleet config.
+
 ## Project layout
 
 ```

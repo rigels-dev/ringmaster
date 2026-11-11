@@ -47,6 +47,15 @@ type SandboxConfig struct {
 // DefaultAcceptanceTimeout fits a cold docker build or an integration suite.
 const DefaultAcceptanceTimeout = 300
 
+// DefaultWebPort is where the web UI listens unless told otherwise.
+const DefaultWebPort = 12053
+
+type WebConfig struct {
+	// Port the web UI listens on (0 = DefaultWebPort). The --port flag and
+	// RINGMASTER_PORT take precedence.
+	Port int `toml:"port,omitempty"`
+}
+
 type EstimateConfig struct {
 	TokensIn  [2]int `toml:"tokens_in"`  // [min, max]
 	TokensOut [2]int `toml:"tokens_out"` // [min, max]
@@ -58,6 +67,7 @@ type Config struct {
 	Routing   RoutingConfig             `toml:"routing"`
 	Budget    BudgetConfig              `toml:"budget"`
 	Sandbox   SandboxConfig             `toml:"sandbox"`
+	Web       WebConfig                 `toml:"web,omitempty"`
 	Estimates map[string]EstimateConfig `toml:"estimates"`
 }
 

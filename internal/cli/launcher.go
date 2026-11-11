@@ -48,13 +48,15 @@ const (
 )
 
 type launcherModel struct {
+	port     int
 	cursor   int
 	selected launcherChoice
 	quitting bool
 }
 
-func initialLauncherModel() launcherModel {
+func initialLauncherModel(port int) launcherModel {
 	return launcherModel{
+		port:     port,
 		cursor:   0,
 		selected: choiceCancel,
 	}
@@ -122,7 +124,7 @@ func (m launcherModel) View() string {
 		desc  string
 	}{
 		{
-			title: "[1] Web UI Dashboard (Browser · http://localhost:12053)",
+			title: fmt.Sprintf("[1] Web UI Dashboard (Browser · http://localhost:%d)", m.port),
 			desc:  "Interactive chat briefing, real-time multi-worker fleet, and visual task pipeline",
 		},
 		{
@@ -156,7 +158,12 @@ func RunInteractiveLauncher() error {
 		return err
 	}
 
-	p := tea.NewProgram(initialLauncherModel())
+	port, err := resolveWebPort(projectDir)
+	if err != nil {
+		return err
+	}
+
+	p := tea.NewProgram(initialLauncherModel(port))
 	finalModel, err := p.Run()
 	if err != nil {
 		return err
@@ -168,7 +175,7 @@ func RunInteractiveLauncher() error {
 	}
 
 	if m.selected == choiceWeb {
-		return StartWebUI(projectDir)
+		return StartWebUI(projectDir, port)
 	}
 
 	return StartTUI()
@@ -185,7 +192,7 @@ func StartTUI() error {
 	return err
 }
 
-func StartWebUI(projectDir string) error {
+func StartWebUI(projectDir string, port int) error {
 	// Locate the web UI in the Ringmaster installation (never in the project,
 	// which may well have a web/.output of its own)
 	root := config.RootDir()
@@ -197,6 +204,10 @@ func StartWebUI(projectDir string) error {
 		return fmt.Errorf("the web UI needs Node.js 22 or newer on your PATH: %w", err)
 	}
 
+	if err := checkPortFree(port); err != nil {
+		return err
+	}
+
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
@@ -204,8 +215,8 @@ func StartWebUI(projectDir string) error {
 	cmd.Dir = filepath.Dir(serverScript)
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true} // Isolate into own process group so killpg terminates all child threads
 	cmd.Env = append(os.Environ(),
-		"PORT=12053",
-		"NITRO_PORT=12053",
+		fmt.Sprintf("PORT=%d", port),
+		fmt.Sprintf("NITRO_PORT=%d", port),
 		"HOST=127.0.0.1",
 		"NITRO_HOST=127.0.0.1",
 		fmt.Sprintf("RINGMASTER_PROJECT_DIR=%s", projectDir),
@@ -231,8 +242,7 @@ func StartWebUI(projectDir string) error {
 
 	fmt.Println("\n🎪 Starting Ringmaster Web UI...")
 	fmt.Printf("   Project Context: %s\n", projectDir)
-	fmt.Println("   URL: http://localhost:12053")
-	fmt.Println("   Port: 12053 (Custom Dedicated Ringmaster Port)")
+	fmt.Printf("   URL: http://localhost:%d\n", port)
 	fmt.Println("   Status: Running. Press Ctrl+C to stop.")
 
 	err := cmd.Run()

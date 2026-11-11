@@ -104,6 +104,9 @@ created_at = %q
 # [budget]
 # max_tokens_per_project = 2000000
 # max_tokens_per_task = 300000
+#
+# [web]
+# port = 12053                                 # web UI port for this project
 `, name, time.Now().UTC().Format(time.RFC3339))
 		_ = os.WriteFile(manifestPath, []byte(manifestContent), 0644)
 	}

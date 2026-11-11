@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -175,5 +176,38 @@ func TestProjectPassEnvAddsToFleet(t *testing.T) {
 
 	if got := fleet.ForProject(&ProjectManifest{}).Sandbox.PassEnv; len(got) != 1 || got[0] != "AWS_*" {
 		t.Errorf("pass_env without a project override = %v, want [AWS_*]", got)
+	}
+}
+
+// A project can move its web UI to another port, so two projects can be open
+// at once; the fleet config is left alone and an unset port stays out of the file.
+func TestProjectWebPortOverridesFleet(t *testing.T) {
+	fleet := DefaultConfig()
+	fleet.Web.Port = 4000
+
+	if got := fleet.ForProject(&ProjectManifest{}).Web.Port; got != 4000 {
+		t.Errorf("no override: port %d, want 4000", got)
+	}
+	if got := fleet.ForProject(&ProjectManifest{Web: WebConfig{Port: 4100}}).Web.Port; got != 4100 {
+		t.Errorf("override: port %d, want 4100", got)
+	}
+	if fleet.Web.Port != 4000 {
+		t.Errorf("fleet config changed to %d", fleet.Web.Port)
+	}
+
+	path := filepath.Join(t.TempDir(), "ringmaster.toml")
+	if err := SaveFile(path, DefaultConfig()); err != nil {
+		t.Fatal(err)
+	}
+	data, _ := os.ReadFile(path)
+	if strings.Contains(string(data), "web") {
+		t.Errorf("unset port written to the config:\n%s", data)
+	}
+	if err := SaveFile(path, fleet); err != nil {
+		t.Fatal(err)
+	}
+	loaded, err := LoadFile(path)
+	if err != nil || loaded.Web.Port != 4000 {
+		t.Errorf("round trip: port %v, err %v", loaded, err)
 	}
 }

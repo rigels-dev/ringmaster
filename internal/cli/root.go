@@ -12,6 +12,7 @@ import (
 
 var (
 	cfgFile string
+	webPort int
 	cfg     *config.Config
 )
 
@@ -39,6 +40,8 @@ func Execute() {
 func init() {
 	cobra.OnInitialize(initConfig)
 	RootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "fleet config file (default: ~/.config/ringmaster/ringmaster.toml)")
+
+	RootCmd.Flags().IntVar(&webPort, "port", 0, fmt.Sprintf("port for the web UI (default: $RINGMASTER_PORT, [web] port in the config, or %d)", config.DefaultWebPort))
 
 	RootCmd.AddCommand(initCmd)
 }
