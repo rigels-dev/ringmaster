@@ -13,6 +13,7 @@ import (
 	"ringmaster/internal/planner"
 	"ringmaster/internal/registry"
 	"ringmaster/internal/schemas"
+	"ringmaster/internal/skills"
 	"ringmaster/internal/verify"
 	"ringmaster/internal/workspace"
 )
@@ -246,7 +247,13 @@ func (e *Engine) executeTask(ctx context.Context, planTask schemas.PlanTask) {
 		return
 	}
 
-	// 5. Execute task attempt loop, with commands the user approved added to the sandbox
+	// 5. Give the worker the enabled skills, as files in its workspace
+	if err := skills.Sync(worktree, skills.Enabled(skills.Discover(e.projectRoot), e.cfg.Skills.Disabled)); err != nil {
+		e.failTask(planTask.ID, fmt.Sprintf("installing skills failed: %v", err))
+		return
+	}
+
+	// 6. Execute task attempt loop, with commands the user approved added to the sandbox
 	sandbox := e.cfg.Sandbox
 	sandbox.Allow = append(append([]string{}, e.cfg.Sandbox.Allow...), LoadApprovals(e.projectRoot).For(planTask.ID)...)
 	loopRes, err := verify.RunTaskLoop(
@@ -292,7 +299,7 @@ func (e *Engine) executeTask(ctx context.Context, planTask schemas.PlanTask) {
 		ts.FinishAt = &now
 	})
 
-	// 6. Handle verification decision
+	// 7. Handle verification decision
 	switch loopRes.Decision.Type {
 	case verify.DecisionDONE:
 		fmt.Printf("✓ [Scheduler] Task %s passed acceptance tests! Queuing git merge...\n", planTask.ID)

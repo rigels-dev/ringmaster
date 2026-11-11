@@ -13,6 +13,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"ringmaster/internal/config"
+	"ringmaster/internal/skills"
 	"ringmaster/internal/tui"
 	"ringmaster/internal/version"
 )
@@ -187,9 +188,17 @@ func StartTUI() error {
 	if loaded == nil {
 		loaded = config.DefaultConfig()
 	}
-	p := tea.NewProgram(tui.NewConfigModel(loaded, path), tea.WithAltScreen())
+	p := tea.NewProgram(withInstalledSkills(tui.NewConfigModel(loaded, path)), tea.WithAltScreen())
 	_, err := p.Run()
 	return err
+}
+
+// withInstalledSkills fills the TUI's Skills tab: the fleet's skills, plus the
+// project's when run inside one.
+func withInstalledSkills(m tui.ConfigModel) tui.ConfigModel {
+	projectDir, _ := ResolveProjectDir()
+	_, projectOff := skillDisabledLists(projectDir)
+	return m.WithSkills(skills.Discover(projectDir), projectOff)
 }
 
 func StartWebUI(projectDir string, port int) error {

@@ -32,7 +32,7 @@ edit, and remove LLM Providers and Agent Models in the global ringmaster.toml.`,
 		}
 
 		absPath, _ := filepath.Abs(path)
-		model := tui.NewConfigModel(loadedCfg, absPath)
+		model := withInstalledSkills(tui.NewConfigModel(loadedCfg, absPath))
 		p := tea.NewProgram(model, tea.WithAltScreen())
 		if _, err := p.Run(); err != nil {
 			return fmt.Errorf("failed to run TUI: %w", err)

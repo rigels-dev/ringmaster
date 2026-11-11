@@ -35,6 +35,7 @@ When a worker needs you (a decision, a value only you know, or approval for a co
 - **Any provider.** OpenAI-compatible APIs (OpenAI, OpenRouter, Ollama, vLLM, DeepSeek and others), the Anthropic API, and a local Claude subscription through the Claude Code CLI.
 - **One fleet for all projects.** Providers and agents are configured once, globally; a project only assigns agents to its tasks.
 - **Guardrails for workers.** Workers run commands only from an allowlist, and their file tools are confined to the task's worktree. Worker and acceptance commands see only a built-in set of environment variables (`PATH`, `HOME`, toolchain paths, proxies) plus the ones you name in `pass_env`, so your API keys and other credentials stay out unless you list them. For agents on a Claude subscription, the Claude Code CLI runs the commands itself, so they also see the CLI's own `CLAUDE_*` and `ANTHROPIC_*` variables. These are guardrails, not isolation: an allowed command such as `go test` still runs code the worker wrote, with your user's permissions. Run Ringmaster inside a container or VM if you need a hard boundary. Each acceptance command has a time limit (default 300 s), adjustable per project or per task.
+- **Agent skills.** Drop a skill folder (a `SKILL.md` plus whatever it refers to) into Ringmaster and every worker can use it, whichever model it runs on. Turn skills on and off from the TUI or the command line.
 - **Live and lasting telemetry.** Worker steps stream to the logs as they happen. Every run is appended to `.ringmaster/logs/run.jsonl`, and reports and transcripts are kept after their worktree is removed. Token usage includes prompt-cache reads and writes, plus cost when the provider reports it.
 
 ### Web UI
@@ -145,6 +146,7 @@ ringmaster answer T03 --text "Use SQLite"          # reply to a waiting task
 ringmaster answer T06 --reply r1=approve --allow "docker build -t app ."
 ringmaster resume
 ringmaster usage         # token usage per agent and task
+ringmaster skills        # installed agent skills; enable or disable them
 ```
 
 Project commands work from any subdirectory of a project, the way `go` finds `go.mod`, and refuse to run outside one.
@@ -164,6 +166,33 @@ port = 4000
 
 The most specific setting wins: the flag, then the environment variable, then the project, then the fleet config.
 
+## Skills
+
+A skill is a folder holding a `SKILL.md`: instructions for one kind of work (your code style, how to write a migration, a review checklist), in the format agent tools already share. Install one by copying or symlinking its folder:
+
+```
+~/.config/ringmaster/skills/<name>/SKILL.md      for every project
+<project>/.ringmaster/skills/<name>/SKILL.md     for one project (wins over a global skill of the same name)
+```
+
+```bash
+ringmaster skills                    # what is installed, and whether it is on
+ringmaster skills disable go-style   # workers no longer get it (enable turns it back on)
+```
+
+The TUI (`ringmaster config`) has the same switches on its Skills tab. An installed skill is on until you disable it. A project can also turn skills off for itself in its `ringmaster.toml`:
+
+```toml
+[skills]
+disabled = ["deploy"]
+```
+
+When a task starts, the enabled skills are copied into its workspace under `.ringmaster/skills/`, which git ignores, so they are never committed or merged. The worker's prompt lists each skill by name and description (taken from the `description` in the `SKILL.md` frontmatter), and the worker reads the full instructions only for the skills that fit its task. Three limits to know:
+
+- A script shipped with a skill runs only if your command allowlist permits it; skills do not widen what a worker may execute.
+- Symlinks inside a skill folder and files over 1 MB are not copied.
+- Skills reach workers only. The master planner does not see them yet.
+
 ## Project layout
 
 ```
@@ -178,10 +207,12 @@ my-project/                          your code; the project is the git repositor
     ├── state.json                   task status, attempts and token usage
     ├── answers/                     answers queued for waiting tasks
     ├── approvals.json               commands you approved beyond the allowlist
+    ├── skills/<name>/SKILL.md       skills for this project's workers (optional)
     ├── run.pid                      present while a run is active
     ├── outputs/Txx.md               worker reports (archived, kept after merge)
     ├── worktrees/Txx/               a task's checkout of branch rm/Txx while it is active
     │   └── .ringmaster/
+    │       ├── skills/              the enabled skills, copied in for the worker
     │       ├── outputs/Txx.md       the report as the worker writes it
     │       └── logs/Txx-attemptN.jsonl   live transcript of each attempt
     └── logs/

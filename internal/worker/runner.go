@@ -12,6 +12,7 @@ import (
 	"ringmaster/internal/config"
 	"ringmaster/internal/llm"
 	"ringmaster/internal/schemas"
+	"ringmaster/internal/skills"
 )
 
 const (
@@ -94,7 +95,7 @@ ID: %s
 Title: %s
 Description:
 %s
-%s
+%s%s
 # ACCEPTANCE CRITERIA:
 - %s
 
@@ -154,7 +155,7 @@ What is done so far and what is waiting on the user.
 
 Never ask for a secret's value; ask for the name of the environment variable that holds it.
 Do not ask about anything already answered under HUMAN ANSWERS & FEEDBACK.
-`, task.ID, briefContent, task.ID, task.Title, task.Description, humanAnswersSection, strings.Join(task.Acceptance, "\n- "), task.ID, attemptNum,
+`, task.ID, briefContent, task.ID, task.Title, task.Description, humanAnswersSection, skills.PromptSection(skills.InWorkspace(worktree)), strings.Join(task.Acceptance, "\n- "), task.ID, attemptNum,
 		strings.Join(sandboxCfg.Allow, ", "), task.ID, attemptNum)
 
 	messages := []llm.Message{

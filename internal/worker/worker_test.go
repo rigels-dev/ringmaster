@@ -293,3 +293,75 @@ func TestRunnerBudgetLimitEnforcement(t *testing.T) {
 		t.Errorf("expected status NEEDS_REVIEW on budget break, got: %s", res.Status)
 	}
 }
+
+// A worker is told about the skills in its workspace, by name and description
+// only, and can read them with its ordinary file tool. Without skills the
+// prompt does not mention them.
+func TestRunnerListsWorkspaceSkills(t *testing.T) {
+	t.Setenv("DUMMY_KEY", "mock-token-value")
+
+	systemPromptOf := func(worktree string) string {
+		var system string
+		ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			var req struct {
+				Messages []struct {
+					Role    string `json:"role"`
+					Content string `json:"content"`
+				} `json:"messages"`
+			}
+			_ = json.NewDecoder(r.Body).Decode(&req)
+			for _, m := range req.Messages {
+				if m.Role == "system" {
+					system = m.Content
+				}
+			}
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"choices": []map[string]any{{"message": map[string]any{"role": "assistant", "content": "done"}}},
+				"usage":   map[string]any{"prompt_tokens": 1, "completion_tokens": 1, "total_tokens": 2},
+			})
+		}))
+		defer ts.Close()
+
+		task := schemas.TaskSpec{ID: "T01", Title: "t", Description: "d", Acceptance: []string{"echo ok"}}
+		agent := config.AgentConfig{Model: "mock-model", Role: "worker", ToolCalling: true}
+		_, err := RunAttempt(context.Background(), task, worktree, agent, llm.NewProvider("openai", ts.URL, "DUMMY_KEY"),
+			config.BudgetConfig{MaxTokensPerTask: 10000}, config.SandboxConfig{Allow: []string{"echo"}}, "brief", 1)
+		if err != nil {
+			t.Fatalf("RunAttempt failed: %v", err)
+		}
+		return system
+	}
+
+	plain := t.TempDir()
+	if prompt := systemPromptOf(plain); strings.Contains(prompt, "SKILLS") {
+		t.Errorf("prompt mentions skills though none are installed")
+	}
+
+	withSkill := t.TempDir()
+	skillDir := filepath.Join(withSkill, ".ringmaster", "skills", "go-style")
+	if err := os.MkdirAll(skillDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	body := "---\ndescription: House rules for Go code\n---\n\nALWAYS-WRAP-ERRORS\n"
+	if err := os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte(body), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	prompt := systemPromptOf(withSkill)
+	if !strings.Contains(prompt, "- go-style (.ringmaster/skills/go-style/SKILL.md): House rules for Go code") {
+		t.Errorf("prompt does not list the skill:\n%s", prompt)
+	}
+	if strings.Contains(prompt, "ALWAYS-WRAP-ERRORS") {
+		t.Errorf("the skill's body was put in the prompt; only its description belongs there")
+	}
+	if strings.Index(prompt, "# SKILLS:") > strings.Index(prompt, "# ACCEPTANCE CRITERIA:") {
+		t.Errorf("skills section should come before the acceptance criteria")
+	}
+
+	// The path in the prompt is one the worker's own read tool accepts
+	out := NewToolSet(withSkill, nil).Execute(context.Background(), "read_file", map[string]any{"path": ".ringmaster/skills/go-style/SKILL.md"})
+	if !strings.Contains(out, "ALWAYS-WRAP-ERRORS") {
+		t.Errorf("read_file could not read the skill: %s", out)
+	}
+}

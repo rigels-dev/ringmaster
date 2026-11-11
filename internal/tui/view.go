@@ -16,12 +16,16 @@ func (m ConfigModel) View() string {
 
 	tabProv := inactiveTabStyle.Render(" [1] Providers ")
 	tabAg := inactiveTabStyle.Render(" [2] Agents ")
-	if m.activeTab == tabProviders {
+	tabSk := inactiveTabStyle.Render(" [3] Skills ")
+	switch m.activeTab {
+	case tabProviders:
 		tabProv = activeTabStyle.Render(" [1] Providers ")
-	} else {
+	case tabSkills:
+		tabSk = activeTabStyle.Render(" [3] Skills ")
+	default:
 		tabAg = activeTabStyle.Render(" [2] Agents ")
 	}
-	b.WriteString(lipgloss.JoinHorizontal(lipgloss.Top, tabProv, " ", tabAg))
+	b.WriteString(lipgloss.JoinHorizontal(lipgloss.Top, tabProv, " ", tabAg, " ", tabSk))
 	b.WriteString("\n\n")
 
 	if m.mode == modePickProviderStep1 {
@@ -332,7 +336,9 @@ func (m ConfigModel) viewForm(b *strings.Builder) {
 
 // viewList renders the provider or agent list, the status line and the key help.
 func (m ConfigModel) viewList(b *strings.Builder) {
-	if m.activeTab == tabProviders {
+	if m.activeTab == tabSkills {
+		m.viewSkills(b)
+	} else if m.activeTab == tabProviders {
 		names := m.getProviderNames()
 		if len(names) == 0 {
 			b.WriteString(hintStyle.Render("No providers registered yet. Press [a] to choose a provider.") + "\n")
@@ -444,7 +450,9 @@ func (m ConfigModel) viewList(b *strings.Builder) {
 	}
 
 	var helpText string
-	if m.activeTab == tabAgents {
+	if m.activeTab == tabSkills {
+		helpText = "[↑/↓] Move · [Space/Enter] Turn on/off · [Tab] Switch · [q] Quit"
+	} else if m.activeTab == tabAgents {
 		helpText = "[↑/↓] Move · [p] Ping · [m] Set Master · [w] Set Worker · [e] Edit · [d] Del · [Tab] Switch · [q] Quit"
 	} else {
 		helpText = "[↑/↓] Move · [p] Ping · [a] Add · [e] Edit · [d] Del · [s] Save · [Tab] Switch · [q] Quit"
