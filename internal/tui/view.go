@@ -155,8 +155,8 @@ func (m ConfigModel) viewClaudeOAuth(b *strings.Builder) {
 func (m ConfigModel) viewConfirmDeleteProvider(b *strings.Builder) {
 	provName := m.deletingProviderName
 	var boundAgents []string
-	for aName, a := range m.cfg.Agents {
-		if a.Provider == provName {
+	for _, aName := range m.getAgentAliases() {
+		if a := m.cfg.Agents[aName]; a.Provider == provName {
 			boundAgents = append(boundAgents, fmt.Sprintf("%s (%s)", aName, a.Model))
 		}
 	}
@@ -371,8 +371,9 @@ func (m ConfigModel) viewList(b *strings.Builder) {
 		} else {
 			currentMaster := m.cfg.Routing.DefaultMaster
 			if currentMaster == "" {
-				for aName, a := range m.cfg.Agents {
-					if a.Role == "master" {
+				// No default set: show the first master by name, the same one every time
+				for _, aName := range aliases {
+					if m.cfg.Agents[aName].Role == "master" {
 						currentMaster = aName
 						break
 					}

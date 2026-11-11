@@ -14,10 +14,11 @@ import (
 
 func (m *ConfigModel) selectAgentTemplate() (tea.Model, tea.Cmd) {
 	tmpl := agentTemplates[m.templateCursor]
+	// Prefill the first provider by name: ranging over the map picked a
+	// different one each time when several were configured
 	provName := ""
-	for p := range m.cfg.Providers {
-		provName = p
-		break
+	if names := m.getProviderNames(); len(names) > 0 {
+		provName = names[0]
 	}
 	a := config.AgentConfig{
 		Provider:    provName,
