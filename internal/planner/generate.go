@@ -11,6 +11,7 @@ import (
 	"ringmaster/internal/config"
 	"ringmaster/internal/llm"
 	"ringmaster/internal/schemas"
+	"ringmaster/internal/skills"
 	"ringmaster/internal/storage"
 )
 
@@ -49,7 +50,12 @@ func GeneratePlan(
 		}
 	}
 
-	systemPrompt := MasterSystemPrompt(cfg, defaultWorker)
+	// The skills workers of this project will get: the fleet's switches plus the project's own
+	disabledSkills := cfg.Skills.Disabled
+	if manifest, mErr := config.LoadProjectManifest(projectRoot); mErr == nil {
+		disabledSkills = cfg.ForProject(manifest).Skills.Disabled
+	}
+	systemPrompt := MasterSystemPrompt(cfg, defaultWorker, skills.Enabled(skills.Discover(projectRoot), disabledSkills))
 	userPrompt := fmt.Sprintf("Project Name: %s\n\n# BRIEF.MD:\n%s\n\nGenerate the complete project DAG Plan JSON now.", projectName, string(briefBytes))
 
 	messages := []llm.Message{

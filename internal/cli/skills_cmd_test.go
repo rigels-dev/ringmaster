@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -126,5 +127,42 @@ func TestSkillsViewShowsProjectDisabled(t *testing.T) {
 	}
 	if got := stateOf(t, buildSkillsView(projectDir), "deploy"); got != "off (project)" {
 		t.Errorf("after fleet enable, project-disabled skill shows as %q", got)
+	}
+}
+
+// The JSON listing is what the web UI reads: every skill, whether workers get
+// it, and where a skill that is off was switched off.
+func TestSkillsReport(t *testing.T) {
+	manifest := "name = \"p\"\n\n[skills]\ndisabled = [\"deploy\"]\n"
+	projectDir, _ := skillsFixture(t, manifest)
+
+	report := buildSkillsReport(projectDir)
+	if len(report.Skills) != 2 {
+		t.Fatalf("skills: %+v", report.Skills)
+	}
+	deploy, goStyle := report.Skills[0], report.Skills[1]
+	if deploy.Name != "deploy" || deploy.Enabled || deploy.DisabledBy != "project" || deploy.Source != "project" {
+		t.Errorf("deploy: %+v", deploy)
+	}
+	if goStyle.Name != "go-style" || !goStyle.Enabled || goStyle.DisabledBy != "" || goStyle.Description != "House rules for Go code" {
+		t.Errorf("go-style: %+v", goStyle)
+	}
+	if report.ProjectDir != filepath.Join(projectDir, ".ringmaster", "skills") || !strings.HasSuffix(report.GlobalDir, "skills") {
+		t.Errorf("directories: %+v", report)
+	}
+
+	if err := setSkillsDisabled([]string{"go-style"}, true); err != nil {
+		t.Fatal(err)
+	}
+	if got := buildSkillsReport(projectDir).Skills[1]; got.Enabled || got.DisabledBy != "fleet" {
+		t.Errorf("after disable: %+v", got)
+	}
+
+	// Outside a project there is no project directory, and an empty list is [] rather than null
+	t.Setenv("RINGMASTER_CONFIG_DIR", t.TempDir())
+	empty := buildSkillsReport("")
+	data, _ := json.Marshal(empty)
+	if !strings.Contains(string(data), `"skills":[]`) || strings.Contains(string(data), "project_dir") {
+		t.Errorf("empty report: %s", data)
 	}
 }
