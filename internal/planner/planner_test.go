@@ -239,7 +239,83 @@ func TestEditsTestsIsPartOfTheApprovedPlan(t *testing.T) {
 		t.Errorf("preview mentions test edits for a plan without any:\n%s", preview)
 	}
 
-	if prompt := MasterSystemPrompt(config.DefaultConfig(), "w"); !strings.Contains(prompt, `"edits_tests": true`) {
+	if prompt := MasterSystemPrompt(config.DefaultConfig(), "w", nil); !strings.Contains(prompt, `"edits_tests": true`) {
 		t.Error("the planner is not told about edits_tests")
+	}
+}
+
+// The planner is told which skills the project's workers will have, so it can
+// point a task at one; disabled skills, whether off for the fleet or only for
+// this project, are left out.
+func TestPlannerSeesEnabledSkills(t *testing.T) {
+	t.Setenv("MOCK_KEY", "k")
+	configDir := t.TempDir()
+	t.Setenv("RINGMASTER_CONFIG_DIR", configDir)
+	projectRoot := t.TempDir()
+
+	write := func(path, content string) {
+		t.Helper()
+		if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte(content), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	skill := func(root, name string) {
+		write(filepath.Join(root, name, "SKILL.md"), "---\ndescription: "+name+" rules\n---\n\nBODY-OF-"+name+"\n")
+	}
+	skill(filepath.Join(configDir, "skills"), "go-style")
+	skill(filepath.Join(configDir, "skills"), "fleet-off")
+	skill(filepath.Join(projectRoot, ".ringmaster", "skills"), "deploy")
+	skill(filepath.Join(projectRoot, ".ringmaster", "skills"), "project-off")
+	write(filepath.Join(projectRoot, ".ringmaster", "BRIEF.md"), "# Brief\nBuild it.\n")
+	write(filepath.Join(projectRoot, "ringmaster.toml"), "name = \"p\"\n\n[skills]\ndisabled = [\"project-off\"]\n")
+
+	var system string
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var req struct {
+			Messages []struct {
+				Role    string `json:"role"`
+				Content string `json:"content"`
+			} `json:"messages"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&req)
+		for _, m := range req.Messages {
+			if m.Role == "system" {
+				system = m.Content
+			}
+		}
+		plan := `{"project":"p","tasks":[{"id":"T01","title":"Do it","type":"backend","depends_on":[],"worker":"w","max_retries":2,"acceptance":["go test ./..."],"description":"d"}],"open_questions":[],"assumptions":[]}`
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"choices": []map[string]any{{"message": map[string]any{"role": "assistant", "content": plan}}},
+			"usage":   map[string]any{"prompt_tokens": 1, "completion_tokens": 1, "total_tokens": 2},
+		})
+	}))
+	defer ts.Close()
+
+	cfg := config.DefaultConfig()
+	cfg.Providers["mock"] = config.ProviderConfig{Type: "openai", BaseURL: ts.URL, APIKeyEnv: "MOCK_KEY"}
+	cfg.Agents["m"] = config.AgentConfig{Provider: "mock", Model: "x", Role: "master"}
+	cfg.Agents["w"] = config.AgentConfig{Provider: "mock", Model: "x", Role: "worker", ToolCalling: true}
+	cfg.Skills.Disabled = []string{"fleet-off"}
+
+	if _, _, err := GeneratePlan(context.Background(), projectRoot, cfg, cfg.Agents["m"], llm.NewProvider("openai", ts.URL, "MOCK_KEY")); err != nil {
+		t.Fatalf("GeneratePlan failed: %v", err)
+	}
+
+	for _, want := range []string{"INSTALLED SKILLS", "- deploy: deploy rules", "- go-style: go-style rules"} {
+		if !strings.Contains(system, want) {
+			t.Errorf("planner prompt lacks %q", want)
+		}
+	}
+	for _, unwanted := range []string{"fleet-off", "project-off", "BODY-OF-"} {
+		if strings.Contains(system, unwanted) {
+			t.Errorf("planner prompt should not contain %q", unwanted)
+		}
+	}
+	if strings.Contains(MasterSystemPrompt(cfg, "w", nil), "SKILLS") {
+		t.Error("with no skills the planner prompt should not mention them")
 	}
 }

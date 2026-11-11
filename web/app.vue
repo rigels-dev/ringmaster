@@ -158,6 +158,7 @@
       <ChatView v-if="activeView === 'chat'" />
       <TasksView v-else-if="activeView === 'tasks'" />
       <ProvidersView v-else-if="activeView === 'providers'" />
+      <SkillsView v-else-if="activeView === 'skills'" />
       <LogsView v-else-if="activeView === 'logs'" />
       <BranchesView v-else-if="activeView === 'branches'" />
       <AnalyticsView v-else-if="activeView === 'analytics'" />

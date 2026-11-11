@@ -181,18 +181,17 @@ ringmaster skills                    # what is installed, and whether it is on
 ringmaster skills disable go-style   # workers no longer get it (enable turns it back on)
 ```
 
-The TUI (`ringmaster config`) has the same switches on its Skills tab. An installed skill is on until you disable it. A project can also turn skills off for itself in its `ringmaster.toml`:
+The TUI (`ringmaster config`) has the same switches on its Skills tab, and the web UI on its Skills page. An installed skill is on until you disable it. A project can also turn skills off for itself in its `ringmaster.toml`:
 
 ```toml
 [skills]
 disabled = ["deploy"]
 ```
 
-When a task starts, the enabled skills are copied into its workspace under `.ringmaster/skills/`, which git ignores, so they are never committed or merged. The worker's prompt lists each skill by name and description (taken from the `description` in the `SKILL.md` frontmatter), and the worker reads the full instructions only for the skills that fit its task. Three limits to know:
+When a task starts, the enabled skills are copied into its workspace under `.ringmaster/skills/`, which git ignores, so they are never committed or merged. The worker's prompt lists each skill by name and description (taken from the `description` in the `SKILL.md` frontmatter), and the worker reads the full instructions only for the skills that fit its task. The master planner gets the same list of names and descriptions, so it can point a task at the skill that applies. Two limits to know:
 
 - A script shipped with a skill runs only if your command allowlist permits it; skills do not widen what a worker may execute.
 - Symlinks inside a skill folder and files over 1 MB are not copied.
-- Skills reach workers only. The master planner does not see them yet.
 
 ## Project layout
 
@@ -251,7 +250,7 @@ test_files = ["*.feature", "checks/"]   # replaces the built-in list; "name/" is
 allow_test_edits = true                 # workers may change existing tests
 ```
 
-Some tasks have to change existing tests, because the behaviour they pin down is meant to change. The master planner marks such a task with `"edits_tests": true` in `plan.json`; the plan preview lists these tasks, and the flag is part of the approved plan's hash. Tasks of type `test` are always exempt.
+Some tasks have to change existing tests, because the behaviour they pin down is meant to change. The master planner marks such a task with `"edits_tests": true` in `plan.json`; the plan preview and the web UI's task cards point these tasks out, and the flag is part of the approved plan's hash. Tasks of type `test` are always exempt.
 
 This covers workers of every kind, since the restore is done by Ringmaster after the worker has finished. It does not stop a worker from making a test pass in other ways, such as special-casing the test's inputs in the code.
 

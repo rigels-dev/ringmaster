@@ -273,6 +273,15 @@
                 <span>Retries: {{ task.retries }}</span>
               </div>
 
+              <!-- The approved plan lets this task rewrite tests that already exist -->
+              <div
+                v-if="task.editsTests"
+                class="text-[9px] text-amber-300 bg-amber-950/40 border border-amber-800/60 rounded px-2 py-1"
+                title="Normally a worker's changes to existing test files are undone before acceptance runs. The plan exempts this task (edits_tests)."
+              >
+                ⚠ May change existing tests
+              </div>
+
               <!-- Interactive Automaton Selection Dropdown -->
               <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 text-[10px] bg-slate-inner p-2 rounded border border-steel/50">
                 <span class="text-zinc-400 font-semibold whitespace-nowrap">Assigned Automaton:</span>

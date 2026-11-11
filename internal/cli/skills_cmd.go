@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"encoding/json"
 	"fmt"
 	"strings"
 
@@ -21,9 +22,56 @@ until disabled.`,
 	Args: cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		projectDir, _ := ResolveProjectDir() // skills can be listed outside a project too
+		if skillsJSON {
+			data, err := json.MarshalIndent(buildSkillsReport(projectDir), "", "  ")
+			if err != nil {
+				return err
+			}
+			fmt.Println(string(data))
+			return nil
+		}
 		fmt.Print(buildSkillsView(projectDir))
 		return nil
 	},
+}
+
+var skillsJSON bool
+
+// skillsReport is the machine-readable listing (ringmaster skills --json),
+// which the web UI reads.
+type skillsReport struct {
+	Skills     []skillEntry `json:"skills"`
+	GlobalDir  string       `json:"global_dir"`
+	ProjectDir string       `json:"project_dir,omitempty"`
+}
+
+type skillEntry struct {
+	Name        string `json:"name"`
+	Description string `json:"description"`
+	Source      string `json:"source"` // "global" or "project"
+	Enabled     bool   `json:"enabled"`
+	// DisabledBy says where a skill that is off was switched off: "fleet"
+	// (the fleet config, which enable/disable edit) or "project" (its ringmaster.toml)
+	DisabledBy string `json:"disabled_by,omitempty"`
+}
+
+func buildSkillsReport(projectDir string) skillsReport {
+	fleetOff, projectOff := skillDisabledLists(projectDir)
+	report := skillsReport{Skills: []skillEntry{}, GlobalDir: skills.GlobalDir()}
+	if projectDir != "" {
+		report.ProjectDir = skills.ProjectDir(projectDir)
+	}
+	for _, s := range skills.Discover(projectDir) {
+		entry := skillEntry{Name: s.Name, Description: s.Description, Source: s.Source, Enabled: true}
+		switch {
+		case skills.IsDisabled(s.Name, fleetOff):
+			entry.Enabled, entry.DisabledBy = false, "fleet"
+		case skills.IsDisabled(s.Name, projectOff):
+			entry.Enabled, entry.DisabledBy = false, "project"
+		}
+		report.Skills = append(report.Skills, entry)
+	}
+	return report
 }
 
 var skillsEnableCmd = &cobra.Command{
@@ -45,6 +93,7 @@ var skillsDisableCmd = &cobra.Command{
 }
 
 func init() {
+	skillsCmd.Flags().BoolVar(&skillsJSON, "json", false, "print the listing as JSON")
 	skillsCmd.AddCommand(skillsEnableCmd, skillsDisableCmd)
 	RootCmd.AddCommand(skillsCmd)
 }

@@ -17,7 +17,7 @@ function createRingmaster() {
   function syncViewFromHash() {
     if (typeof window === 'undefined') return
     const hash = window.location.hash.replace(/^#\/?/, '').toLowerCase()
-    if (['chat', 'tasks', 'branches', 'providers', 'logs', 'analytics'].includes(hash)) {
+    if (['chat', 'tasks', 'branches', 'providers', 'skills', 'logs', 'analytics'].includes(hash)) {
       activeView.value = hash
     }
   }
@@ -53,6 +53,14 @@ function createRingmaster() {
     providers: [],
     agents: []
   })
+
+  const skillsData = ref({
+    skills: [],
+    globalDir: '',
+    projectDir: '',
+    error: ''
+  })
+  const skillBusy = ref('')
 
   const newProv = ref({
     id: '',
@@ -159,6 +167,7 @@ function createRingmaster() {
     },
     { id: 'branches', label: 'Branches', icon: '🌿' },
     { id: 'providers', label: 'Providers', icon: '🤖' },
+    { id: 'skills', label: 'Skills', icon: '🧩' },
     { id: 'logs', label: 'Logs', icon: '📜', badge: isRunActive.value ? 'Live' : null, badgeClass: 'bg-cyan-950 text-cyan-300 border border-cyan-800' },
     { id: 'analytics', label: 'Analytics', icon: '📈' }
   ])
@@ -292,6 +301,42 @@ function createRingmaster() {
     } catch {}
   }
 
+  async function loadSkills() {
+    try {
+      const res = await fetch('/api/skills')
+      const data = await res.json()
+      skillsData.value = {
+        skills: data.skills || [],
+        globalDir: data.globalDir || '',
+        projectDir: data.projectDir || '',
+        error: data.ok ? '' : (data.error || 'Unknown error')
+      }
+    } catch (err) {
+      skillsData.value = { ...skillsData.value, error: err.message }
+    }
+  }
+
+  async function toggleSkill(skill) {
+    skillBusy.value = skill.name
+    try {
+      const res = await fetch('/api/skills', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: skill.name, enabled: !skill.enabled })
+      })
+      const data = await res.json()
+      if (data.ok) {
+        showToast('Skill Updated', data.message, 'info')
+      } else {
+        showToast('Skill Not Changed', data.error, 'error')
+      }
+    } catch (err) {
+      showToast('Skill Not Changed', err.message, 'error')
+    } finally {
+      skillBusy.value = ''
+      await loadSkills()
+    }
+  }
 
   const tasks = computed(() => {
     if (!project.value.plan || !project.value.plan.tasks) return []
@@ -304,6 +349,7 @@ function createRingmaster() {
         desc: t.description || 'No description',
         worker: t.worker || 'worker',
         depends_on: t.depends_on || [],
+        editsTests: Boolean(t.edits_tests),
         status: ts.status || 'PENDING',
         error: ts.error || '',
         requests: ts.requests || [],
@@ -1146,6 +1192,10 @@ function createRingmaster() {
     answerPlanQuestion,
     project,
     providersData,
+    skillsData,
+    skillBusy,
+    loadSkills,
+    toggleSkill,
     newProv,
     isProviderFormValid,
     pingStatus,
