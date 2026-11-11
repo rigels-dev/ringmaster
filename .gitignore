@@ -34,3 +34,4 @@ docs/mockups/
 *.md
 *.markdown
 !/README.md
+markdowns/
