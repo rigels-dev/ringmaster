@@ -6,7 +6,7 @@
 
 **A local control plane for teams of AI coding agents.** Ringmaster turns a project brief into a plan of tasks, hands each task to an AI worker in its own git worktree, checks the result with real commands, and merges what passes into `main`, while you watch, answer questions and approve from a terminal or a web UI.
 
-Current release: **v0.3.0-capella**. Ringmaster runs on Linux and macOS.
+Current release: **v0.3.1-capella**. Ringmaster runs on Linux and macOS.
 
 ---
 
