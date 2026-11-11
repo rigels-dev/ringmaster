@@ -73,6 +73,17 @@ func RenderPreview(plan *schemas.Plan, estimates ProjectEstimate, budget config.
 
 	sb.WriteString(borderStyle.Render("────────────────────────────────────────────────────────────────────────────────────────────") + "\n")
 
+	// Tasks the plan lets rewrite existing tests: approving the plan approves that too
+	var editsTests []string
+	for _, t := range plan.Tasks {
+		if t.EditsTests {
+			editsTests = append(editsTests, t.ID)
+		}
+	}
+	if len(editsTests) > 0 {
+		sb.WriteString(warningStyle.Render("  ⚠ May change existing tests: "+strings.Join(editsTests, ", ")) + "\n")
+	}
+
 	// Cumulative summary
 	summary := fmt.Sprintf("  Cumulative Token Range: %dk – %dk tokens", estimates.TotalMin/1000, estimates.TotalMax/1000)
 	sb.WriteString(successStyle.Render(summary) + "\n")

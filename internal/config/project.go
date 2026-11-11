@@ -73,6 +73,12 @@ func (c *Config) ForProject(m *ProjectManifest) *Config {
 	if len(m.Sandbox.PassEnv) > 0 {
 		out.Sandbox.PassEnv = append(append([]string(nil), c.Sandbox.PassEnv...), m.Sandbox.PassEnv...)
 	}
+	if m.Sandbox.AllowTestEdits {
+		out.Sandbox.AllowTestEdits = true
+	}
+	if len(m.Sandbox.TestFiles) > 0 {
+		out.Sandbox.TestFiles = append([]string(nil), m.Sandbox.TestFiles...)
+	}
 	if m.Web.Port > 0 {
 		out.Web.Port = m.Web.Port
 	}

@@ -15,6 +15,7 @@ import (
 	"ringmaster/internal/schemas"
 	"ringmaster/internal/skills"
 	"ringmaster/internal/verify"
+	"ringmaster/internal/worker"
 	"ringmaster/internal/workspace"
 )
 
@@ -256,6 +257,24 @@ func (e *Engine) executeTask(ctx context.Context, planTask schemas.PlanTask) {
 	// 6. Execute task attempt loop, with commands the user approved added to the sandbox
 	sandbox := e.cfg.Sandbox
 	sandbox.Allow = append(append([]string{}, e.cfg.Sandbox.Allow...), LoadApprovals(e.projectRoot).For(planTask.ID)...)
+
+	// Whether this task may change existing tests is the approved plan's call,
+	// not the task file's. When it may not, such changes are undone before
+	// each acceptance check.
+	taskSpec.EditsTests = planTask.EditsTests
+	var restoreTests func(context.Context) ([]string, error)
+	if worker.ProtectsTests(*taskSpec, sandbox) {
+		patterns := worker.TestFilePatterns(sandbox)
+		restoreTests = func(ctx context.Context) ([]string, error) {
+			restored, err := workspace.RestoreFromBase(ctx, worktree, baseRef, func(file string) bool {
+				return worker.IsTestFile(file, patterns)
+			})
+			if len(restored) > 0 {
+				fmt.Printf("↺ [Scheduler] Task %s changed existing test files; restored before verification: %s\n", planTask.ID, strings.Join(restored, ", "))
+			}
+			return restored, err
+		}
+	}
 	loopRes, err := verify.RunTaskLoop(
 		ctx,
 		*taskSpec,
@@ -266,6 +285,7 @@ func (e *Engine) executeTask(ctx context.Context, planTask schemas.PlanTask) {
 		sandbox,
 		e.briefContent,
 		e.eventsPath,
+		restoreTests,
 		// One commit per attempt, tagged with the automaton that made it
 		func(attempt int, report *schemas.WorkerReport) {
 			subject := fmt.Sprintf("%s: attempt %d", planTask.ID, attempt)
@@ -456,6 +476,7 @@ func (e *Engine) loadTaskSpec(t schemas.PlanTask) (*schemas.TaskSpec, error) {
 		Acceptance: t.Acceptance,
 
 		AcceptanceTimeout: t.AcceptanceTimeout,
+		EditsTests:        t.EditsTests,
 	}, nil
 }
 

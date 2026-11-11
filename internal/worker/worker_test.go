@@ -365,3 +365,55 @@ func TestRunnerListsWorkspaceSkills(t *testing.T) {
 		t.Errorf("read_file could not read the skill: %s", out)
 	}
 }
+
+// The worker is told up front whether it may touch existing tests.
+func TestRunnerStatesTheRuleForExistingTests(t *testing.T) {
+	t.Setenv("DUMMY_KEY", "mock-token-value")
+	promptFor := func(task schemas.TaskSpec, sandboxCfg config.SandboxConfig) string {
+		var system string
+		ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			var req struct {
+				Messages []struct {
+					Role    string `json:"role"`
+					Content string `json:"content"`
+				} `json:"messages"`
+			}
+			_ = json.NewDecoder(r.Body).Decode(&req)
+			if len(req.Messages) > 0 {
+				system = req.Messages[0].Content
+			}
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"choices": []map[string]any{{"message": map[string]any{"role": "assistant", "content": "done"}}},
+				"usage":   map[string]any{"prompt_tokens": 1, "completion_tokens": 1, "total_tokens": 2},
+			})
+		}))
+		defer ts.Close()
+		task.ID, task.Acceptance = "T01", []string{"echo ok"}
+		agent := config.AgentConfig{Model: "mock-model", Role: "worker", ToolCalling: true}
+		sandboxCfg.Allow = []string{"echo"}
+		if _, err := RunAttempt(context.Background(), task, t.TempDir(), agent, llm.NewProvider("openai", ts.URL, "DUMMY_KEY"),
+			config.BudgetConfig{MaxTokensPerTask: 10000}, sandboxCfg, "brief", 1); err != nil {
+			t.Fatalf("RunAttempt failed: %v", err)
+		}
+		return system
+	}
+
+	protected := promptFor(schemas.TaskSpec{Type: schemas.TaskTypeBackend}, config.SandboxConfig{})
+	if !strings.Contains(protected, "Do NOT modify, rename or delete test files that already exist") || !strings.Contains(protected, "*_test.go") {
+		t.Errorf("protected task is not told the rule:\n%s", protected)
+	}
+	custom := promptFor(schemas.TaskSpec{Type: schemas.TaskTypeBackend}, config.SandboxConfig{TestFiles: []string{"*.feature"}})
+	if !strings.Contains(custom, "(*.feature)") || strings.Contains(custom, "*_test.go") {
+		t.Errorf("custom patterns are not the ones named:\n%s", custom)
+	}
+	for name, prompt := range map[string]string{
+		"edits_tests":      promptFor(schemas.TaskSpec{Type: schemas.TaskTypeBackend, EditsTests: true}, config.SandboxConfig{}),
+		"test task":        promptFor(schemas.TaskSpec{Type: schemas.TaskTypeTest}, config.SandboxConfig{}),
+		"allow_test_edits": promptFor(schemas.TaskSpec{Type: schemas.TaskTypeBackend}, config.SandboxConfig{AllowTestEdits: true}),
+	} {
+		if strings.Contains(prompt, "Do NOT modify") || !strings.Contains(prompt, "You may add and change tests") {
+			t.Errorf("%s: the task is exempt but the prompt forbids test edits", name)
+		}
+	}
+}

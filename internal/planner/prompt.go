@@ -58,6 +58,10 @@ INSTRUCTIONS:
    Acceptance commands are executed directly, NOT through a shell. Each entry must be ONE plain command with
    space-separated arguments: no $(...), backticks, pipes, &&, ||, ;, redirects or quotes.
    Use separate entries instead (e.g. ["go vet ./...", "go test -race ./..."]).
+   EXISTING TESTS are protected: a worker may add test files, but any change it makes to a test file that
+   already exists in the repository is undone before the acceptance commands run. If a task must change
+   existing tests because the intended behaviour changes, set "edits_tests": true on that task (omit it
+   otherwise). Tasks of type "test" may always change tests.
 6. OPEN QUESTIONS: if the brief leaves a decision open that materially changes the implementation
    (storage engine, auth scheme, deployment target, ...), do NOT silently pick one. Add it to "open_questions"
    with 2-4 short options and your "recommended" option; the user answers before approving the plan.

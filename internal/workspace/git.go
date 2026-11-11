@@ -238,3 +238,46 @@ func RemoveWorktree(ctx context.Context, projectRoot, taskID string) error {
 	_ = os.RemoveAll(targetDir)
 	return nil
 }
+
+// RestoreFromBase undoes a task's changes to files that already existed where
+// its branch started (the merge base of the worktree's HEAD and baseRef) and
+// that protect selects: modified ones get their old content back, deleted ones
+// reappear. Files the task added are left alone. It returns the restored
+// paths, slash-separated and sorted by git.
+func RestoreFromBase(ctx context.Context, worktree, baseRef string, protect func(path string) bool) ([]string, error) {
+	if baseRef == "" {
+		baseRef = "main"
+	}
+	out, err := RunGit(ctx, worktree, "merge-base", "HEAD", baseRef)
+	if err != nil {
+		return nil, err
+	}
+	base := strings.TrimSpace(out)
+
+	// Compares the base commit with the working tree, so it sees committed,
+	// staged and unstaged changes alike. core.quotePath off keeps names literal.
+	out, err = RunGit(ctx, worktree, "-c", "core.quotePath=false", "diff", "--name-status", "--no-renames", base, "--")
+	if err != nil {
+		return nil, err
+	}
+	var restore []string
+	for _, line := range strings.Split(out, "\n") {
+		status, file, ok := strings.Cut(line, "\t")
+		if !ok || status == "A" {
+			continue
+		}
+		if protect(file) {
+			restore = append(restore, file)
+		}
+	}
+
+	const batch = 100 // keep each command line short
+	for i := 0; i < len(restore); i += batch {
+		end := min(i+batch, len(restore))
+		args := append([]string{"checkout", base, "--"}, restore[i:end]...)
+		if _, err := RunGit(ctx, worktree, args...); err != nil {
+			return nil, err
+		}
+	}
+	return restore, nil
+}

@@ -41,6 +41,8 @@ type TaskSpec struct {
 	AcceptanceTimeout int    `yaml:"acceptance_timeout,omitempty" json:"acceptance_timeout,omitempty"`
 	Description       string `yaml:"-" json:"description"`
 	HumanAnswers      string `yaml:"-" json:"human_answers,omitempty"`
+	// EditsTests comes from the approved plan only, never from the task file
+	EditsTests bool `yaml:"-" json:"edits_tests,omitempty"`
 }
 
 func ValidateTaskSpec(spec *TaskSpec) error {

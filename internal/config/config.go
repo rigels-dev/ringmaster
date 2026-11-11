@@ -42,6 +42,13 @@ type SandboxConfig struct {
 	// commands on top of the built-in set (PATH, HOME, toolchain paths, ...).
 	// A trailing * matches a prefix. Everything not named stays out.
 	PassEnv []string `toml:"pass_env,omitempty"`
+	// AllowTestEdits lets every worker change test files that already exist.
+	// By default such changes are undone before acceptance runs, so a worker
+	// cannot pass a check by weakening it.
+	AllowTestEdits bool `toml:"allow_test_edits,omitempty"`
+	// TestFiles replaces the built-in patterns for what counts as a test file:
+	// "name/" is a directory anywhere in the path, anything else a file-name glob.
+	TestFiles []string `toml:"test_files,omitempty"`
 }
 
 // DefaultAcceptanceTimeout fits a cold docker build or an integration suite.

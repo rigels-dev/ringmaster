@@ -239,3 +239,31 @@ func TestProjectDisabledSkillsAddToFleet(t *testing.T) {
 		t.Errorf("manifest [skills]: %v, err %v", m, err)
 	}
 }
+
+// A project can lift test protection or name its own test files; neither
+// reaches the fleet config.
+func TestProjectTestProtectionSettings(t *testing.T) {
+	fleet := DefaultConfig()
+	fleet.Sandbox.TestFiles = []string{"*.feature"}
+
+	got := fleet.ForProject(&ProjectManifest{}).Sandbox
+	if got.AllowTestEdits || strings.Join(got.TestFiles, ",") != "*.feature" {
+		t.Errorf("no project setting: %+v", got)
+	}
+	got = fleet.ForProject(&ProjectManifest{Sandbox: SandboxConfig{AllowTestEdits: true, TestFiles: []string{"checks/"}}}).Sandbox
+	if !got.AllowTestEdits || strings.Join(got.TestFiles, ",") != "checks/" {
+		t.Errorf("project settings not applied: %+v", got)
+	}
+	if fleet.Sandbox.AllowTestEdits || strings.Join(fleet.Sandbox.TestFiles, ",") != "*.feature" {
+		t.Errorf("fleet config changed: %+v", fleet.Sandbox)
+	}
+
+	// Defaults stay out of a saved config
+	path := filepath.Join(t.TempDir(), "ringmaster.toml")
+	if err := SaveFile(path, DefaultConfig()); err != nil {
+		t.Fatal(err)
+	}
+	if data, _ := os.ReadFile(path); strings.Contains(string(data), "test_files") || strings.Contains(string(data), "allow_test_edits") {
+		t.Errorf("default test protection written to the config:\n%s", data)
+	}
+}

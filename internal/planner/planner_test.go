@@ -199,3 +199,47 @@ func TestApproveRequiresAnsweredQuestions(t *testing.T) {
 		t.Error("expected approval to be invalid after changing an answer")
 	}
 }
+
+// Letting a task change existing tests is part of what the user approves: the
+// flag changes the plan hash, the preview points it out, the planner is told
+// how to ask for it, and a plan without the flag hashes as it always did.
+func TestEditsTestsIsPartOfTheApprovedPlan(t *testing.T) {
+	task := schemas.PlanTask{ID: "T01", Title: "Rename the API", Type: schemas.TaskTypeBackend, Worker: "w", MaxRetries: 2, Acceptance: []string{"go test ./..."}, DependsOn: []string{}}
+	plain := &schemas.Plan{Project: "p", Tasks: []schemas.PlanTask{task}}
+	task.EditsTests = true
+	flagged := &schemas.Plan{Project: "p", Tasks: []schemas.PlanTask{task}}
+
+	plainHash, err := plain.PlanHash()
+	if err != nil {
+		t.Fatal(err)
+	}
+	flaggedHash, err := flagged.PlanHash()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if plainHash == flaggedHash {
+		t.Error("edits_tests does not change the plan hash, so it could be added after approval")
+	}
+
+	data, _ := json.Marshal(plain)
+	if strings.Contains(string(data), "edits_tests") {
+		t.Errorf("an unset flag must stay out of plan.json, or existing approvals break: %s", data)
+	}
+	var back schemas.Plan
+	data, _ = json.Marshal(flagged)
+	if err := json.Unmarshal(data, &back); err != nil || !back.Tasks[0].EditsTests {
+		t.Errorf("edits_tests lost in plan.json: %s", data)
+	}
+
+	estimates := CalculateEstimates(flagged, nil)
+	if preview := RenderPreview(flagged, estimates, config.BudgetConfig{}); !strings.Contains(preview, "May change existing tests: T01") {
+		t.Errorf("preview does not point out the task:\n%s", preview)
+	}
+	if preview := RenderPreview(plain, CalculateEstimates(plain, nil), config.BudgetConfig{}); strings.Contains(preview, "existing tests") {
+		t.Errorf("preview mentions test edits for a plan without any:\n%s", preview)
+	}
+
+	if prompt := MasterSystemPrompt(config.DefaultConfig(), "w"); !strings.Contains(prompt, `"edits_tests": true`) {
+		t.Error("the planner is not told about edits_tests")
+	}
+}
