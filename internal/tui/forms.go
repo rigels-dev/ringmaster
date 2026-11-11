@@ -247,3 +247,61 @@ func (m *ConfigModel) submitForm() (tea.Model, tea.Cmd) {
 
 	return m, nil
 }
+
+// updatePickAgentTemplate chooses a template to prefill the add-agent form.
+func (m ConfigModel) updatePickAgentTemplate(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "esc", "q":
+		m.mode = modeList
+		return m, nil
+	case "up", "k":
+		if m.templateCursor > 0 {
+			m.templateCursor--
+		}
+		return m, nil
+	case "down", "j":
+		if m.templateCursor < len(agentTemplates)-1 {
+			m.templateCursor++
+		}
+		return m, nil
+	case "1", "2", "3", "4":
+		idx := int(msg.Runes[0] - '1')
+		if idx >= 0 && idx < len(agentTemplates) {
+			m.templateCursor = idx
+			return m.selectAgentTemplate()
+		}
+	case "enter":
+		return m.selectAgentTemplate()
+	}
+
+	return m, nil
+}
+
+// updateForm handles keys in the add/edit forms for providers and agents.
+func (m ConfigModel) updateForm(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "esc":
+		m.mode = modeList
+		return m, nil
+	case "tab", "down":
+		m.focusNextInput()
+		return m, nil
+	case "shift+tab", "up":
+		m.focusPrevInput()
+		return m, nil
+	case "enter":
+		if m.isLastInputFocused() {
+			return m.submitForm()
+		}
+		m.focusNextInput()
+		return m, nil
+	}
+
+	var cmds []tea.Cmd
+	for i := range m.inputs {
+		var cmd tea.Cmd
+		m.inputs[i], cmd = m.inputs[i].Update(msg)
+		cmds = append(cmds, cmd)
+	}
+	return m, tea.Batch(cmds...)
+}
