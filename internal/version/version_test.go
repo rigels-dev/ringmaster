@@ -17,6 +17,23 @@ func TestVersionFileFollowsScheme(t *testing.T) {
 	}
 }
 
+// The README names the current release by hand; it went stale once. Fail the
+// build when it disagrees with VERSION, so a release cannot ship without it.
+func TestReadmeNamesCurrentRelease(t *testing.T) {
+	data, err := os.ReadFile("../../VERSION")
+	if err != nil {
+		t.Fatalf("read VERSION: %v", err)
+	}
+	version := strings.TrimSpace(string(data))
+	readme, err := os.ReadFile("../../README.md")
+	if err != nil {
+		t.Fatalf("read README.md: %v", err)
+	}
+	if want := "Current release: **" + version + "**"; !strings.Contains(string(readme), want) {
+		t.Errorf("README.md does not say %q; update its \"Current release\" line to match VERSION", want)
+	}
+}
+
 func TestCodenamesAreAlphabetical(t *testing.T) {
 	for i, name := range Codenames {
 		if want := byte('a' + i); name[0] != want {
