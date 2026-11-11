@@ -136,3 +136,45 @@ func TestClaudeExistingSessionAndVersionedModels(t *testing.T) {
 		t.Errorf("expected master change notification, got:\n%s", v8)
 	}
 }
+
+// Choices that used to come from ranging over a map must be the same on every
+// run: the first name in alphabetical order.
+func TestMapBackedChoicesAreDeterministic(t *testing.T) {
+	cfg := config.DefaultConfig()
+	for _, name := range []string{"zeta", "openrouter", "alpha", "local", "mid"} {
+		cfg.Providers[name] = config.ProviderConfig{Type: "openai"}
+	}
+	for _, alias := range []string{"zed", "planner", "boss", "chief", "lead"} {
+		cfg.Agents[alias] = config.AgentConfig{Provider: "alpha", Model: alias + "-model", Role: "master"}
+	}
+	cfg.Agents["coder"] = config.AgentConfig{Provider: "zeta", Model: "c", Role: "worker"}
+
+	for i := 0; i < 50; i++ {
+		// Template form: prefilled provider
+		m := NewConfigModel(cfg, filepath.Join(t.TempDir(), "ringmaster.toml"))
+		m.selectAgentTemplate()
+		if got := m.inputs[1].Value(); got != "alpha" {
+			t.Fatalf("run %d: template form prefilled provider %q, want alpha", i, got)
+		}
+
+		// Agent list: master shown when no default master is set
+		m = NewConfigModel(cfg, filepath.Join(t.TempDir(), "ringmaster.toml"))
+		m.activeTab = tabAgents
+		if view := m.View(); !strings.Contains(view, "[Master Planner: boss]") {
+			t.Fatalf("run %d: routing box does not name the first master by name:\n%s", i, view)
+		}
+
+		// Delete confirmation: bound agents in alphabetical order
+		m.mode = modeConfirmDeleteProvider
+		m.deletingProviderName = "alpha"
+		view := m.View()
+		last := -1
+		for _, alias := range []string{"boss", "chief", "lead", "planner", "zed"} {
+			at := strings.Index(view, "• "+alias+" (")
+			if at < 0 || at < last {
+				t.Fatalf("run %d: bound agents are not listed alphabetically (at %q):\n%s", i, alias, view)
+			}
+			last = at
+		}
+	}
+}

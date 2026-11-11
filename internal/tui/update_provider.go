@@ -130,9 +130,8 @@ func (m ConfigModel) updatePickAuthMethod(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			// Save URL to file so user can always copy it easily
 			if home, err := os.UserHomeDir(); err == nil {
 				_ = os.MkdirAll(filepath.Join(home, ".claude"), 0700)
-				_ = os.WriteFile(filepath.Join(home, ".claude", "auth_url.txt"), []byte(authURL), 0644)
+				_ = os.WriteFile(filepath.Join(home, ".claude", "auth_url.txt"), []byte(authURL), 0600)
 			}
-			_ = os.WriteFile("/tmp/claude_auth_url.txt", []byte(authURL), 0644)
 
 			ti := textinput.New()
 			ti.Placeholder = "Paste authorization code or callback URL here..."
