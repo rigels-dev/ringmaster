@@ -35,6 +35,9 @@ type AuditEvent struct {
 }
 
 // RunTaskLoop executes attempts for task until DONE, BLOCKED, NEEDS_REVIEW, or PAUSED.
+// restoreTests, when set, runs before each acceptance check: it undoes the
+// worker's changes to existing test files and returns their paths, so the
+// checks run against tests the worker could not weaken.
 // afterAttempt, when set, runs once each attempt has been verified.
 func RunTaskLoop(
 	ctx context.Context,
@@ -46,6 +49,7 @@ func RunTaskLoop(
 	sandboxCfg config.SandboxConfig,
 	briefContent string,
 	eventsPath string,
+	restoreTests func(ctx context.Context) ([]string, error),
 	afterAttempt func(attempt int, report *schemas.WorkerReport),
 ) (*TaskAttemptLoopResult, error) {
 	start := time.Now()
@@ -114,7 +118,17 @@ func RunTaskLoop(
 		budgetExceeded := attemptRes.Reason == "BUDGET"
 
 		var checks []CheckResult
+		var restored []string
 		if attemptRes.Status == schemas.ReportStatusCompleted && !budgetExceeded {
+			if restoreTests != nil {
+				var restoreErr error
+				if restored, restoreErr = restoreTests(ctx); restoreErr != nil {
+					return nil, fmt.Errorf("failed to restore protected test files: %w", restoreErr)
+				}
+				if len(restored) > 0 {
+					appendEvent(attempt, "TESTS_RESTORED", restored)
+				}
+			}
 			var checkErr error
 			checks, checkErr = RunAcceptance(ctx, task, worktree, sandboxCfg.Allow, sandboxCfg.PassEnv, acceptanceTimeout(task, sandboxCfg))
 			if checkErr != nil {
@@ -124,6 +138,10 @@ func RunTaskLoop(
 		}
 
 		decision := Decide(attemptRes.Report, checks, attempt, maxRetries, budgetExceeded)
+		if len(restored) > 0 && decision.Type == DecisionRETRY {
+			// The worker's next attempt must know why its test changes are gone
+			decision.FailureLogs = restoredTestsNote(restored) + "\n\n" + decision.FailureLogs
+		}
 		res.Decision = decision
 		res.FinalReport = attemptRes.Report
 
@@ -138,6 +156,9 @@ func RunTaskLoop(
 					passStr = fmt.Sprintf("FAIL (exit %d)", chk.ExitCode)
 				}
 				verLines = append(verLines, fmt.Sprintf("- `%s`: %s", chk.Command, passStr))
+			}
+			if len(restored) > 0 {
+				verLines = append(verLines, fmt.Sprintf("- Existing test files the worker changed were restored before these checks: %s", strings.Join(restored, ", ")))
 			}
 			attemptRes.Report.Verification = strings.Join(verLines, "\n")
 			rendered, rErr := attemptRes.Report.RenderMarkdown()
@@ -166,6 +187,14 @@ func RunTaskLoop(
 
 	res.Duration = time.Since(start)
 	return res, nil
+}
+
+// restoredTestsNote tells a worker that its edits to existing tests were undone.
+func restoredTestsNote(restored []string) string {
+	return "Ringmaster restored these existing test files to their original content before running the acceptance checks, " +
+		"because this task may not change or delete tests that already exist: " + strings.Join(restored, ", ") + ".\n" +
+		"Make the code pass the tests as they are; you may add new test files. " +
+		"If an existing test is itself wrong for this task, do not edit it again: report AWAITING_INPUT and ask the user."
 }
 
 // acceptanceTimeout is the task's own limit, else the sandbox's, else the default.

@@ -42,6 +42,11 @@ acceptance_timeout = 300   # seconds each acceptance command may run
 # Commands see only a built-in set of environment variables (PATH, HOME,
 # toolchain paths, proxies). Name any others they need; a trailing * is a prefix.
 # pass_env = ["DATABASE_URL", "AWS_*"]
+# Changes a worker makes to test files that already exist are undone before
+# acceptance runs. Set allow_test_edits to lift that, or test_files to say
+# which files count as tests ("name/" is a directory, the rest file-name globs).
+# allow_test_edits = true
+# test_files = ["*_test.go", "tests/"]
 allow = [
   "pytest",
   "ruff",

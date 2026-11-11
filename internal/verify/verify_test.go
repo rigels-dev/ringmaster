@@ -147,7 +147,7 @@ func TestRunTaskLoopSuccessAttempt1(t *testing.T) {
 	sandboxCfg := config.SandboxConfig{Allow: []string{"echo"}}
 	eventsPath := filepath.Join(tempDir, ".ringmaster", "logs", "events.jsonl")
 
-	res, err := RunTaskLoop(context.Background(), task, tempDir, agent, provider, budget, sandboxCfg, "Demo Brief", eventsPath, nil)
+	res, err := RunTaskLoop(context.Background(), task, tempDir, agent, provider, budget, sandboxCfg, "Demo Brief", eventsPath, nil, nil)
 	if err != nil {
 		t.Fatalf("RunTaskLoop error: %v", err)
 	}

@@ -19,6 +19,9 @@ type PlanTask struct {
 	Acceptance []string `json:"acceptance"`
 	// AcceptanceTimeout overrides how long each acceptance command may run, in seconds
 	AcceptanceTimeout int `json:"acceptance_timeout,omitempty"`
+	// EditsTests lets this task's worker change test files that already exist
+	// (see [sandbox] allow_test_edits). Part of the approved plan.
+	EditsTests bool `json:"edits_tests,omitempty"`
 }
 
 // PlanQuestion is a decision the master could not settle from the brief; it must be

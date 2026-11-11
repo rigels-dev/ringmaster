@@ -35,6 +35,7 @@ When a worker needs you (a decision, a value only you know, or approval for a co
 - **Any provider.** OpenAI-compatible APIs (OpenAI, OpenRouter, Ollama, vLLM, DeepSeek and others), the Anthropic API, and a local Claude subscription through the Claude Code CLI.
 - **One fleet for all projects.** Providers and agents are configured once, globally; a project only assigns agents to its tasks.
 - **Guardrails for workers.** Workers run commands only from an allowlist, and their file tools are confined to the task's worktree. Worker and acceptance commands see only a built-in set of environment variables (`PATH`, `HOME`, toolchain paths, proxies) plus the ones you name in `pass_env`, so your API keys and other credentials stay out unless you list them. For agents on a Claude subscription, the Claude Code CLI runs the commands itself, so they also see the CLI's own `CLAUDE_*` and `ANTHROPIC_*` variables. These are guardrails, not isolation: an allowed command such as `go test` still runs code the worker wrote, with your user's permissions. Run Ringmaster inside a container or VM if you need a hard boundary. Each acceptance command has a time limit (default 300 s), adjustable per project or per task.
+- **Tests a worker cannot weaken.** A worker may add tests, but its changes to test files that already existed are undone before the acceptance commands run, so a check cannot be passed by editing it. A task that really must change existing tests says so in the plan, where you see it before approving.
 - **Agent skills.** Drop a skill folder (a `SKILL.md` plus whatever it refers to) into Ringmaster and every worker can use it, whichever model it runs on. Turn skills on and off from the TUI or the command line.
 - **Live and lasting telemetry.** Worker steps stream to the logs as they happen. Every run is appended to `.ringmaster/logs/run.jsonl`, and reports and transcripts are kept after their worktree is removed. Token usage includes prompt-cache reads and writes, plus cost when the provider reports it.
 
@@ -237,6 +238,22 @@ max_tokens_per_task = 300000
 ```
 
 A project's `allow` replaces the fleet's list, while its `pass_env` adds to it; a trailing `*` matches a prefix. A task in the plan can also set its own `acceptance_timeout`.
+
+### Protected tests
+
+Acceptance commands are only worth something if the worker cannot rewrite what they check. So before each acceptance run, Ringmaster compares the task's workspace with the commit its branch started from and puts back every test file that existed there and was modified or deleted since. Test files the worker added are kept. If the checks then fail, the next attempt is told which files were restored and why; the restore is also recorded in `events.jsonl` and in the task's report.
+
+A file counts as a test by its name or directory: `*_test.go`, `test_*.py`, `*.test.*`, `*.spec.*`, anything under `tests/`, `test/`, `__tests__/`, `spec/` or `testdata/`, and the usual names for Ruby, Rust, Java, C# and PHP. To use your own list, or to turn the protection off:
+
+```toml
+[sandbox]
+test_files = ["*.feature", "checks/"]   # replaces the built-in list; "name/" is a directory, the rest file-name globs
+allow_test_edits = true                 # workers may change existing tests
+```
+
+Some tasks have to change existing tests, because the behaviour they pin down is meant to change. The master planner marks such a task with `"edits_tests": true` in `plan.json`; the plan preview lists these tasks, and the flag is part of the approved plan's hash. Tasks of type `test` are always exempt.
+
+This covers workers of every kind, since the restore is done by Ringmaster after the worker has finished. It does not stop a worker from making a test pass in other ways, such as special-casing the test's inputs in the code.
 
 ## Versioning
 

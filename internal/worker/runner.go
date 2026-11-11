@@ -84,6 +84,13 @@ func RunAttempt(
 		humanAnswersSection = fmt.Sprintf("\n# HUMAN ANSWERS & FEEDBACK:\n%s\n", task.HumanAnswers)
 	}
 
+	testsRule := "You may add and change tests as the task requires."
+	if ProtectsTests(task, sandboxCfg) {
+		testsRule = "Do NOT modify, rename or delete test files that already exist (" + strings.Join(TestFilePatterns(sandboxCfg), ", ") + ").\n" +
+			"They are the specification: Ringmaster puts them back before it runs the acceptance criteria, so such changes are lost.\n" +
+			"Make the code pass them. You may add new test files. If an existing test is wrong for this task, ask the user (see WHEN YOU NEED THE USER)."
+	}
+
 	systemPrompt := fmt.Sprintf(`You are an autonomous AI software engineer working for Ringmaster.
 Your role is to implement task '%s' within your isolated workspace.
 
@@ -98,6 +105,9 @@ Description:
 %s%s
 # ACCEPTANCE CRITERIA:
 - %s
+
+# EXISTING TESTS:
+%s
 
 # INSTRUCTIONS:
 1. Explore the workspace with read_file, list_dir, search.
@@ -155,7 +165,7 @@ What is done so far and what is waiting on the user.
 
 Never ask for a secret's value; ask for the name of the environment variable that holds it.
 Do not ask about anything already answered under HUMAN ANSWERS & FEEDBACK.
-`, task.ID, briefContent, task.ID, task.Title, task.Description, humanAnswersSection, skills.PromptSection(skills.InWorkspace(worktree)), strings.Join(task.Acceptance, "\n- "), task.ID, attemptNum,
+`, task.ID, briefContent, task.ID, task.Title, task.Description, humanAnswersSection, skills.PromptSection(skills.InWorkspace(worktree)), strings.Join(task.Acceptance, "\n- "), testsRule, task.ID, attemptNum,
 		strings.Join(sandboxCfg.Allow, ", "), task.ID, attemptNum)
 
 	messages := []llm.Message{
