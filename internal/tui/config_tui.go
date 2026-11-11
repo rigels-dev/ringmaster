@@ -12,6 +12,7 @@ import (
 	"ringmaster/internal/auth"
 	"ringmaster/internal/config"
 	"ringmaster/internal/llm"
+	"ringmaster/internal/skills"
 )
 
 type tab int
@@ -19,6 +20,7 @@ type tab int
 const (
 	tabProviders tab = iota
 	tabAgents
+	tabSkills
 )
 
 type viewMode int
@@ -75,6 +77,8 @@ type ConfigModel struct {
 	oauthState            string
 	oauthInput            textinput.Model
 	inputs                []textinput.Model
+	skills                []skills.Skill // installed skills, for the Skills tab
+	projectDisabled       []string       // skills the current project's ringmaster.toml turns off
 	statusMsg             string
 	err                   error
 	width                 int
@@ -89,6 +93,14 @@ func NewConfigModel(cfg *config.Config, configPath string) ConfigModel {
 		mode:       modeList,
 		cursor:     0,
 	}
+}
+
+// WithSkills gives the model the installed skills to show on the Skills tab,
+// and the ones the current project disables on its own (shown, not editable here).
+func (m ConfigModel) WithSkills(list []skills.Skill, projectDisabled []string) ConfigModel {
+	m.skills = list
+	m.projectDisabled = projectDisabled
+	return m
 }
 
 func (m ConfigModel) Init() tea.Cmd {
@@ -215,8 +227,11 @@ func (m ConfigModel) getAgentAliases() []string {
 }
 
 func (m ConfigModel) currentListLen() int {
-	if m.activeTab == tabProviders {
+	switch m.activeTab {
+	case tabProviders:
 		return len(m.cfg.Providers)
+	case tabSkills:
+		return len(m.skills)
 	}
 	return len(m.cfg.Agents)
 }

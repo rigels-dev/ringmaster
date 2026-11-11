@@ -19,10 +19,11 @@ type ProjectManifest struct {
 	Plan      string `toml:"plan"`
 	CreatedAt string `toml:"created_at"`
 
-	// Optional overrides of the global [budget], [sandbox] and [web] for this project
+	// Optional overrides of the global [budget], [sandbox], [web] and [skills] for this project
 	Budget  BudgetConfig  `toml:"budget"`
 	Sandbox SandboxConfig `toml:"sandbox"`
 	Web     WebConfig     `toml:"web,omitempty"`
+	Skills  SkillsConfig  `toml:"skills,omitempty"`
 }
 
 // ProjectManifestPath is where a project's manifest lives.
@@ -74,6 +75,11 @@ func (c *Config) ForProject(m *ProjectManifest) *Config {
 	}
 	if m.Web.Port > 0 {
 		out.Web.Port = m.Web.Port
+	}
+	// Like pass_env, a project's disabled skills add to the fleet's: a project
+	// can turn a skill off for itself, not back on against the fleet
+	if len(m.Skills.Disabled) > 0 {
+		out.Skills.Disabled = append(append([]string(nil), c.Skills.Disabled...), m.Skills.Disabled...)
 	}
 	return &out
 }

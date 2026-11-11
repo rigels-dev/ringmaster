@@ -13,15 +13,16 @@ import (
 
 // updateList handles keys on the provider and agent lists.
 func (m ConfigModel) updateList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	if m.activeTab == tabSkills {
+		if next, handled := m.updateSkills(msg); handled {
+			return next, nil
+		}
+	}
 	switch msg.String() {
 	case "q", "ctrl+c":
 		return m, tea.Quit
 	case "tab":
-		if m.activeTab == tabProviders {
-			m.activeTab = tabAgents
-		} else {
-			m.activeTab = tabProviders
-		}
+		m.activeTab = (m.activeTab + 1) % (tabSkills + 1)
 		m.cursor = 0
 		m.statusMsg = ""
 		return m, nil
@@ -31,6 +32,10 @@ func (m ConfigModel) updateList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case "2":
 		m.activeTab = tabAgents
+		m.cursor = 0
+		return m, nil
+	case "3":
+		m.activeTab = tabSkills
 		m.cursor = 0
 		return m, nil
 	case "up", "k":

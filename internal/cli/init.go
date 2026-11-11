@@ -107,6 +107,9 @@ created_at = %q
 #
 # [web]
 # port = 12053                                 # web UI port for this project
+#
+# [skills]
+# disabled = ["deploy"]                        # installed skills this project's workers do not get
 `, name, time.Now().UTC().Format(time.RFC3339))
 		_ = os.WriteFile(manifestPath, []byte(manifestContent), 0644)
 	}

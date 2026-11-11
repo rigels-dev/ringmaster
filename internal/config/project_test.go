@@ -211,3 +211,31 @@ func TestProjectWebPortOverridesFleet(t *testing.T) {
 		t.Errorf("round trip: port %v, err %v", loaded, err)
 	}
 }
+
+// A project can turn a skill off for itself; that adds to what the fleet
+// already disables and never reaches the fleet config.
+func TestProjectDisabledSkillsAddToFleet(t *testing.T) {
+	fleet := DefaultConfig()
+	fleet.Skills.Disabled = []string{"fleet-off"}
+
+	got := fleet.ForProject(&ProjectManifest{Skills: SkillsConfig{Disabled: []string{"project-off"}}}).Skills.Disabled
+	if strings.Join(got, ",") != "fleet-off,project-off" {
+		t.Errorf("disabled skills %v", got)
+	}
+	if strings.Join(fleet.Skills.Disabled, ",") != "fleet-off" {
+		t.Errorf("fleet config changed: %v", fleet.Skills.Disabled)
+	}
+	if got := fleet.ForProject(&ProjectManifest{}).Skills.Disabled; strings.Join(got, ",") != "fleet-off" {
+		t.Errorf("no project setting: %v", got)
+	}
+
+	dir := t.TempDir()
+	manifest := "name = \"p\"\n\n[skills]\ndisabled = [\"deploy\"]\n"
+	if err := os.WriteFile(ProjectManifestPath(dir), []byte(manifest), 0644); err != nil {
+		t.Fatal(err)
+	}
+	m, err := LoadProjectManifest(dir)
+	if err != nil || strings.Join(m.Skills.Disabled, ",") != "deploy" {
+		t.Errorf("manifest [skills]: %v, err %v", m, err)
+	}
+}

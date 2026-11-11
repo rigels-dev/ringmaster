@@ -215,3 +215,97 @@ Configure database.
 		t.Errorf("expected T01 to complete after human answer, got: %s (err: %s)", state.TaskStates["T01"].Status, state.TaskStates["T01"].Error)
 	}
 }
+
+// Enabled skills are copied into a task's workspace for the worker to read;
+// disabled ones are not, and none of it is committed on the task branch.
+func TestE2ESkillsReachWorkspaceButNotGit(t *testing.T) {
+	// A blocked task keeps its workspace, so what the worker was given can be inspected
+	ms := mockserver.NewMockServer(mockserver.ScenarioBlocked)
+	defer ms.Close()
+
+	projectRoot, cfg := setupE2EProject(t, ms)
+	configDir := t.TempDir()
+	t.Setenv("RINGMASTER_CONFIG_DIR", configDir)
+
+	writeSkill := func(root, name string) {
+		t.Helper()
+		dir := filepath.Join(root, name)
+		if err := os.MkdirAll(dir, 0755); err != nil {
+			t.Fatal(err)
+		}
+		content := "---\ndescription: " + name + " instructions\n---\n\nSKILL-BODY-" + name + "\n"
+		if err := os.WriteFile(filepath.Join(dir, "SKILL.md"), []byte(content), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	writeSkill(filepath.Join(configDir, "skills"), "fleet-skill")
+	writeSkill(filepath.Join(configDir, "skills"), "switched-off")
+	writeSkill(filepath.Join(projectRoot, ".ringmaster", "skills"), "project-skill")
+	cfg.Skills.Disabled = []string{"switched-off"}
+
+	plan := &schemas.Plan{
+		Project: filepath.Base(projectRoot),
+		Tasks: []schemas.PlanTask{{
+			ID: "T01", Title: "Needs Database", Type: schemas.TaskTypeBackend,
+			Worker: "mock-worker", MaxRetries: 2, Acceptance: []string{"echo db_ok"},
+		}},
+	}
+	_ = storage.WriteJSONAtomic(filepath.Join(projectRoot, ".ringmaster", "plan.json"), plan)
+	if _, err := planner.ApprovePlan(projectRoot, plan); err != nil {
+		t.Fatal(err)
+	}
+	tasksDir := filepath.Join(projectRoot, ".ringmaster", "tasks")
+	_ = os.MkdirAll(tasksDir, 0755)
+	_ = os.WriteFile(filepath.Join(tasksDir, "T01-needs-database.md"), []byte(`---
+id: T01
+title: "Needs Database"
+type: backend
+depends_on: []
+worker: "mock-worker"
+max_retries: 2
+acceptance:
+  - "echo db_ok"
+---
+Configure database.
+`), 0644)
+
+	engine, err := scheduler.NewEngine(projectRoot, cfg, 1)
+	if err != nil {
+		t.Fatalf("NewEngine failed: %v", err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	_ = engine.Run(ctx)
+	if status := engine.GetState().TaskStates["T01"].Status; status != schemas.TaskStateBlocked {
+		t.Fatalf("expected T01 to be BLOCKED, got: %s", status)
+	}
+
+	skillsDir := filepath.Join(workspace.WorktreesDir(projectRoot), "T01", ".ringmaster", "skills")
+	for _, name := range []string{"fleet-skill", "project-skill"} {
+		data, err := os.ReadFile(filepath.Join(skillsDir, name, "SKILL.md"))
+		if err != nil || !strings.Contains(string(data), "SKILL-BODY-"+name) {
+			t.Errorf("enabled skill %s is not in the workspace: %v", name, err)
+		}
+	}
+	if _, err := os.Stat(filepath.Join(skillsDir, "switched-off")); err == nil {
+		t.Errorf("disabled skill was given to the worker")
+	}
+
+	// The worker's commits and the workspace's git status never see the skills
+	worktree := filepath.Join(workspace.WorktreesDir(projectRoot), "T01")
+	for _, ref := range []string{"main", "rm/T01"} {
+		tree, err := workspace.RunGit(ctx, projectRoot, "ls-tree", "-r", "--name-only", ref)
+		if err != nil {
+			t.Fatalf("ls-tree %s: %v", ref, err)
+		}
+		if strings.Contains(tree, "skills") || strings.Contains(tree, "SKILL.md") {
+			t.Errorf("skill files were committed on %s:\n%s", ref, tree)
+		}
+	}
+	for _, dir := range []string{projectRoot, worktree} {
+		status, _ := workspace.RunGit(ctx, dir, "status", "--porcelain")
+		if strings.Contains(status, "skills") {
+			t.Errorf("git sees the skills in %s:\n%s", dir, status)
+		}
+	}
+}

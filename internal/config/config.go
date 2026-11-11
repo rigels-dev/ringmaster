@@ -56,6 +56,12 @@ type WebConfig struct {
 	Port int `toml:"port,omitempty"`
 }
 
+type SkillsConfig struct {
+	// Disabled names installed skills that workers do not get. A skill is on
+	// unless it is listed here.
+	Disabled []string `toml:"disabled,omitempty"`
+}
+
 type EstimateConfig struct {
 	TokensIn  [2]int `toml:"tokens_in"`  // [min, max]
 	TokensOut [2]int `toml:"tokens_out"` // [min, max]
@@ -68,6 +74,7 @@ type Config struct {
 	Budget    BudgetConfig              `toml:"budget"`
 	Sandbox   SandboxConfig             `toml:"sandbox"`
 	Web       WebConfig                 `toml:"web,omitempty"`
+	Skills    SkillsConfig              `toml:"skills,omitempty"`
 	Estimates map[string]EstimateConfig `toml:"estimates"`
 }
 
