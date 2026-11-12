@@ -18,8 +18,9 @@ test:
 	go test ./...
 
 # Unit tests for the web server's own logic; needs only Node.js, no npm install
+# The web tests import npm packages, so install them when they are missing
 test-web:
-	cd web && npm test
+	cd web && { [ -d node_modules ] || npm ci; } && npm test
 
 # Point web/package-lock.json at the public npm registry (after npm install via a mirror)
 lockfile:
