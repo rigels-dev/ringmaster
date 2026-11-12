@@ -1,13 +1,13 @@
 <template>
   <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4" @click.self="$emit('close')">
-    <div class="bg-slate-dark border border-gear-gold/60 rounded-xl w-full max-w-4xl max-h-[90vh] shadow-2xl flex flex-col font-mono">
+    <div class="bg-slate-dark border border-gear-gold/60 rounded-xl w-full max-w-4xl max-h-[90vh] shadow-2xl flex flex-col">
       <!-- Header -->
       <div class="flex items-start justify-between gap-3 p-4 border-b border-steel/60">
         <div class="min-w-0">
-          <div class="flex items-center gap-2 text-xs">
+          <div class="flex items-center gap-2 text-body">
             <span class="font-bold text-gear-gold">{{ taskId }}</span>
-            <span v-if="detail?.state?.status" class="text-[9px] px-2 py-0.5 rounded font-bold uppercase border" :class="statusClass(detail.state.status)">
-              {{ detail.state.status }}
+            <span v-if="detail?.state?.status" class="text-2xs px-2 py-0.5 rounded font-bold border" :class="statusClass(detail.state.status)">
+              {{ statusLabel(detail.state.status) }}
             </span>
           </div>
           <h3 class="text-sm font-semibold text-zinc-200 mt-1">{{ title }}</h3>
@@ -15,26 +15,26 @@
         <button @click="$emit('close')" class="text-zinc-400 hover:text-zinc-200 text-sm px-2" title="Close">✕</button>
       </div>
 
-      <div v-if="error" class="p-4 text-xs text-red-300">{{ error }}</div>
-      <div v-else-if="!detail" class="p-4 text-xs text-zinc-400">Loading task details…</div>
+      <div v-if="error" class="p-4 text-body text-red-300">{{ error }}</div>
+      <div v-else-if="!detail" class="p-4 text-body text-zinc-400">Loading task details…</div>
 
-      <div v-else class="flex-1 overflow-y-auto p-4 space-y-4 text-[11px]">
+      <div v-else class="flex-1 overflow-y-auto p-4 space-y-4 text-body">
         <!-- Facts -->
         <div class="grid grid-cols-2 sm:grid-cols-4 gap-2">
           <div class="bg-slate-inner border border-steel/50 rounded p-2">
-            <div class="text-zinc-500 text-[9px] uppercase">Automaton</div>
+            <div class="text-zinc-500 text-2xs uppercase">Automaton</div>
             <div class="text-cyan-energy truncate">{{ detail.state?.worker || '—' }}</div>
           </div>
           <div class="bg-slate-inner border border-steel/50 rounded p-2">
-            <div class="text-zinc-500 text-[9px] uppercase">Attempts</div>
+            <div class="text-zinc-500 text-2xs uppercase">Attempts</div>
             <div class="text-zinc-200">{{ detail.state?.attempt ?? 0 }}</div>
           </div>
           <div class="bg-slate-inner border border-steel/50 rounded p-2">
-            <div class="text-zinc-500 text-[9px] uppercase">Tokens in / out</div>
+            <div class="text-zinc-500 text-2xs uppercase">Tokens in / out</div>
             <div class="text-zinc-200">{{ detail.state?.usage?.tokens_in ?? 0 }} / {{ detail.state?.usage?.tokens_out ?? 0 }}</div>
           </div>
           <div class="bg-slate-inner border border-steel/50 rounded p-2">
-            <div class="text-zinc-500 text-[9px] uppercase">Duration</div>
+            <div class="text-zinc-500 text-2xs uppercase">Duration</div>
             <div class="text-zinc-200">{{ duration }}</div>
           </div>
         </div>
@@ -42,7 +42,7 @@
         <!-- Full reason -->
         <div v-if="detail.state?.error" class="p-3 bg-red-950/70 border border-red-800/80 rounded text-red-200">
           <div class="font-bold text-red-300 mb-1">⚠ Reason</div>
-          <pre class="whitespace-pre-wrap break-words font-mono text-[11px] text-red-200/90">{{ detail.state.error }}</pre>
+          <pre class="whitespace-pre-wrap break-words font-mono text-body text-red-200/90">{{ detail.state.error }}</pre>
         </div>
 
         <!-- Needs you: answer requests, approve commands, or give guidance -->
@@ -55,10 +55,10 @@
               <div class="text-zinc-300"><span class="text-zinc-500">[{{ r.id }}]</span> Run a command outside the sandbox allow list?</div>
               <code class="block bg-slate-inner text-amber-200 px-2 py-1 rounded break-all">{{ r.command }}</code>
               <div v-if="r.reason" class="text-zinc-400">Why: {{ r.reason }}</div>
-              <div class="text-[10px] text-zinc-500">Runs in the task worktree, without a shell. Approving also allows this command with extra arguments appended.</div>
+              <div class="text-xs text-zinc-500">Runs in the task worktree, without a shell. Approving also allows this command with extra arguments appended.</div>
               <div class="flex flex-wrap gap-2">
                 <button v-for="opt in approvalOptions" :key="opt.value" @click="form.approvals[r.id] = opt.value"
-                  class="px-2.5 py-1 rounded border text-[10px] font-bold"
+                  class="px-2.5 py-1 rounded border text-xs font-bold"
                   :class="form.approvals[r.id] === opt.value ? opt.active : 'border-steel text-zinc-400 hover:text-zinc-200'">
                   {{ opt.label }}
                 </button>
@@ -72,7 +72,7 @@
               <div class="text-zinc-300"><span class="text-zinc-500">[{{ r.id }}]</span> {{ r.question }}</div>
               <div class="flex flex-wrap gap-2">
                 <button v-for="opt in r.options" :key="opt" @click="form.replies[r.id] = opt"
-                  class="px-2.5 py-1 rounded border text-[10px] font-bold"
+                  class="px-2.5 py-1 rounded border text-xs font-bold"
                   :class="form.replies[r.id] === opt ? 'bg-cyan-950 border-cyan-500 text-cyan-200' : 'border-steel text-zinc-400 hover:text-zinc-200'">
                   {{ opt }}<span v-if="opt === r.recommended" class="text-emerald-400"> ★ recommended</span>
                 </button>
@@ -84,29 +84,29 @@
             <!-- Free input; secrets are referenced by env var name only -->
             <template v-else>
               <div class="text-zinc-300"><span class="text-zinc-500">[{{ r.id }}]</span> {{ r.question }}</div>
-              <div v-if="r.secret" class="text-[10px] text-amber-300">Secret: enter the NAME of the environment variable that holds it, never the value.</div>
+              <div v-if="r.secret" class="text-xs text-amber-300">Secret: enter the NAME of the environment variable that holds it, never the value.</div>
               <input v-model="form.replies[r.id]" :placeholder="r.secret ? 'e.g. SHORTENER_API_KEY' : 'Your answer'"
                 class="w-full bg-slate-dark border border-steel rounded px-2 py-1 text-zinc-200" />
             </template>
           </div>
 
           <div>
-            <label class="text-zinc-400 text-[10px]">{{ requests.length ? 'Extra notes (optional)' : noteLabel }}</label>
+            <label class="text-zinc-400 text-xs">{{ requests.length ? 'Extra notes (optional)' : noteLabel }}</label>
             <textarea v-model="form.text" rows="3" class="w-full mt-1 bg-slate-dark border border-steel rounded px-2 py-1 text-zinc-200"
               :placeholder="requests.length ? 'Anything else the automaton should know' : 'e.g. Drop the gofmt check; go vet covers it.'"></textarea>
           </div>
 
           <div class="flex items-center justify-between gap-2">
-            <span class="text-[10px] text-rose-200/80">{{ formError }}</span>
+            <span class="text-xs text-rose-200/80">{{ formError }}</span>
             <button @click="submitAnswer" :disabled="sending"
-              class="px-4 py-1.5 rounded text-xs font-bold bg-emerald-500 hover:bg-emerald-400 text-ink disabled:opacity-50">
+              class="px-4 py-1.5 rounded text-body font-bold bg-emerald-500 hover:bg-emerald-400 text-ink disabled:opacity-50">
               {{ sending ? 'Sending…' : detail.state?.status === 'PAUSED' && !requests.length ? '▶ Resume task' : '✓ Send answer & resume' }}
             </button>
           </div>
         </div>
 
         <!-- Paths for manual inspection -->
-        <div class="bg-slate-inner border border-steel/50 rounded p-2 space-y-1 text-[10px]">
+        <div class="bg-slate-inner border border-steel/50 rounded p-2 space-y-1 text-xs">
           <div v-if="detail.worktree"><span class="text-zinc-500">Worktree:</span> <code class="text-zinc-300 break-all select-all">{{ detail.worktree }}</code></div>
           <div><span class="text-zinc-500">Branch:</span> <code class="text-zinc-300 select-all">{{ detail.branch }}</code></div>
           <div v-if="detail.specFile"><span class="text-zinc-500">Spec:</span> <code class="text-zinc-300 break-all select-all">{{ detail.specFile }}</code></div>
@@ -120,7 +120,7 @@
             v-for="t in tabs"
             :key="t.id"
             @click="tab = t.id"
-            class="px-3 py-1.5 text-[10px] font-bold rounded-t border border-b-0"
+            class="px-3 py-1.5 text-xs font-bold rounded-t border border-b-0"
             :class="tab === t.id ? 'bg-slate-panel text-gear-gold border-gear-dark' : 'text-zinc-400 border-transparent hover:text-zinc-200'"
           >
             {{ t.label }}
@@ -133,9 +133,9 @@
           <div v-for="a in detail.attempts" :key="a.file" class="space-y-2">
             <div class="text-gear-gold font-bold">Attempt {{ a.attempt }}</div>
             <div v-for="(e, i) in a.entries" :key="i" class="border border-steel/50 rounded p-2 bg-slate-inner">
-              <div class="text-[9px] text-zinc-500 mb-1">turn {{ e.turn }} · {{ e.role }} · {{ e.timestamp }}</div>
+              <div class="text-2xs text-zinc-500 mb-1">turn {{ e.turn }} · {{ e.role }} · {{ e.timestamp }}</div>
               <pre v-if="e.content" class="whitespace-pre-wrap break-words text-zinc-200">{{ e.content }}</pre>
-              <div v-for="tc in e.tool_calls || []" :key="tc.id" class="text-cyan-energy break-all">→ {{ tc.function?.name }} {{ tc.function?.arguments }}</div>
+              <div v-for="tc in e.tool_calls || []" :key="tc.id" class="text-cyan-energy break-all font-mono">→ {{ tc.function?.name }} {{ tc.function?.arguments }}</div>
               <details v-if="e.tool_response">
                 <summary class="cursor-pointer text-zinc-400">tool output ({{ e.tool_response.length }} chars)</summary>
                 <pre class="whitespace-pre-wrap break-words text-zinc-300 mt-1">{{ e.tool_response }}</pre>
@@ -147,15 +147,15 @@
 
         <!-- Report -->
         <div v-else-if="tab === 'report'">
-          <pre v-if="detail.report" class="whitespace-pre-wrap break-words text-zinc-200 bg-slate-inner border border-steel/50 rounded p-3">{{ detail.report }}</pre>
-          <p v-else class="text-zinc-500">The worker has not written .ringmaster/outputs/{{ taskId }}.md.</p>
+          <div v-if="detail.report" class="text-zinc-200 bg-slate-inner border border-steel/50 rounded p-3"><MarkdownText :source="detail.report" /></div>
+          <p v-else class="text-zinc-500">The automaton has not written .ringmaster/outputs/{{ taskId }}.md.</p>
         </div>
 
         <!-- Events -->
         <div v-else-if="tab === 'events'" class="space-y-1.5">
           <p v-if="!detail.events.length" class="text-zinc-500">No audit events recorded for this task.</p>
           <div v-for="(e, i) in detail.events" :key="i" class="border border-steel/50 rounded p-2 bg-slate-inner">
-            <div class="flex gap-2 text-[10px]">
+            <div class="flex gap-2 text-xs">
               <span class="text-zinc-500">{{ e.timestamp }}</span>
               <span class="text-gear-gold font-bold">{{ e.action }}</span>
               <span class="text-zinc-400">attempt {{ e.attempt }}</span>
@@ -166,7 +166,7 @@
 
         <!-- Spec -->
         <div v-else-if="tab === 'spec'">
-          <pre v-if="detail.spec" class="whitespace-pre-wrap break-words text-zinc-200 bg-slate-inner border border-steel/50 rounded p-3">{{ detail.spec }}</pre>
+          <div v-if="detail.spec" class="text-zinc-200 bg-slate-inner border border-steel/50 rounded p-3"><MarkdownText :source="detail.spec" /></div>
           <p v-else class="text-zinc-500">No spec file found in tasks/.</p>
         </div>
       </div>
@@ -175,6 +175,7 @@
 </template>
 
 <script setup>
+import { statusLabel, statusClass } from '~/utils/status'
 import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
 
 const { answerTask } = useRingmaster()
@@ -288,19 +289,6 @@ const duration = computed(() => {
   const secs = Math.max(0, Math.round((end - new Date(s.start_at)) / 1000))
   return secs >= 60 ? `${Math.floor(secs / 60)}m ${secs % 60}s` : `${secs}s`
 })
-
-function statusClass(status) {
-  return {
-    DONE: 'bg-green-950 text-green-400 border-green-800',
-    COMPLETED: 'bg-green-950 text-green-400 border-green-800',
-    RUNNING: 'bg-cyan-950 text-cyan-300 border-cyan-500',
-    BLOCKED: 'bg-red-950 text-red-400 border-red-800',
-    NEEDS_REVIEW: 'bg-amber-950 text-amber-300 border-amber-700',
-    AWAITING_INPUT: 'bg-rose-950 text-rose-300 border-rose-700',
-    PAUSED: 'bg-indigo-950 text-indigo-300 border-indigo-700',
-    FAILED: 'bg-zinc-900 text-zinc-500 border-zinc-700'
-  }[status] || 'bg-slate-inner text-zinc-400 border-steel'
-}
 
 // Keep refreshing while open so a running task's transcript stays live
 let timer = null

@@ -6,11 +6,11 @@
           <div class="h-14 flex items-center justify-between px-6 border-b border-steel bg-slate-panel">
             <div>
               <div class="flex items-center gap-2">
-                <h2 class="text-sm font-bold text-gear-gold font-cinzel">Mission Control & Agent Stream</h2>
-                <span class="w-2 h-2 rounded-full" :class="project.isBlank ? 'bg-amber-400' : 'bg-green-500 animate-pulse'"></span>
+                <h2 class="text-sm font-bold text-gear-gold font-cinzel">Chat</h2>
+                <span class="w-2 h-2 rounded-full" :class="project.isBlank ? 'bg-amber-400' : 'bg-green-500'"></span>
               </div>
-              <p class="text-[10px] text-zinc-400">
-                {{ project.isBlank ? 'Discuss project scope with Master Planner to draft your BRIEF.md.' : 'Live mission control and multi-agent fleet communications.' }}
+              <p class="text-xs text-zinc-400">
+                {{ project.isBlank ? 'Tell the Master what to build. The conversation becomes your brief.' : 'Talk to the Master and see what automatons report.' }}
               </p>
             </div>
             
@@ -18,30 +18,30 @@
             <!-- Master Planner activity, shown here rather than next to the sidebar logo -->
             <span
               v-if="isThinking || isGeneratingPlan"
-              class="px-2 py-1 rounded border border-gear-dark/60 bg-gear-dark/20 text-gear-gold text-[10px] font-bold uppercase tracking-wide flex items-center gap-1.5 whitespace-nowrap"
+              class="px-2 py-1 rounded border border-gear-dark/60 bg-gear-dark/20 text-gear-gold text-xs font-bold uppercase tracking-wide flex items-center gap-1.5 whitespace-nowrap"
             >
-              <span class="w-1.5 h-1.5 rounded-full bg-gear-gold animate-pulse"></span>
+              <span class="w-1.5 h-1.5 rounded-full bg-gear-gold"></span>
               {{ isGeneratingPlan ? 'Generating plan' : 'Planning' }}
             </span>
             <!-- Orchestration activity; click through to the live logs -->
             <button
               v-if="isRunActive"
               @click="activeView = 'logs'"
-              class="px-2 py-1 rounded border border-cyan-700 bg-cyan-950 text-cyan-300 hover:border-cyan-500 text-[10px] font-bold uppercase tracking-wide flex items-center gap-1.5 whitespace-nowrap transition"
+              class="px-2 py-1 rounded border border-cyan-700 bg-cyan-950 text-cyan-300 hover:border-cyan-500 text-xs font-bold uppercase tracking-wide flex items-center gap-1.5 whitespace-nowrap transition"
               title="Open live logs"
             >
-              <span class="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse"></span>
+              <span class="w-1.5 h-1.5 rounded-full bg-cyan-400"></span>
               Running
               <span class="font-normal normal-case text-cyan-200/80">
-                · {{ activeWorkersList.length }} worker{{ activeWorkersList.length === 1 ? '' : 's' }} · {{ completedTasksCount }}/{{ tasks.length }} done
+                · {{ activeWorkersList.length }} automaton{{ activeWorkersList.length === 1 ? '' : 's' }} · {{ completedTasksCount }}/{{ tasks.length }} done
               </span>
             </button>
             <button 
               v-if="!project.isBlank"
               @click="activeView = 'tasks'" 
-              class="px-3 py-1.5 bg-slate-inner hover:bg-slate-panel text-zinc-300 text-xs rounded border border-steel flex items-center gap-1.5 transition"
+              class="px-3 py-1.5 bg-slate-inner hover:bg-slate-panel text-zinc-300 text-body rounded border border-steel flex items-center gap-1.5 transition"
             >
-              <span>View Tasks Pipeline ({{ tasks.length }})</span>
+              <span>Tasks ({{ tasks.length }})</span>
               <span>▸</span>
             </button>
             </div>
@@ -52,9 +52,9 @@
           <div ref="chatContainerRef" @scroll="onChatScroll" class="flex-1 p-6 overflow-y-auto space-y-4">
             <!-- Welcome Hero Animated SVG when chat is clean/blank -->
             <div v-if="messages.length <= 1" class="flex flex-col items-center justify-center py-6 text-center select-none">
-              <img src="/icons/ringmaster-animated.svg" alt="Ringmaster Kinematics" class="w-44 h-44 object-contain drop-shadow-[0_0_25px_rgba(222,170,59,0.35)] mb-3" />
-              <h3 class="font-cinzel text-base font-bold text-gear-gold tracking-wide">The Stage is Ready</h3>
-              <p class="text-xs text-zinc-400 max-w-md mt-1">Discuss project requirements with Master Planner to architect tasks and orchestrate automaton agents.</p>
+              <img src="/icons/ringmaster-animated.svg" alt="" class="w-44 h-44 object-contain drop-shadow-[0_0_25px_rgba(222,170,59,0.35)] mb-3" />
+              <h3 class="font-cinzel text-base font-bold text-gear-gold tracking-wide">Start with a brief</h3>
+              <p class="text-body text-zinc-400 max-w-md mt-1">Tell the Master what you want to build. It asks what it needs, then splits the work into tasks for automatons.</p>
             </div>
 
             <div 
@@ -64,16 +64,16 @@
               :class="msg.role === 'user' ? 'ml-auto items-end' : 'mr-auto items-start'"
             >
               <!-- Role / Origin Badge -->
-              <div class="flex items-center gap-1.5 mb-1 text-[9px] uppercase tracking-wider">
-                <span v-if="msg.role === 'user'" class="text-zinc-400 font-bold">You (Reviewer) ➔ To: {{ msg.targetLabel }}</span>
-                <span v-else-if="msg.role === 'master'" class="text-gear-gold font-bold">🎪 Master Planner</span>
-                <span v-else-if="msg.role === 'worker'" class="text-cyan-energy font-bold">🤖 Automaton: {{ msg.workerId }} · Task {{ msg.taskId }}</span>
+              <div class="flex items-center gap-1.5 mb-1 text-2xs uppercase tracking-wider">
+                <span v-if="msg.role === 'user'" class="text-zinc-400 font-bold">You → {{ msg.targetLabel }}</span>
+                <span v-else-if="msg.role === 'master'" class="text-gear-gold font-bold">🎪 Master</span>
+                <span v-else-if="msg.role === 'worker'" class="text-cyan-energy font-bold">🤖 Automaton {{ msg.workerId }} · {{ msg.taskId }}</span>
                 <span class="text-zinc-600">· {{ msg.time }}</span>
               </div>
 
               <!-- Message Bubble -->
               <div 
-                class="p-4 rounded-lg text-xs leading-relaxed"
+                class="p-4 rounded-lg text-body leading-relaxed"
                 :class="{
                   'bg-slate-panel text-parchment border border-steel': msg.role === 'user',
                   'bg-slate-dark text-parchment border border-gear-dark/40 shadow-sm': msg.role === 'master',
@@ -83,23 +83,25 @@
               >
                 <!-- Automaton Report Card Header -->
                 <div v-if="msg.role === 'worker'" class="flex items-center justify-between pb-2 mb-2 border-b border-steel/50">
-                  <span class="text-[10px] font-bold tracking-wider" :class="msg.type === 'error' ? 'text-coat-bright' : 'text-cyan-energy'">
+                  <span class="text-xs font-bold tracking-wider" :class="msg.type === 'error' ? 'text-coat-bright' : 'text-cyan-energy'">
                     {{ msg.statusTitle }}
                   </span>
-                  <span class="text-[9px] px-1.5 py-0.5 rounded bg-slate-panel text-zinc-400">
+                  <span class="text-2xs px-1.5 py-0.5 rounded bg-slate-panel text-zinc-400">
                     {{ msg.taskBranch }}
                   </span>
                 </div>
 
-                <p class="whitespace-pre-wrap">{{ msg.text }}</p>
+                <!-- The Master writes markdown; your own messages and automaton reports stay as typed -->
+                <MarkdownText v-if="msg.role === 'master'" :source="msg.text" />
+                <p v-else class="whitespace-pre-wrap">{{ msg.text }}</p>
 
                 <!-- Shortcut button to navigate directly to Tasks tab if plan was generated -->
-                <div v-if="msg.role === 'master' && msg.text && msg.text.includes('DAG Plan successfully generated')" class="mt-3 pt-2.5 border-t border-gear-dark/40 flex items-center gap-2">
+                <div v-if="msg.role === 'master' && (msg.planReady || (msg.text && msg.text.includes('DAG Plan successfully generated')))" class="mt-3 pt-2.5 border-t border-gear-dark/40 flex items-center gap-2">
                   <button 
                     @click="setView('tasks')"
-                    class="px-3.5 py-1.5 bg-gradient-to-r from-gear-gold to-amber-500 hover:from-amber-400 hover:to-gear-gold text-ink font-bold text-xs rounded transition flex items-center gap-1.5 shadow"
+                    class="px-3.5 py-1.5 bg-gradient-to-r from-gear-gold to-amber-500 hover:from-amber-400 hover:to-gear-gold text-ink font-bold text-body rounded transition flex items-center gap-1.5 shadow"
                   >
-                    <span>📋 View & Review Tasks Pipeline</span>
+                    <span>Review the plan</span>
                     <span>▸</span>
                   </button>
                 </div>
@@ -108,15 +110,15 @@
                 <div v-if="msg.actionable" class="mt-3 pt-3 border-t border-steel/60 flex items-center gap-2">
                   <button 
                     @click="instructWorker(msg, 'answer')" 
-                    class="px-2.5 py-1 bg-green-950 hover:bg-green-900 text-green-400 border border-green-800 rounded text-[10px] font-bold transition"
+                    class="px-2.5 py-1 bg-green-950 hover:bg-green-900 text-green-400 border border-green-800 rounded text-xs font-bold transition"
                   >
-                    🙋 Answer in task panel
+                    🙋 Answer
                   </button>
                   <button 
                     @click="instructWorker(msg, 'via_master')" 
-                    class="px-2.5 py-1 bg-gear-dark/30 hover:bg-gear-dark/50 text-gear-gold border border-gear-dark rounded text-[10px] font-semibold transition"
+                    class="px-2.5 py-1 bg-gear-dark/30 hover:bg-gear-dark/50 text-gear-gold border border-gear-dark rounded text-xs font-semibold transition"
                   >
-                    🎪 Escalate to Master
+                    🎪 Ask the Master
                   </button>
                 </div>
               </div>
@@ -124,19 +126,19 @@
 
             <!-- Thinking / Typing Indicator with Animated Kinematics Emblem -->
             <div v-if="isThinking" class="flex flex-col mr-auto items-start max-w-xl animate-fade-in">
-              <div class="flex items-center gap-1.5 mb-1 text-[9px] uppercase tracking-wider">
-                <span class="text-gear-gold font-bold">🎪 Master Planner</span>
-                <span class="text-zinc-500">· orchestrating</span>
+              <div class="flex items-center gap-1.5 mb-1 text-2xs uppercase tracking-wider">
+                <span class="text-gear-gold font-bold">🎪 Master</span>
+                <span class="text-zinc-500">· thinking</span>
               </div>
-              <div class="p-3.5 rounded-lg text-xs leading-relaxed bg-slate-dark border border-gear-gold/40 shadow-md flex items-center gap-3">
+              <div class="p-3.5 rounded-lg text-body leading-relaxed bg-slate-dark border border-gear-gold/40 shadow-md flex items-center gap-3">
                 <!-- Kinematic Emblem with moving hands, rotating gears & strings -->
                 <RingmasterEmblem :status="isGeneratingPlan ? 'dag' : 'execution'" size="sm" />
                 <div class="flex flex-col">
-                  <span class="text-gear-gold font-semibold text-[11px] tracking-wide">
-                    {{ isGeneratingPlan ? 'Synthesizing DAG execution graph...' : 'Discussing with Master Planner...' }}
+                  <span class="text-gear-gold font-semibold text-body tracking-wide">
+                    {{ isGeneratingPlan ? 'Generating the plan…' : 'Thinking…' }}
                   </span>
-                  <span class="text-zinc-400 text-[10px]">
-                    {{ isGeneratingPlan ? 'Allocating worker worktrees, estimates & acceptance tests' : 'Evaluating architecture, trade-offs, and project scope' }}
+                  <span class="text-zinc-400 text-xs">
+                    {{ isGeneratingPlan ? 'Splitting the brief into tasks with acceptance checks' : 'Reading your message' }}
                   </span>
                 </div>
               </div>
@@ -146,7 +148,7 @@
             <button
               v-if="!atBottom && unseen > 0"
               @click="jumpToLatest"
-              class="absolute bottom-3 left-1/2 -translate-x-1/2 px-3 py-1 rounded-full bg-gear-gold text-ink text-[10px] font-bold shadow-lg"
+              class="absolute bottom-3 left-1/2 -translate-x-1/2 px-3 py-1 rounded-full bg-gear-gold text-ink text-xs font-bold shadow-lg"
             >↓ {{ unseen }} new message{{ unseen === 1 ? '' : 's' }}</button>
           </div>
 
@@ -166,29 +168,29 @@
             </div>
 
             <!-- Warning if no Master Planner is configured -->
-            <div v-if="!hasMasterPlanner" class="mb-3 p-3 bg-amber-950/60 border border-amber-800 rounded flex items-center justify-between text-xs">
+            <div v-if="!hasMasterPlanner" class="mb-3 p-3 bg-amber-950/60 border border-amber-800 rounded flex items-center justify-between text-body">
               <div class="flex items-center gap-2 text-amber-300">
                 <span>⚠</span>
-                <span>No Master Planner configured. Project briefing chat is disabled.</span>
+                <span>No Master is set, so chat is off.</span>
               </div>
-              <button @click="activeView = 'providers'" class="px-2.5 py-1 bg-gear-gold text-ink font-bold rounded text-[10px]">
-                Assign Master in Providers ▸
+              <button @click="activeView = 'providers'" class="px-2.5 py-1 bg-gear-gold text-ink font-bold rounded text-xs">
+                Set a Master in Providers ▸
               </button>
             </div>
 
             <div class="flex items-center gap-2 mb-2 overflow-x-auto pb-1 justify-between">
               <div class="flex items-center gap-2">
-                <span class="text-[10px] text-zinc-400 font-semibold whitespace-nowrap">Target Agent:</span>
+                <span class="text-xs text-zinc-400 font-semibold whitespace-nowrap">To:</span>
                 
                 <!-- Master Option -->
                 <button 
                   @click="selectedTarget = 'master'"
                   :disabled="!hasMasterPlanner"
-                  class="px-2.5 py-1 rounded text-[10px] font-bold transition flex items-center gap-1 whitespace-nowrap disabled:opacity-40 disabled:cursor-not-allowed"
+                  class="px-2.5 py-1 rounded text-xs font-bold transition flex items-center gap-1 whitespace-nowrap disabled:opacity-40 disabled:cursor-not-allowed"
                   :class="selectedTarget === 'master' ? 'bg-gear-gold text-ink' : 'bg-slate-inner text-zinc-400 border border-steel hover:text-zinc-200'"
                 >
-                  <span>🎪 Master Planner</span>
-                  <span v-if="!hasMasterPlanner" class="text-[8px] text-amber-300">(None)</span>
+                  <span>🎪 Master</span>
+                  <span v-if="!hasMasterPlanner" class="text-2xs text-amber-300">(None)</span>
                 </button>
 
                 <!-- Dynamic Active Automaton Options -->
@@ -196,11 +198,10 @@
                   v-for="worker in activeWorkersList"
                   :key="worker.taskId"
                   @click="selectedTarget = worker.id"
-                  class="px-2.5 py-1 rounded text-[10px] font-bold transition flex items-center gap-1.5 whitespace-nowrap"
+                  class="px-2.5 py-1 rounded text-xs font-bold transition flex items-center gap-1.5 whitespace-nowrap"
                   :class="selectedTarget === worker.id ? 'bg-cyan-energy text-ink' : 'bg-slate-inner text-zinc-400 border border-steel hover:text-zinc-200'"
                 >
-                  <span class="w-1.5 h-1.5 rounded-full bg-green-400 animate-ping"></span>
-                  <span>🤖 {{ worker.name }} (Task {{ worker.taskId }})</span>
+                  <span>🤖 {{ worker.name }} · {{ worker.taskId }}</span>
                 </button>
               </div>
 
@@ -208,25 +209,25 @@
               <div class="flex items-center gap-2">
                 <span 
                   v-if="!canGeneratePlan && !isGeneratingPlan" 
-                  class="text-[10px] text-zinc-500 italic hidden sm:inline"
+                  class="text-xs text-zinc-500 italic hidden sm:inline"
                 >
-                  Discuss specs with Master to unlock plan
+                  Unlocks when the Master has enough detail
                 </span>
                 <button
                   @click="triggerGeneratePlan"
                   :disabled="isGeneratingPlan || !hasMasterPlanner || !canGeneratePlan"
-                  class="px-3.5 py-1.5 rounded flex items-center gap-1.5 shadow transition font-bold text-[11px] whitespace-nowrap"
+                  class="px-3.5 py-1.5 rounded flex items-center gap-1.5 shadow transition font-bold text-body whitespace-nowrap"
                   :class="canGeneratePlan 
-                    ? 'bg-gradient-to-r from-gear-gold to-amber-500 hover:from-amber-400 hover:to-gear-gold text-ink animate-pulse shadow-[0_0_15px_rgba(222,170,59,0.5)] cursor-pointer' 
+                    ? 'bg-gradient-to-r from-gear-gold to-amber-500 hover:from-amber-400 hover:to-gear-gold text-ink cursor-pointer' 
                     : 'bg-slate-dark text-zinc-500 border border-steel/60 opacity-60 cursor-not-allowed'"
-                  :title="canGeneratePlan ? 'Master has sufficient info! Click to decompose into DAG tasks.' : 'Master is still evaluating requirements with you. Keep discussing to unlock.'"
+                  :title="canGeneratePlan ? 'The Master has enough detail. Generate the plan.' : 'The Master is still asking questions. Keep going to unlock this.'"
                 >
                   <svg v-if="isGeneratingPlan" class="w-3.5 h-3.5 animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <circle cx="12" cy="12" r="10" stroke-opacity="0.25"></circle>
                     <path d="M12 2a10 10 0 0 1 10 10" stroke-linecap="round"></path>
                   </svg>
                   <span v-else>{{ canGeneratePlan ? '⚡' : '🔒' }}</span>
-                  <span>{{ isGeneratingPlan ? 'Generating DAG...' : (canGeneratePlan ? '⚡ Ready: Generate Plan' : 'Generate Plan (Locked)') }}</span>
+                  <span>{{ isGeneratingPlan ? 'Generating plan…' : 'Generate plan' }}</span>
                 </button>
               </div>
             </div>
@@ -242,15 +243,15 @@
                   @keydown.enter.exact.prevent="sendMessage"
                   @keydown.enter.shift.exact="inputMsg += '\n'"
                   :placeholder="selectedTarget === 'master' 
-                    ? (hasMasterPlanner ? 'Message Master Planner (e.g. features to implement in ' + (project.name || 'project') + ')...\nPress Enter to send, Shift+Enter for newline' : 'Chat disabled: Set an agent as Master Planner in Providers menu first.')
-                    : `Direct instruction to automaton '${selectedTarget}'...\nPress Enter to send, Shift+Enter for newline`"
-                  class="w-full bg-slate-inner border border-steel text-parchment text-xs px-4 py-2.5 rounded focus:outline-none focus:border-gear-gold disabled:opacity-40 disabled:cursor-not-allowed resize-none leading-relaxed font-mono"
+                    ? (hasMasterPlanner ? 'Message the Master…\nEnter to send, Shift+Enter for a new line' : 'Chat is off: set a Master in Providers first.')
+                    : `Message automaton '${selectedTarget}'…\nEnter to send, Shift+Enter for a new line`"
+                  class="w-full bg-slate-inner border border-steel text-parchment text-body px-4 py-2.5 rounded focus:outline-none focus:border-gear-gold disabled:opacity-40 disabled:cursor-not-allowed resize-none leading-relaxed"
                 ></textarea>
               </div>
               <button 
                 type="submit" 
                 :disabled="(selectedTarget === 'master' && !hasMasterPlanner) || !inputMsg.trim()"
-                class="px-5 py-3 bg-cyan-dim hover:bg-cyan-energy text-ink font-bold text-xs rounded transition flex items-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed h-[52px] shadow-sm mb-1"
+                class="px-5 py-3 bg-cyan-dim hover:bg-cyan-energy text-ink font-bold text-body rounded transition flex items-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed h-[52px] shadow-sm mb-1"
               >
                 <span>Send</span>
                 <span>↑</span>
@@ -262,16 +263,16 @@
         <!-- Right Panel: Context Sidebar -->
         <div class="w-80 flex flex-col h-full bg-slate-panel/40">
           <div class="h-14 flex items-center justify-between px-4 border-b border-steel bg-slate-panel">
-            <span class="text-xs font-bold text-zinc-300">Project Context</span>
-            <span class="text-[9px] px-2 py-0.5 rounded bg-slate-inner text-gear-gold border border-steel">
-              {{ project.isBlank ? 'Awaiting Plan' : 'Active Plan' }}
+            <span class="text-body font-bold text-zinc-300">Project Context</span>
+            <span class="text-2xs px-2 py-0.5 rounded bg-slate-inner text-gear-gold border border-steel">
+              {{ project.isBlank ? 'No plan yet' : 'Plan ready' }}
             </span>
           </div>
 
           <div class="flex-1 p-4 overflow-y-auto space-y-4">
             <!-- Parallel Workers (Show if active) -->
             <div v-if="activeWorkersList.length > 0" class="space-y-2">
-              <span class="text-[10px] uppercase font-bold text-zinc-400">Active Worktrees</span>
+              <span class="text-xs uppercase font-bold text-zinc-400">Working automatons</span>
               <div 
                 v-for="worker in activeWorkersList"
                 :key="worker.taskId"
@@ -279,13 +280,13 @@
                 @click="selectedTarget = worker.id"
               >
                 <div class="flex items-center justify-between mb-1">
-                  <span class="text-[10px] text-zinc-300 font-bold">{{ worker.name }}</span>
-                  <span class="text-[9px] font-bold px-1.5 py-0.2 rounded uppercase bg-amber-950 text-amber-400 border border-amber-800">
-                    {{ worker.status }}
+                  <span class="text-xs text-zinc-300 font-bold">{{ worker.name }}</span>
+                  <span class="text-2xs font-bold px-1.5 py-0.2 rounded border" :class="statusClass(worker.status)">
+                    {{ statusLabel(worker.status) }}
                   </span>
                 </div>
-                <p class="text-xs font-semibold text-zinc-200">{{ worker.taskId }}: {{ worker.taskTitle }}</p>
-                <div class="flex items-center justify-between text-[9px] text-zinc-400 mt-2">
+                <p class="text-body font-semibold text-zinc-200">{{ worker.taskId }}: {{ worker.taskTitle }}</p>
+                <div class="flex items-center justify-between text-2xs text-zinc-400 mt-2">
                   <span>Branch: <code class="text-cyan-energy">rm/{{ worker.taskId }}</code></span>
                   <span>Attempt: {{ worker.attempt }}</span>
                 </div>
@@ -293,18 +294,19 @@
             </div>
 
             <div v-else class="p-3 bg-slate-dark/60 border border-steel/60 rounded text-center">
-              <p class="text-[11px] text-zinc-400">No active running tasks yet.</p>
-              <p class="text-[9px] text-zinc-500 mt-1">Discuss requirements in Chat to generate the task pipeline.</p>
+              <p class="text-body text-zinc-400">No automaton is working.</p>
+              <p class="text-2xs text-zinc-500 mt-1">Tasks start after you approve a plan and run it.</p>
             </div>
 
             <!-- BRIEF.md Preview -->
             <div class="pt-2 border-t border-steel">
               <div class="flex items-center justify-between mb-2">
-                <span class="text-xs font-bold text-zinc-300">BRIEF.md</span>
-                <span class="text-[9px] text-zinc-500">{{ project.brief ? 'Found' : 'Empty' }}</span>
+                <span class="text-body font-bold text-zinc-300">BRIEF.md</span>
+                <span class="text-2xs text-zinc-500">{{ project.brief ? 'Found' : 'Empty' }}</span>
               </div>
-              <div class="p-3 bg-slate-inner border border-steel rounded font-mono text-[10px] leading-relaxed text-zinc-400 whitespace-pre-wrap max-h-56 overflow-y-auto">
-{{ project.brief || '(BRIEF.md is empty. Send a message to Master Planner to generate it automatically.)' }}
+              <div class="p-3 bg-slate-inner border border-steel rounded text-xs leading-relaxed text-zinc-400 max-h-56 overflow-y-auto">
+                <MarkdownText v-if="project.brief" :source="project.brief" />
+                <p v-else>Empty. The brief is written from your conversation with the Master.</p>
               </div>
             </div>
           </div>
@@ -313,6 +315,7 @@
 </template>
 
 <script setup>
+import { statusLabel, statusClass } from '~/utils/status'
 const {
   activeView,
   selectedTarget,

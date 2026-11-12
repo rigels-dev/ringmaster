@@ -2,42 +2,42 @@
       <section class="flex-1 flex flex-col p-6 overflow-hidden">
         <div class="flex items-center justify-between mb-4">
           <div>
-            <h2 class="text-lg font-bold text-gear-gold font-cinzel">Orchestration Logs</h2>
-            <p class="text-xs text-zinc-400">Live output of the Ringmaster engine dispatching tasks to automatons.</p>
+            <h2 class="text-lg font-bold text-gear-gold font-cinzel">Logs</h2>
+            <p class="text-body text-zinc-400">Output of the run, with a lane for each working automaton.</p>
           </div>
           <div class="flex items-center gap-3">
             <button
               v-if="isRunActive"
               @click="stopOrchestration"
-              class="px-3 py-2 bg-red-950/80 hover:bg-red-900 border border-red-700/60 text-red-200 text-xs font-bold rounded transition"
-              title="Gracefully stop orchestration"
+              class="px-3 py-2 bg-red-950/80 hover:bg-red-900 border border-red-700/60 text-red-200 text-body font-bold rounded transition"
+              title="Stop the run"
             >
               ⏹ Stop
             </button>
             <button
               :disabled="isRunActive || runLogs.length === 0"
               @click="clearRunLogs"
-              class="px-3.5 py-2 bg-slate-panel hover:bg-slate-panel/70 text-zinc-300 font-bold text-xs rounded border border-steel transition disabled:opacity-40 disabled:cursor-not-allowed"
+              class="px-3.5 py-2 bg-slate-panel hover:bg-slate-panel/70 text-zinc-300 font-bold text-body rounded border border-steel transition disabled:opacity-40 disabled:cursor-not-allowed"
               :title="isRunActive ? 'Logs can be cleared once the run has exited.' : 'Start a fresh log; the current one is archived in .ringmaster/logs/'"
             >
-              Clear Logs
+              Clear logs
             </button>
           </div>
         </div>
 
         <!-- Run Status Strip -->
-        <div class="mb-3 p-3 rounded-lg border border-steel/80 bg-slate-panel flex flex-wrap items-center gap-x-6 gap-y-2 text-[11px]">
+        <div class="mb-3 p-3 rounded-lg border border-steel/80 bg-slate-panel flex flex-wrap items-center gap-x-6 gap-y-2 text-body">
           <div class="flex items-center gap-2">
             <span class="relative flex w-2.5 h-2.5">
               <span v-if="isRunActive" class="absolute inline-flex h-full w-full rounded-full bg-cyan-400 opacity-60 animate-ping"></span>
               <span class="relative inline-flex w-2.5 h-2.5 rounded-full" :class="isRunActive ? 'bg-cyan-400' : 'bg-zinc-500'"></span>
             </span>
-            <span class="font-bold" :class="isRunActive ? 'text-cyan-300' : 'text-zinc-400'">{{ isRunActive ? 'RUNNING' : 'IDLE' }}</span>
+            <span class="font-bold" :class="isRunActive ? 'text-cyan-300' : 'text-zinc-400'">{{ isRunActive ? 'Running' : 'Idle' }}</span>
           </div>
           <span class="text-zinc-400">PID: <strong class="text-zinc-200">{{ isRunActive ? (runPid || 'Live') : 'Exited' }}</strong></span>
-          <span class="text-zinc-400">Project: <strong class="text-gear-gold">{{ project.state?.status || 'READY' }}</strong></span>
-          <span class="text-zinc-400">Working Automatons: <strong :class="activeWorkersList.length > 0 ? 'text-green-400' : 'text-zinc-500'">{{ activeWorkersList.length }}</strong></span>
-          <span class="text-zinc-400">Tasks Completed: <strong class="text-zinc-200">{{ completedTasksCount }} / {{ tasks.length }}</strong></span>
+          <span class="text-zinc-400">Project: <strong class="text-gear-gold">{{ statusLabel(project.state?.status || 'READY') }}</strong></span>
+          <span class="text-zinc-400">Automatons working: <strong :class="activeWorkersList.length > 0 ? 'text-green-400' : 'text-zinc-500'">{{ activeWorkersList.length }}</strong></span>
+          <span class="text-zinc-400">Tasks done: <strong class="text-zinc-200">{{ completedTasksCount }} / {{ tasks.length }}</strong></span>
           <span v-if="isRunActive && lastOutputAgo" class="text-zinc-400">Last output: <strong class="text-zinc-200">{{ lastOutputAgo }}</strong></span>
         </div>
 
@@ -52,7 +52,7 @@
             :class="selectedTask === lane.taskId ? lane.color.border : 'border-steel/80 hover:border-steel'"
             :title="`Filter logs to ${lane.taskId}`"
           >
-            <div class="flex items-center gap-2 text-[11px]">
+            <div class="flex items-center gap-2 text-body">
               <span class="relative flex w-2 h-2 shrink-0">
                 <span class="absolute inline-flex h-full w-full rounded-full opacity-60 animate-ping" :class="lane.color.dot"></span>
                 <span class="relative inline-flex w-2 h-2 rounded-full" :class="lane.color.dot"></span>
@@ -62,7 +62,7 @@
               <span class="ml-auto text-zinc-500 shrink-0">attempt {{ lane.attempt }}</span>
               <span class="font-bold text-zinc-200 tabular-nums shrink-0">{{ lane.elapsed }}</span>
             </div>
-            <div class="mt-1.5 text-[10px] truncate" :class="lane.last ? 'text-zinc-400' : 'text-zinc-500 italic'">
+            <div class="mt-1.5 text-xs truncate" :class="lane.last ? 'text-zinc-400' : 'text-zinc-500 italic'">
               <template v-if="lane.last">
                 <span class="mr-1">{{ lane.last.icon }}</span>{{ lane.last.text }}
                 <span class="text-zinc-500"> · {{ lane.lastAgo }}</span>
@@ -73,7 +73,7 @@
         </div>
 
         <!-- Task filter -->
-        <div v-if="seenTasks.length" class="mb-2 flex items-center gap-1.5 overflow-x-auto pb-1 text-[10px]">
+        <div v-if="seenTasks.length" class="mb-2 flex items-center gap-1.5 overflow-x-auto pb-1 text-xs">
           <span class="text-zinc-500 mr-1 shrink-0">Show:</span>
           <button
             @click="selectedTask = ''"
@@ -94,14 +94,14 @@
           <div
             ref="consoleRef"
             @scroll="onConsoleScroll"
-            class="h-full bg-slate-inner/90 py-2 rounded-lg font-mono text-[11px] leading-relaxed overflow-y-auto border border-steel/40 select-text"
+            class="h-full bg-slate-inner/90 py-2 rounded-lg font-mono text-body leading-relaxed overflow-y-auto border border-steel/40 select-text"
           >
-            <div v-if="visibleLines.length === 0" class="h-full flex items-center justify-center text-zinc-500 text-xs">
-              {{ runLogs.length === 0 ? 'No orchestration output yet. Execute an approved plan from the Tasks view.' : `No output for ${selectedTask} yet.` }}
+            <div v-if="visibleLines.length === 0" class="h-full flex items-center justify-center text-zinc-500 text-body">
+              {{ runLogs.length === 0 ? 'No output yet. Run an approved plan from Tasks.' : `No output for ${selectedTask} yet.` }}
             </div>
             <template v-for="line in visibleLines" :key="line.idx">
             <!-- Run boundary -->
-            <div v-if="line.run" class="flex items-center gap-2 px-3 my-2 text-[10px] text-zinc-500 select-none">
+            <div v-if="line.run" class="flex items-center gap-2 px-3 my-2 text-xs text-zinc-500 select-none">
               <span class="tabular-nums">{{ line.date }} {{ line.time }}</span>
               <span class="flex-1 border-t border-dashed border-steel"></span>
               <span class="font-bold uppercase tracking-wide" :class="line.cls">{{ line.text }}</span>
@@ -112,9 +112,9 @@
               class="flex items-start gap-2 px-3 py-[1px] hover:bg-slate-panel/50"
               :class="line.emphasis ? 'mt-1' : ''"
             >
-              <span class="text-zinc-600 select-none tabular-nums shrink-0 w-[58px]">{{ line.time }}</span>
-              <span class="shrink-0 w-[38px]">
-                <span v-if="line.task" class="px-1 rounded text-[9px] font-bold border" :class="[taskColor(line.task).bg, taskColor(line.task).border, taskColor(line.task).text]">{{ line.task }}</span>
+              <span class="text-zinc-600 select-none tabular-nums shrink-0 w-[66px]">{{ line.time }}</span>
+              <span class="shrink-0 w-[44px]">
+                <span v-if="line.task" class="px-1 rounded text-2xs font-bold border" :class="[taskColor(line.task).bg, taskColor(line.task).border, taskColor(line.task).text]">{{ line.task }}</span>
               </span>
               <span class="shrink-0 w-4 text-center select-none">{{ line.icon }}</span>
               <span class="break-all whitespace-pre-wrap min-w-0" :class="line.cls">{{ line.text }}</span>
@@ -125,13 +125,14 @@
           <button
             v-if="!followTail && newSincePause > 0"
             @click="jumpToBottom"
-            class="absolute bottom-3 left-1/2 -translate-x-1/2 px-3 py-1 rounded-full bg-gear-gold text-ink text-[10px] font-bold shadow-lg"
+            class="absolute bottom-3 left-1/2 -translate-x-1/2 px-3 py-1 rounded-full bg-gear-gold text-ink text-xs font-bold shadow-lg"
           >↓ {{ newSincePause }} new line{{ newSincePause === 1 ? '' : 's' }}</button>
         </div>
       </section>
 </template>
 
 <script setup>
+import { statusLabel } from '~/utils/status'
 const {
   project,
   tasks,

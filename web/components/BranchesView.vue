@@ -3,15 +3,15 @@
         <div class="flex items-end justify-between gap-3 flex-wrap">
           <div>
             <h2 class="text-lg font-bold text-gear-gold font-cinzel">Branches</h2>
-            <p class="text-xs text-zinc-400">Every task branch, where it forked, what each automaton committed, and when it merged into {{ data.main || 'main' }}.</p>
+            <p class="text-body text-zinc-400">Every task branch, where it forked, what each automaton committed, and when it merged into {{ data.main || 'main' }}.</p>
           </div>
-          <button @click="load" class="px-3 py-1.5 bg-slate-panel hover:bg-slate-inner text-zinc-300 text-xs rounded border border-steel transition">↻ Refresh</button>
+          <button @click="load" class="px-3 py-1.5 bg-slate-panel hover:bg-slate-inner text-zinc-300 text-body rounded border border-steel transition">↻ Refresh</button>
         </div>
 
-        <p v-if="error" class="p-3 rounded border border-rose-700 bg-rose-950 text-rose-300 text-xs">{{ error }}</p>
+        <p v-if="error" class="p-3 rounded border border-rose-700 bg-rose-950 text-rose-300 text-body">{{ error }}</p>
 
         <!-- Summary -->
-        <div v-if="branches.length" class="p-3 rounded-lg border border-steel bg-slate-panel flex flex-wrap gap-x-6 gap-y-2 text-[11px] font-mono text-zinc-400">
+        <div v-if="branches.length" class="p-3 rounded-lg border border-steel bg-slate-panel flex flex-wrap gap-x-6 gap-y-2 text-body font-mono text-zinc-400">
           <span>Branches <strong class="text-zinc-200">{{ branches.length }}</strong></span>
           <span>Merged <strong class="text-zinc-200">{{ mergedCount }}</strong></span>
           <span>Open <strong class="text-zinc-200">{{ branches.length - mergedCount }}</strong></span>
@@ -21,7 +21,7 @@
           <span v-if="data.truncated" class="text-amber-300">Showing the newest {{ commits.length }} commits</span>
         </div>
 
-        <div v-if="!error && !loading && branches.length === 0" class="p-8 text-center text-xs text-zinc-500 border border-dashed border-steel rounded-lg">
+        <div v-if="!error && !loading && branches.length === 0" class="p-8 text-center text-body text-zinc-500 border border-dashed border-steel rounded-lg">
           No task branches yet. Each task gets an <code class="text-zinc-300">rm/Txx</code> branch when its automaton starts working.
         </div>
 
@@ -29,8 +29,8 @@
           <!-- Graph + commit rows -->
           <div class="bg-slate-panel border border-steel rounded-lg min-w-0">
             <div class="flex items-center justify-between gap-2 px-4 py-2.5 border-b border-steel">
-              <h3 class="text-xs font-bold text-zinc-200">Commit graph</h3>
-              <div class="flex flex-wrap gap-1 text-[10px]">
+              <h3 class="text-body font-bold text-zinc-200">Commit graph</h3>
+              <div class="flex flex-wrap gap-1 text-xs">
                 <button
                   @click="focus = ''"
                   class="px-2 py-0.5 rounded border font-bold"
@@ -78,9 +78,9 @@
                   @click="select(c.sha)"
                   @keydown.enter.prevent="select(c.sha)"
                   tabindex="0"
-                  class="relative grid items-center gap-2.5 pr-4 font-mono text-[11px] cursor-pointer focus:outline-none focus-visible:ring-1 focus-visible:ring-gear-gold"
+                  class="relative grid items-center gap-2.5 pr-4 font-mono text-body cursor-pointer focus:outline-none focus-visible:ring-1 focus-visible:ring-gear-gold"
                   :class="[c.sha === selected ? 'bg-slate-inner/80' : 'hover:bg-slate-inner/50', rowDim(c) ? 'opacity-30' : '']"
-                  :style="{ height: ROW + 'px', gridTemplateColumns: `${lanesWidth}px minmax(0,1fr) auto 58px` }"
+                  :style="{ height: ROW + 'px', gridTemplateColumns: `${lanesWidth}px minmax(0,1fr) auto 66px` }"
                 >
                   <span></span>
                   <span class="truncate min-w-0">
@@ -93,7 +93,7 @@
                       <span class="text-zinc-200">{{ stripTask(c.subject) }}</span>
                     </template>
                   </span>
-                  <span v-if="automatonOf(c)" class="text-[10px] px-1.5 rounded border border-steel text-cyan-energy whitespace-nowrap">
+                  <span v-if="automatonOf(c)" class="text-xs px-1.5 rounded border border-steel text-cyan-energy whitespace-nowrap">
                     {{ automatonOf(c) }}<template v-if="c.attempt > 1"> · a{{ c.attempt }}</template>
                   </span>
                   <span v-else></span>
@@ -105,14 +105,14 @@
 
           <!-- Commit inspector -->
           <aside class="bg-slate-panel border border-steel rounded-lg" aria-live="polite">
-            <div class="px-4 py-2.5 border-b border-steel"><h3 class="text-xs font-bold text-zinc-200">Commit</h3></div>
-            <div v-if="!selectedCommit" class="p-4 text-xs text-zinc-500">Pick a commit to see its automaton, trailers and changed files.</div>
-            <div v-else class="p-4 space-y-3 text-xs">
+            <div class="px-4 py-2.5 border-b border-steel"><h3 class="text-body font-bold text-zinc-200">Commit</h3></div>
+            <div v-if="!selectedCommit" class="p-4 text-body text-zinc-500">Pick a commit to see its automaton, trailers and changed files.</div>
+            <div v-else class="p-4 space-y-3 text-body">
               <div>
-                <div class="text-[10px] uppercase tracking-wide text-zinc-500 font-mono">{{ selectedCommit.mergeOf ? 'Merge commit' : (selectedCommit.branch || 'commit') }}</div>
+                <div class="text-xs uppercase tracking-wide text-zinc-500 font-mono">{{ selectedCommit.mergeOf ? 'Merge commit' : (selectedCommit.branch || 'commit') }}</div>
                 <h4 class="text-sm font-semibold text-zinc-200 leading-snug mt-0.5">{{ selectedCommit.subject }}</h4>
               </div>
-              <dl class="grid gap-x-3 gap-y-1.5 font-mono text-[11px]" style="grid-template-columns: 80px minmax(0,1fr)">
+              <dl class="grid gap-x-3 gap-y-1.5 font-mono text-body" style="grid-template-columns: 80px minmax(0,1fr)">
                 <dt class="text-zinc-500">sha</dt><dd class="break-all text-zinc-300">{{ selectedCommit.sha.slice(0, 12) }}</dd>
                 <dt class="text-zinc-500">time</dt><dd class="text-zinc-300">{{ fullTime(selectedCommit.time) }}</dd>
                 <dt class="text-zinc-500">parents</dt>
@@ -133,14 +133,14 @@
                 </template>
               </dl>
               <div v-if="detail.message && detail.message.includes('\n')">
-                <div class="text-[10px] uppercase tracking-wide text-zinc-500 font-mono mb-1">Message</div>
-                <pre class="p-2.5 rounded border border-steel bg-slate-inner text-[11px] leading-relaxed text-zinc-400 whitespace-pre-wrap font-mono">{{ detail.message }}</pre>
+                <div class="text-xs uppercase tracking-wide text-zinc-500 font-mono mb-1">Message</div>
+                <pre class="p-2.5 rounded border border-steel bg-slate-inner text-body leading-relaxed text-zinc-400 whitespace-pre-wrap font-mono">{{ detail.message }}</pre>
               </div>
               <div v-if="detail.files.length">
-                <div class="text-[10px] uppercase tracking-wide text-zinc-500 font-mono mb-1">
+                <div class="text-xs uppercase tracking-wide text-zinc-500 font-mono mb-1">
                   Files · <span class="text-green-400">+{{ fileTotals.add }}</span> <span class="text-red-400">−{{ fileTotals.del }}</span>
                 </div>
-                <div class="space-y-0.5 font-mono text-[11px] max-h-64 overflow-y-auto">
+                <div class="space-y-0.5 font-mono text-body max-h-64 overflow-y-auto">
                   <div v-for="f in detail.files" :key="f.path" class="flex justify-between gap-2">
                     <span class="truncate text-zinc-300" :title="f.path">{{ f.path }}</span>
                     <span class="shrink-0 tabular-nums">
@@ -153,7 +153,7 @@
               <button
                 v-if="taskOfCommit(selectedCommit)"
                 @click="openTask(taskOfCommit(selectedCommit))"
-                class="w-full px-3 py-1.5 rounded border border-steel text-zinc-300 hover:text-gear-gold hover:border-gear-dark text-[11px] transition"
+                class="w-full px-3 py-1.5 rounded border border-steel text-zinc-300 hover:text-gear-gold hover:border-gear-dark text-body transition"
               >Open task {{ taskOfCommit(selectedCommit) }} ▸</button>
             </div>
           </aside>
@@ -162,13 +162,13 @@
         <!-- Branch ledger -->
         <div v-if="branches.length" class="bg-slate-panel border border-steel rounded-lg overflow-hidden">
           <div class="px-4 py-2.5 border-b border-steel flex items-center justify-between">
-            <h3 class="text-xs font-bold text-zinc-200">Branch ledger</h3>
-            <span class="text-[10px] text-zinc-500">click a branch to highlight it</span>
+            <h3 class="text-body font-bold text-zinc-200">Branch ledger</h3>
+            <span class="text-xs text-zinc-500">click a branch to highlight it</span>
           </div>
           <div class="overflow-x-auto">
-            <table class="w-full text-[11px] font-mono min-w-[860px]">
+            <table class="w-full text-body font-mono min-w-[860px]">
               <thead>
-                <tr class="text-[10px] uppercase text-zinc-500 border-b border-steel">
+                <tr class="text-xs uppercase text-zinc-500 border-b border-steel">
                   <th class="text-left font-semibold px-4 py-2">Branch</th>
                   <th class="text-left font-semibold px-2 py-2">Task</th>
                   <th class="text-left font-semibold px-2 py-2">Automaton</th>
@@ -189,7 +189,7 @@
                   :class="focus === b.name ? 'bg-slate-inner' : 'hover:bg-slate-inner/60'"
                 >
                   <td class="px-4 py-2 whitespace-nowrap"><span class="inline-block w-2 h-2 rounded-full mr-1.5" :style="{ background: colorOf(b.name) }"></span>{{ b.name }}</td>
-                  <td class="px-2 py-2 text-zinc-300 font-outfit min-w-[180px]">{{ b.title || '—' }}</td>
+                  <td class="px-2 py-2 text-zinc-300 min-w-[180px]">{{ b.title || '—' }}</td>
                   <td class="px-2 py-2 text-cyan-energy whitespace-nowrap">{{ b.automatons.join(' → ') || '—' }}</td>
                   <td class="px-2 py-2 whitespace-nowrap text-zinc-400">
                     <template v-if="b.fork">{{ branchOfSha(b.fork) || data.main }}@{{ b.fork.slice(0, 7) }}</template><template v-else>—</template>
@@ -199,7 +199,7 @@
                   <td class="px-2 py-2 text-right tabular-nums text-zinc-300">{{ lifetime(b) }}</td>
                   <td class="px-2 py-2 text-right tabular-nums text-zinc-300">{{ b.commits }}</td>
                   <td class="px-4 py-2">
-                    <span class="text-[9px] px-1.5 py-0.5 rounded border font-bold uppercase whitespace-nowrap" :class="statusClass(b.status)">{{ b.status.replace('_', ' ') }}</span>
+                    <span class="text-2xs px-1.5 py-0.5 rounded border font-bold whitespace-nowrap" :class="statusClass(b.status)">{{ statusLabel(b.status) }}</span>
                   </td>
                 </tr>
               </tbody>
@@ -210,6 +210,7 @@
 </template>
 
 <script setup>
+import { statusLabel, statusClass } from '~/utils/status'
 const { setView, openTaskDetail } = useRingmaster()
 
 const ROW = 34
@@ -368,19 +369,6 @@ const avgLifetime = computed(() => {
   if (!merged.length) return ''
   return duration(merged.reduce((n, b) => n + lifetimeMs(b), 0) / merged.length)
 })
-
-function statusClass(status) {
-  return {
-    MERGED: 'bg-green-950 text-green-400 border-green-800',
-    COMPLETED: 'bg-green-950 text-green-400 border-green-800',
-    RUNNING: 'bg-cyan-950 text-cyan-300 border-cyan-500',
-    BLOCKED: 'bg-red-950 text-red-400 border-red-800',
-    NEEDS_REVIEW: 'bg-amber-950 text-amber-300 border-amber-700',
-    AWAITING_INPUT: 'bg-rose-950 text-rose-300 border-rose-700',
-    PAUSED: 'bg-indigo-950 text-indigo-300 border-indigo-700',
-    FAILED: 'bg-zinc-900 text-zinc-500 border-zinc-700'
-  }[status] || 'bg-slate-inner text-zinc-400 border-steel'
-}
 
 function openTask(id) {
   setView('tasks')

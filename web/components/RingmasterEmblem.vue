@@ -275,12 +275,12 @@ const animDurations = computed(() => {
 
 const statusTooltip = computed(() => {
   switch (props.status) {
-    case 'overdrive': return 'Kinematics: Whip Overdrive'
+    case 'overdrive': return 'Running at full speed'
     case 'dag':
-    case 'planning': return 'Kinematics: Master DAG Planning'
+    case 'planning': return 'The Master is planning'
     case 'execution':
-    case 'running': return 'Kinematics: Active Parallel Execution'
-    default: return 'Kinematics: Idle / Discovery'
+    case 'running': return 'Automatons are working'
+    default: return 'Idle'
   }
 })
 </script>
