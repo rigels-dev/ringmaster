@@ -12,7 +12,7 @@ const themeBootScript = `try{var t=localStorage.getItem('rm-theme');if(t==='ligh
 export default defineNuxtConfig({
   compatibilityDate: '2026-10-26',
   devtools: { enabled: false },
-  css: ['~/assets/css/theme.css', '@xterm/xterm/css/xterm.css'],
+  css: ['~/assets/css/theme.css', '~/assets/css/markdown.css', '@xterm/xterm/css/xterm.css'],
   // WebSocket support for the web UI terminal (server/routes/_terminal.ts)
   nitro: {
     experimental: { websocket: true }
@@ -27,7 +27,7 @@ export default defineNuxtConfig({
       script: [{ innerHTML: themeBootScript }],
       link: [
         { rel: 'icon', type: 'image/svg+xml', href: '/icons/ringmaster-icon-transparent.svg' },
-        { rel: 'stylesheet', href: 'https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700;900&family=IBM+Plex+Mono:ital,wght@0,300;0,400;0,600;1,400&family=Outfit:wght@300;400;600;800&display=swap' }
+        { rel: 'stylesheet', href: 'https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700;900&family=IBM+Plex+Mono:ital,wght@0,300;0,400;0,600;1,400&family=Outfit:wght@400;500;600;700&display=swap' }
       ]
     }
   },
@@ -74,10 +74,18 @@ export default defineNuxtConfig({
             parchment: themed('parchment'),
             steel: themed('steel')
           },
+          // One small type scale for the whole UI: 2xs for captions, xs for
+          // secondary text, body for everything else. Nothing below 11px.
+          fontSize: {
+            '2xs': ['11px', { lineHeight: '16px' }],
+            xs: ['12px', { lineHeight: '17px' }],
+            body: ['13px', { lineHeight: '20px' }],
+          },
+          // Prose is set in Outfit (the default); mono is for code, logs and ids
           fontFamily: {
-            mono: ['"IBM Plex Mono"', 'monospace'],
+            sans: ['Outfit', 'system-ui', 'sans-serif'],
+            mono: ['"IBM Plex Mono"', 'ui-monospace', 'monospace'],
             cinzel: ['Cinzel', 'serif'],
-            outfit: ['Outfit', 'sans-serif'],
           }
         }
       }

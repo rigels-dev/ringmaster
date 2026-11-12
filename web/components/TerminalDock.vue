@@ -34,7 +34,7 @@
     </div>
 
     <!-- Tab bar -->
-    <div class="h-9 shrink-0 flex items-center gap-1 pl-5 pr-2 border-b border-steel bg-slate-dark text-[11px] font-mono">
+    <div class="h-9 shrink-0 flex items-center gap-1 pl-5 pr-2 border-b border-steel bg-slate-dark text-body font-mono">
       <span class="text-gear-gold font-bold px-1 select-none">&gt;_</span>
       <div class="flex-1 min-w-0 flex items-center gap-1 overflow-x-auto">
         <div

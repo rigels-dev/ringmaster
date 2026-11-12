@@ -1,42 +1,42 @@
 <template>
       <section class="flex-1 flex flex-col p-6 overflow-y-auto">
         <div class="mb-6">
-          <h2 class="text-lg font-bold text-gear-gold font-cinzel">Execution Analytics & Token Usage</h2>
-          <p class="text-xs text-zinc-400">Token usage, cost and time per task and per agent.</p>
+          <h2 class="text-lg font-bold text-gear-gold font-cinzel">Analytics</h2>
+          <p class="text-body text-zinc-400">Token usage, cost and time per task and per agent.</p>
         </div>
 
         <!-- Summary -->
         <div class="grid gap-4 mb-6" style="grid-template-columns: repeat(auto-fit, minmax(180px, 1fr))">
           <div class="bg-slate-panel border border-steel p-4 rounded-lg">
-            <span class="text-[10px] text-zinc-400 uppercase">Total Tokens</span>
+            <span class="text-xs text-zinc-400 uppercase">Total Tokens</span>
             <p class="text-xl font-bold text-gear-gold mt-1 tabular-nums">{{ fmt(totals.total) }}</p>
-            <p class="text-[10px] text-zinc-500 mt-1 tabular-nums">
+            <p class="text-xs text-zinc-500 mt-1 tabular-nums">
               {{ fmt(totals.in) }} in · {{ fmt(totals.out) }} out
               <span v-if="totals.cached"> · {{ pct(totals.cached, totals.in) }} cached</span>
             </p>
           </div>
           <div class="bg-slate-panel border border-steel p-4 rounded-lg">
-            <span class="text-[10px] text-zinc-400 uppercase">Cost</span>
+            <span class="text-xs text-zinc-400 uppercase">Cost</span>
             <p class="text-xl font-bold text-zinc-200 mt-1 tabular-nums">{{ totals.cost ? usd(totals.cost) : '—' }}</p>
-            <p class="text-[10px] text-zinc-500 mt-1">{{ totals.cost ? 'as reported by providers' : 'no provider reported a cost' }}</p>
+            <p class="text-xs text-zinc-500 mt-1">{{ totals.cost ? 'as reported by providers' : 'no provider reported a cost' }}</p>
           </div>
           <div class="bg-slate-panel border border-steel p-4 rounded-lg">
-            <span class="text-[10px] text-zinc-400 uppercase">Worker Time</span>
+            <span class="text-xs text-zinc-400 uppercase">Automaton time</span>
             <p class="text-xl font-bold text-zinc-200 mt-1 tabular-nums">{{ totals.ms ? duration(totals.ms) : '—' }}</p>
-            <p class="text-[10px] text-zinc-500 mt-1 tabular-nums">{{ fmt(totals.calls) }} LLM calls</p>
+            <p class="text-xs text-zinc-500 mt-1 tabular-nums">{{ fmt(totals.calls) }} LLM calls</p>
           </div>
           <div class="bg-slate-panel border border-steel p-4 rounded-lg">
-            <span class="text-[10px] text-zinc-400 uppercase">Tasks Completed</span>
+            <span class="text-xs text-zinc-400 uppercase">Tasks Completed</span>
             <p class="text-xl font-bold text-zinc-200 mt-1 tabular-nums">{{ completedTasksCount }} / {{ tasks.length }}</p>
-            <p class="text-[10px] text-zinc-500 mt-1">{{ project.isBlank ? 'no plan yet' : (project.state?.status || 'READY') }}</p>
+            <p class="text-xs text-zinc-500 mt-1">{{ project.isBlank ? 'no plan yet' : statusLabel(project.state?.status || 'READY') }}</p>
           </div>
         </div>
 
         <!-- Per task -->
         <div class="bg-slate-panel border border-steel rounded-lg mb-6 overflow-hidden">
           <div class="flex items-center justify-between px-4 py-2.5 border-b border-steel">
-            <h3 class="text-xs font-bold text-zinc-200">Usage per Task</h3>
-            <div class="flex items-center gap-1 text-[10px]">
+            <h3 class="text-body font-bold text-zinc-200">Usage per Task</h3>
+            <div class="flex items-center gap-1 text-xs">
               <span class="text-zinc-500 mr-1">Sort:</span>
               <button
                 v-for="opt in SORTS"
@@ -48,11 +48,11 @@
             </div>
           </div>
 
-          <div v-if="taskRows.length === 0" class="p-6 text-center text-xs text-zinc-500">No tasks yet. Generate and approve a plan first.</div>
+          <div v-if="taskRows.length === 0" class="p-6 text-center text-body text-zinc-500">No tasks yet. Generate and approve a plan first.</div>
           <div v-else class="overflow-x-auto">
-            <table class="w-full text-[11px] font-mono">
+            <table class="w-full text-body font-mono">
               <thead>
-                <tr class="text-[10px] uppercase text-zinc-500 border-b border-steel">
+                <tr class="text-xs uppercase text-zinc-500 border-b border-steel">
                   <th class="text-left font-semibold px-4 py-2">Task</th>
                   <th class="text-left font-semibold px-2 py-2">Automaton</th>
                   <th class="text-left font-semibold px-2 py-2">Status</th>
@@ -76,18 +76,18 @@
                   <td class="px-4 py-2 max-w-[280px]">
                     <div class="flex items-baseline gap-2 min-w-0">
                       <span class="text-gear-gold font-bold shrink-0">{{ r.id }}</span>
-                      <span class="text-zinc-300 truncate font-outfit">{{ r.title }}</span>
+                      <span class="text-zinc-300 truncate">{{ r.title }}</span>
                     </div>
                   </td>
                   <td class="px-2 py-2 text-cyan-energy whitespace-nowrap">{{ r.worker || '—' }}</td>
                   <td class="px-2 py-2">
-                    <span class="text-[9px] px-1.5 py-0.5 rounded border font-bold uppercase whitespace-nowrap" :class="statusClass(r.status)">{{ r.status }}</span>
+                    <span class="text-2xs px-1.5 py-0.5 rounded border font-bold whitespace-nowrap" :class="statusClass(r.status)">{{ statusLabel(r.status) }}</span>
                   </td>
                   <td class="px-2 py-2 text-right tabular-nums text-zinc-400">{{ r.attempt || '—' }}</td>
                   <td class="px-2 py-2 text-right tabular-nums text-zinc-400">{{ r.calls ? fmt(r.calls) : '—' }}</td>
                   <td class="px-2 py-2 text-right tabular-nums text-zinc-300 whitespace-nowrap">
                     {{ r.in ? fmt(r.in) : '—' }}
-                    <span v-if="r.cached" class="text-[9px] text-zinc-500">({{ pct(r.cached, r.in) }} cached)</span>
+                    <span v-if="r.cached" class="text-2xs text-zinc-500">({{ pct(r.cached, r.in) }} cached)</span>
                   </td>
                   <td class="px-2 py-2 text-right tabular-nums text-zinc-300">{{ r.out ? fmt(r.out) : '—' }}</td>
                   <td class="px-2 py-2">
@@ -120,16 +120,16 @@
         <!-- Per agent -->
         <div class="bg-slate-panel border border-steel rounded-lg overflow-hidden">
           <div class="px-4 py-2.5 border-b border-steel flex items-center justify-between">
-            <h3 class="text-xs font-bold text-zinc-200">Usage per Agent</h3>
-            <span v-if="planning.total" class="text-[10px] text-zinc-500 tabular-nums">
+            <h3 class="text-body font-bold text-zinc-200">Usage per Agent</h3>
+            <span v-if="planning.total" class="text-xs text-zinc-500 tabular-nums">
               Master planning: {{ fmt(planning.total) }} tokens · {{ planning.calls }} call{{ planning.calls === 1 ? '' : 's' }}
             </span>
           </div>
-          <div v-if="agentRows.length === 0" class="p-6 text-center text-xs text-zinc-500">No automaton has run a task yet.</div>
+          <div v-if="agentRows.length === 0" class="p-6 text-center text-body text-zinc-500">No automaton has run a task yet.</div>
           <div v-else class="overflow-x-auto">
-            <table class="w-full text-[11px] font-mono">
+            <table class="w-full text-body font-mono">
               <thead>
-                <tr class="text-[10px] uppercase text-zinc-500 border-b border-steel">
+                <tr class="text-xs uppercase text-zinc-500 border-b border-steel">
                   <th class="text-left font-semibold px-4 py-2">Automaton</th>
                   <th class="text-right font-semibold px-2 py-2">Tasks</th>
                   <th class="text-right font-semibold px-2 py-2">Calls</th>
@@ -166,6 +166,7 @@
 </template>
 
 <script setup>
+import { statusLabel, statusClass } from '~/utils/status'
 const {
   project,
   tasks,
@@ -275,19 +276,6 @@ function duration(ms) {
   const m = Math.floor(s / 60)
   if (m < 60) return `${m}m ${String(s % 60).padStart(2, '0')}s`
   return `${Math.floor(m / 60)}h ${String(m % 60).padStart(2, '0')}m`
-}
-
-function statusClass(status) {
-  return {
-    DONE: 'bg-green-950 text-green-400 border-green-800',
-    COMPLETED: 'bg-green-950 text-green-400 border-green-800',
-    RUNNING: 'bg-cyan-950 text-cyan-300 border-cyan-500',
-    BLOCKED: 'bg-red-950 text-red-400 border-red-800',
-    NEEDS_REVIEW: 'bg-amber-950 text-amber-300 border-amber-700',
-    AWAITING_INPUT: 'bg-rose-950 text-rose-300 border-rose-700',
-    PAUSED: 'bg-indigo-950 text-indigo-300 border-indigo-700',
-    FAILED: 'bg-zinc-900 text-zinc-500 border-zinc-700'
-  }[status] || 'bg-slate-inner text-zinc-400 border-steel'
 }
 
 // Task details live on the Tasks view

@@ -1,3 +1,5 @@
+import { statusLabel } from '~/utils/status'
+
 import { ref, computed, watch } from 'vue'
 
 // Shared Ringmaster UI state. One instance per Nuxt app, so every view
@@ -89,6 +91,7 @@ function createRingmaster() {
     show: false,
     title: '',
     message: '',
+    confirmLabel: '',
     action: null
   })
 
@@ -278,7 +281,7 @@ function createRingmaster() {
           {
             role: 'master',
             targetLabel: 'You',
-            text: `Welcome! Project '${data.name}' is connected. There are currently no tasks configured. Share your project requirements or feature ideas below, and I will help architect the specification and task workflow.`,
+            text: `Project '${data.name}' is connected and has no tasks yet. Tell me what you want to build. I will ask what I need, then split the work into tasks.`,
             time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
           }
         ]
@@ -399,7 +402,7 @@ function createRingmaster() {
         workerId: t.worker,
         taskId: t.id,
         taskBranch: `rm/${t.id}`,
-        statusTitle: `🙋 ${t.status.replace('_', ' ')}: needs you`,
+        statusTitle: `🙋 ${statusLabel(t.status)}`,
         text: lines.length ? `${reason}\n\n${lines.join('\n')}` : reason,
         time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         actionable: true,
@@ -514,7 +517,7 @@ function createRingmaster() {
       })
       const data = await res.json()
       if (data.ok) {
-        showToast('Agent Registered', `Agent '${newAgent.value.id}' (${newAgent.value.model}) added to fleet.`, 'success')
+        showToast('Agent Added', `Agent '${newAgent.value.id}' (${newAgent.value.model}) is ready to use.`, 'success')
         showAddAgentModal.value = false
         newAgent.value.id = ''
         newAgent.value.model = ''
@@ -557,7 +560,7 @@ function createRingmaster() {
       })
       const data = await res.json()
       if (data.ok) {
-        showToast('Role Updated', `Agent '${id}' is now designated as ${role.toUpperCase()}.`, 'info')
+        showToast('Role Updated', `Agent '${id}' is now ${role === 'master' ? 'the Master' : 'an automaton'}.`, 'info')
         loadProvidersData()
         refreshProject()
       } else {
@@ -571,8 +574,9 @@ function createRingmaster() {
   async function deleteAgent(id) {
     confirmDialog.value = {
       show: true,
-      title: 'Delete Agent',
-      message: `Are you sure you want to remove agent '${id}' from the fleet?`,
+      title: 'Delete agent',
+      message: `Delete agent '${id}'?`,
+      confirmLabel: 'Delete agent',
       action: async () => {
         try {
           const res = await fetch('/api/providers', {
@@ -582,7 +586,7 @@ function createRingmaster() {
           })
           const data = await res.json()
           if (data.ok) {
-            showToast('Agent Removed', `Agent '${id}' removed from fleet.`, 'info')
+            showToast('Agent Removed', `Agent '${id}' was deleted.`, 'info')
             loadProvidersData()
             refreshProject()
           } else {
@@ -772,8 +776,9 @@ function createRingmaster() {
   async function deleteProvider(id) {
     confirmDialog.value = {
       show: true,
-      title: 'Delete Provider',
-      message: `Are you sure you want to delete provider '${id}'? Agents using this provider will lose connectivity.`,
+      title: 'Delete provider',
+      message: `Delete provider '${id}'? Agents that use it will stop working.`,
+      confirmLabel: 'Delete provider',
       action: async () => {
         try {
           const res = await fetch('/api/providers', {
@@ -783,7 +788,7 @@ function createRingmaster() {
           })
           const data = await res.json()
           if (data.ok) {
-            showToast('Provider Deleted', `Provider '${id}' removed from configuration.`, 'info')
+            showToast('Provider Deleted', `Provider '${id}' was deleted.`, 'info')
             loadProvidersData()
           } else {
             showToast('Delete Failed', data.error, 'error')
@@ -834,7 +839,7 @@ function createRingmaster() {
           isApproved: true,
           approvedHash: data.approvedHash || ''
         }
-        showToast('Plan Approved!', `Canonical Hash: ${data.approvedHash?.slice(0, 16)}... Ready for execution.`, 'success')
+        showToast('Plan Approved', `You can run it now. Hash ${data.approvedHash?.slice(0, 16)}…`, 'success')
         await refreshProject()
       } else {
         showToast('Approval Failed', data.error, 'error')
@@ -855,22 +860,23 @@ function createRingmaster() {
       })
       const data = await res.json()
       if (data.ok) {
-        showToast('Worker Assigned', `Task ${taskId} reassigned to '${worker}'. Approval revoked for safety.`, 'info')
+        showToast('Automaton Changed', `Task ${taskId} now uses '${worker}'. The plan needs approval again.`, 'info')
         planApprovalState.value.isApproved = false
         await refreshProject()
       } else {
         showToast('Update Failed', data.error, 'error')
       }
     } catch (err) {
-      showToast('Failed to update worker', err.message, 'error')
+      showToast('Could Not Change Automaton', err.message, 'error')
     }
   }
 
   async function discardPlanAction() {
     confirmDialog.value = {
       show: true,
-      title: 'Discard Plan',
-      message: 'Are you sure you want to discard the generated DAG plan? Tasks will be cleared and you can re-plan with Master.',
+      title: 'Discard plan',
+      message: 'Discard this plan? Its tasks are cleared, and you can plan again with the Master.',
+      confirmLabel: 'Discard plan',
       action: async () => {
         try {
           const res = await fetch('/api/plan', {
@@ -880,7 +886,7 @@ function createRingmaster() {
           })
           const data = await res.json()
           if (data.ok) {
-            showToast('Plan Discarded', 'DAG plan cleared. Start a new plan anytime.', 'info')
+            showToast('Plan Discarded', 'The plan was cleared.', 'info')
             planApprovalState.value.isApproved = false
             await refreshProject()
           }
@@ -900,13 +906,13 @@ function createRingmaster() {
 
     messages.value.push({
       role: 'user',
-      targetLabel: 'Master Planner',
-      text: '⚡ Generate DAG Plan from current requirements and BRIEF.md',
+      targetLabel: 'Master',
+      text: 'Generate the plan from this conversation.',
       time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
     })
     scrollToBottom()
 
-    showToast('Master AI Orchestrating', 'Analyzing requirements and generating DAG task pipeline...', 'info')
+    showToast('Generating Plan', 'The Master is splitting the brief into tasks…', 'info')
 
     try {
       const res = await fetch('/api/plan', {
@@ -916,11 +922,12 @@ function createRingmaster() {
       })
       const data = await res.json()
       if (data.ok) {
-        showToast('Plan Generated!', 'DAG workflow successfully synthesized. Check Tasks tab to inspect pipeline.', 'success')
+        showToast('Plan Ready', 'Review it in Tasks.', 'success')
         messages.value.push({
           role: 'master',
           targetLabel: 'You',
-          text: `✓ DAG Plan successfully generated!\n\n${data.plan?.tasks?.length || 0} tasks created in the pipeline. Acceptance criteria verified. You can now view, customize workers, and approve them in the Tasks tab.`,
+          planReady: true,
+          text: `The plan is ready: ${data.plan?.tasks?.length || 0} tasks.\n\nReview them in Tasks, change the automaton for any task, then approve.`,
           time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
         })
         scrollToBottom()
@@ -932,7 +939,7 @@ function createRingmaster() {
         messages.value.push({
           role: 'master',
           targetLabel: 'You',
-          text: `✗ Failed to generate plan: ${data.error}\n${data.output || ''}`,
+          text: `The plan could not be generated: ${data.error}\n\n${data.output || ''}`,
           time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
           type: 'error'
         })
@@ -955,7 +962,7 @@ function createRingmaster() {
 
     messages.value.push({
       role: 'user',
-      targetLabel: target === 'master' ? 'Master Planner' : target,
+      targetLabel: target === 'master' ? 'Master' : target,
       text: text,
       time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
     })
@@ -995,7 +1002,7 @@ function createRingmaster() {
           messages.value.push({
             role: 'master',
             targetLabel: 'You',
-            text: data.error ? `Error: ${data.error}` : `Master Planner received your specification.`,
+            text: data.error ? `Error: ${data.error}` : `The Master received your message.`,
             time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
             type: 'error'
           })
@@ -1006,7 +1013,7 @@ function createRingmaster() {
         messages.value.push({
           role: 'master',
           targetLabel: 'You',
-          text: `Error contacting Master Planner: ${err.message}`,
+          text: `Could not reach the Master: ${err.message}`,
           time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
           type: 'error'
         })
@@ -1017,20 +1024,20 @@ function createRingmaster() {
         scrollToBottom()
       }
     } else {
-      // Direct worker message
-      setTimeout(() => {
-        isThinking.value = false
-        messages.value.push({
-          role: 'worker',
-          workerId: target,
-          taskId: 'Direct',
-          statusTitle: 'Worker Acknowledged',
-          taskBranch: `rm/${target}`,
-          text: `Direct directive received for ${target}: "${text}". Updating working context.`,
-          time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-        })
-        saveChatHistory()
-      }, 1000)
+      // Nothing carries a chat message to a running automaton yet, so say so
+      // instead of showing an acknowledgement that never happened.
+      isThinking.value = false
+      messages.value.push({
+        role: 'worker',
+        workerId: target,
+        taskId: 'not delivered',
+        statusTitle: 'Message not delivered',
+        taskBranch: `rm/${target}`,
+        text: `A running automaton cannot receive chat messages yet. To steer ${target}, answer its question when it asks one, or stop the run and re-plan.`,
+        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        type: 'error'
+      })
+      saveChatHistory()
     }
   }
 
@@ -1088,8 +1095,8 @@ function createRingmaster() {
   async function handleExecuteOrSpur() {
     if (isRunActive.value) {
       showToast(
-        'Orchestration Active ⚡',
-        'Ringmaster engine is actively executing tasks in git worktrees.',
+        'Run Active',
+        'Tasks are running. See Logs.',
         'info'
       )
       return
@@ -1106,17 +1113,17 @@ function createRingmaster() {
       if (data.ok) {
         isRunActive.value = true
         showToast(
-          'Orchestration Dispatched 🚀',
-          `Ringmaster backend process (PID ${data.pid || 'live'}) spawned. Workers are entering worktrees!`,
+          'Run Started',
+          `Automatons are starting on the plan (PID ${data.pid || 'live'}).`,
           'success'
         )
         refreshProject()
         pollRunStatus()
       } else {
-        showToast('Dispatch Error', data.error || 'Failed to start orchestration', 'error')
+        showToast('Run Did Not Start', data.error || 'Unknown error', 'error')
       }
     } catch (err) {
-      showToast('Failed to start orchestration', err.message, 'error')
+      showToast('Run Did Not Start', err.message, 'error')
     } finally {
       isExecutingPlan.value = false
     }
