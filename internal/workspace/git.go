@@ -22,6 +22,20 @@ func WorktreesDir(projectRoot string) string {
 	return filepath.Join(projectRoot, StateDirName, "worktrees")
 }
 
+// Ringmaster is the committer of every commit it makes. The author is the
+// project's owner (see commitAuthor), so on a git host a commit reads
+// "<owner> authored and Ringmaster committed".
+const (
+	committerName  = "Ringmaster"
+	committerEmail = "ringmaster@local"
+)
+
+// Git subcommands that write a commit, and so need an author.
+var commitCommands = map[string]bool{
+	"commit": true, "commit-tree": true, "merge": true,
+	"cherry-pick": true, "revert": true, "rebase": true, "am": true,
+}
+
 // RunGit runs a git command with -C <repoPath> explicitly.
 func RunGit(ctx context.Context, repoPath string, args ...string) (string, error) {
 	cmdArgs := append([]string{"-C", repoPath}, args...)
@@ -29,13 +43,14 @@ func RunGit(ctx context.Context, repoPath string, args ...string) (string, error
 	defer cancel()
 
 	cmd := exec.CommandContext(tCtx, "git", cmdArgs...)
-	// Ensure clean git environment
 	cmd.Env = append(os.Environ(),
-		"GIT_AUTHOR_NAME=Ringmaster",
-		"GIT_AUTHOR_EMAIL=ringmaster@local",
-		"GIT_COMMITTER_NAME=Ringmaster",
-		"GIT_COMMITTER_EMAIL=ringmaster@local",
+		"GIT_COMMITTER_NAME="+committerName,
+		"GIT_COMMITTER_EMAIL="+committerEmail,
 	)
+	if len(args) > 0 && commitCommands[args[0]] {
+		name, email := commitAuthor(ctx, repoPath)
+		cmd.Env = append(cmd.Env, "GIT_AUTHOR_NAME="+name, "GIT_AUTHOR_EMAIL="+email)
+	}
 
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
@@ -53,16 +68,45 @@ func RunGit(ctx context.Context, repoPath string, args ...string) (string, error
 	return outStr, nil
 }
 
-// EnsureGitIdentity sets user.name and user.email locally in the repo if not set.
-// An identity the user already has (local or global) is left untouched.
-func EnsureGitIdentity(ctx context.Context, repoPath string) error {
-	if out, err := RunGit(ctx, repoPath, "config", "user.name"); err != nil || strings.TrimSpace(out) == "" {
-		_, _ = RunGit(ctx, repoPath, "config", "user.name", "Ringmaster")
+// commitAuthor returns who Ringmaster's commits in repoPath are attributed
+// to: the identity the user has set up for git, so the work shows up as
+// theirs. In order: GIT_AUTHOR_NAME/EMAIL from the environment, then
+// user.name/user.email from git config (the repository's, else the global
+// one). Ringmaster's own identity is the fallback when the user has none,
+// so a commit never fails for want of an author.
+func commitAuthor(ctx context.Context, repoPath string) (name, email string) {
+	if n, e := os.Getenv("GIT_AUTHOR_NAME"), os.Getenv("GIT_AUTHOR_EMAIL"); n != "" && e != "" {
+		return n, e
 	}
-	if out, err := RunGit(ctx, repoPath, "config", "user.email"); err != nil || strings.TrimSpace(out) == "" {
-		_, _ = RunGit(ctx, repoPath, "config", "user.email", "ringmaster@local")
+
+	name = gitConfig(ctx, repoPath, "user.name")
+	email = gitConfig(ctx, repoPath, "user.email")
+
+	// Earlier versions wrote Ringmaster's identity into the repository's own
+	// config when the user had none. If that placeholder is still there but
+	// the user has since set a global identity, the global one is theirs.
+	if email == committerEmail {
+		if n, e := gitConfig(ctx, repoPath, "--global", "user.name"), gitConfig(ctx, repoPath, "--global", "user.email"); n != "" && e != "" {
+			return n, e
+		}
 	}
-	return nil
+
+	if name == "" || email == "" {
+		return committerName, committerEmail
+	}
+	return name, email
+}
+
+// gitConfig reads one git config value, "" when it is unset.
+func gitConfig(ctx context.Context, repoPath string, args ...string) string {
+	tCtx, cancel := context.WithTimeout(ctx, gitTimeout)
+	defer cancel()
+	cmdArgs := append([]string{"-C", repoPath, "config", "--get"}, args...)
+	out, err := exec.CommandContext(tCtx, "git", cmdArgs...).Output()
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(out))
 }
 
 // EnsureStateExcluded lists .ringmaster/ in the repo's info/exclude so that
@@ -177,9 +221,6 @@ func CreateWorktree(ctx context.Context, projectRoot, taskID, baseRef string) (s
 	}
 
 	if err := EnsureRepoRoot(ctx, repoPath); err != nil {
-		return "", err
-	}
-	if err := EnsureGitIdentity(ctx, repoPath); err != nil {
 		return "", err
 	}
 	if err := EnsureStateExcluded(ctx, repoPath); err != nil {

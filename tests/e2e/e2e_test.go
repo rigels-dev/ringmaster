@@ -27,7 +27,6 @@ func setupE2EProject(t *testing.T, ms *mockserver.MockServer) (string, *config.C
 	_ = os.MkdirAll(filepath.Join(projectRoot, ".ringmaster"), 0755)
 	ctx := context.Background()
 	_, _ = workspace.RunGit(ctx, repoDir, "init", "-b", "main")
-	_ = workspace.EnsureGitIdentity(ctx, repoDir)
 	_ = os.WriteFile(filepath.Join(repoDir, "README.md"), []byte("# Ringmaster E2E\n"), 0644)
 	_, _ = workspace.RunGit(ctx, repoDir, "add", "README.md")
 	_, _ = workspace.RunGit(ctx, repoDir, "commit", "-m", "init commit")

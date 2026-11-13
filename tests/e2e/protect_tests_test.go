@@ -86,7 +86,6 @@ func runCheatingTask(t *testing.T, task schemas.PlanTask, tune func(*config.Conf
 	projectRoot = t.TempDir()
 	ctx := context.Background()
 	_, _ = workspace.RunGit(ctx, projectRoot, "init", "-b", "main")
-	_ = workspace.EnsureGitIdentity(ctx, projectRoot)
 	for name, content := range map[string]string{
 		"go.mod":       "module calc\n\ngo 1.21\n",
 		"calc.go":      brokenCalc,

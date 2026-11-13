@@ -21,7 +21,6 @@ func setupTestRepo(t *testing.T) string {
 	if _, err := RunGit(ctx, repoPath, "init", "-b", "main"); err != nil {
 		t.Fatalf("failed git init: %v", err)
 	}
-	_ = EnsureGitIdentity(ctx, repoPath)
 
 	readme := filepath.Join(repoPath, "README.md")
 	if err := os.WriteFile(readme, []byte("# Ringmaster Test\n"), 0644); err != nil {

@@ -49,9 +49,6 @@ func (mq *MergeQueue) Enqueue(ctx context.Context, taskID string) (*MergeResult,
 	if err := EnsureRepoRoot(ctx, mq.repoPath); err != nil {
 		return nil, err
 	}
-	if err := EnsureGitIdentity(ctx, mq.repoPath); err != nil {
-		return nil, err
-	}
 
 	// The project directory is the user's own working tree, so the merge is
 	// computed without checking anything out: merge-tree builds the merged
