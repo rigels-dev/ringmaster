@@ -234,6 +234,20 @@ func (e *Engine) executeTask(ctx context.Context, planTask schemas.PlanTask) {
 		return
 	}
 
+	// An acceptance command that can never run would fail the task after the
+	// automaton has done all its work. Stop before any tokens are spent.
+	for _, command := range taskSpec.Acceptance {
+		if why := verify.UnrunnableReason(strings.TrimSpace(command)); why != "" {
+			reason := verify.UnrunnableAcceptanceMessage(command) + "\n\n" + why
+			fmt.Printf("⚠ [Scheduler] Task %s was not started: %s\n", planTask.ID, reason)
+			_ = e.stateMgr.UpdateTaskState(planTask.ID, func(ts *schemas.TaskState) {
+				ts.Status = schemas.TaskStateReview
+				ts.Error = reason
+			})
+			return
+		}
+	}
+
 	// 3. Determine baseRef for worktree branch
 	baseRef := "main"
 	if len(planTask.DependsOn) > 0 {

@@ -13,7 +13,7 @@ Current release: **v0.5.1-electra**. Ringmaster runs on Linux and macOS.
 ## How it works
 
 1. **Brief.** You describe what to build, in a chat with the master planner or in `.ringmaster/BRIEF.md`.
-2. **Plan.** The master agent splits the brief into a DAG of tasks, each with a worker, dependencies and acceptance commands. It asks you about decisions it should not guess, and nothing runs until you approve the plan (the approval is tied to the plan's SHA-256 hash).
+2. **Plan.** The master agent splits the brief into a DAG of tasks, each with a worker, dependencies and acceptance commands. It asks you about decisions it should not guess, and nothing runs until you approve the plan (the approval is tied to the plan's SHA-256 hash). Acceptance commands run directly, without a shell; one that would need a shell is sent back to the master to rewrite before the plan reaches you, and a task that still has one is stopped before its automaton starts.
 3. **Run.** Each task gets a branch `rm/Txx` and a worktree. Workers run in parallel where dependencies allow; a task that depends on another starts from that task's branch.
 4. **Verify.** Ringmaster runs the acceptance commands itself instead of trusting the worker's report. Failures go back to the worker for another attempt; problems an attempt cannot fix (a timeout, a command that cannot run) go to you instead.
 5. **Merge.** Passing tasks are merged into `main` one at a time. Every attempt is a commit tagged with the automaton that made it.

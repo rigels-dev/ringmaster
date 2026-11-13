@@ -87,7 +87,7 @@ func Decide(
 		if chk.Unrunnable {
 			return Decision{
 				Type:        DecisionNEED_REVIEW,
-				Reason:      fmt.Sprintf("Acceptance command cannot run as written: '%s'. Fix it in the plan.", chk.Command),
+				Reason:      UnrunnableAcceptanceMessage(chk.Command),
 				FailureLogs: chk.StderrTail,
 			}
 		}
@@ -146,4 +146,12 @@ func Decide(
 		Reason:      fmt.Sprintf("Acceptance checks failed and max retries (%d) exhausted.", maxRetries),
 		FailureLogs: failuresCombined,
 	}
+}
+
+// UnrunnableAcceptanceMessage tells the user what to do about an acceptance
+// command that cannot run: the automaton cannot fix it, because the command
+// belongs to the task, not to the work.
+func UnrunnableAcceptanceMessage(command string) string {
+	return fmt.Sprintf("Acceptance command cannot run as written: '%s'. An automaton cannot fix this. "+
+		"Either re-plan, or replace the command under 'acceptance:' in the task's file in .ringmaster/tasks/ and resume.", command)
 }

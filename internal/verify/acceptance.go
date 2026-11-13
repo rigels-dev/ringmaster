@@ -40,6 +40,17 @@ func hasShellSyntax(cmd string) bool {
 	return false
 }
 
+// UnrunnableReason says why Ringmaster can never run cmd as an acceptance
+// command, or "" when it can. Acceptance commands are executed directly,
+// without a shell, so anything that needs one cannot pass however good the
+// work is. The planner and the scheduler ask this before any work is done.
+func UnrunnableReason(cmd string) string {
+	if hasShellSyntax(cmd) {
+		return "Shell syntax ($(), backticks, pipes, &, ;, redirects, quotes) is not supported: acceptance commands run without a shell. Use one plain command per entry."
+	}
+	return ""
+}
+
 // RunAcceptance runs each command in task.Acceptance independently inside worktree,
 // each limited to timeout. All commands must exit with code 0 to pass.
 // They get the same environment as worker commands (worker.CommandEnv).
@@ -52,13 +63,13 @@ func RunAcceptance(ctx context.Context, task schemas.TaskSpec, worktree string, 
 			continue
 		}
 
-		if hasShellSyntax(cmdStr) {
+		if reason := UnrunnableReason(cmdStr); reason != "" {
 			results = append(results, CheckResult{
 				Command:    cmdStr,
 				ExitCode:   2,
 				Passed:     false,
 				Unrunnable: true,
-				StderrTail: "Shell syntax ($(), backticks, pipes, &, ;, redirects, quotes) is not supported: acceptance commands run without a shell. Split it into plain commands in the plan.",
+				StderrTail: reason,
 			})
 			continue
 		}

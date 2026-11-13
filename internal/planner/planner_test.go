@@ -319,3 +319,136 @@ func TestPlannerSeesEnabledSkills(t *testing.T) {
 		t.Error("with no skills the planner prompt should not mention them")
 	}
 }
+
+// planServer answers each planning call with the next plan in replies (the
+// last one repeats) and records what the master was told.
+func planServer(t *testing.T, replies ...string) (url string, calls *int, lastUser *string) {
+	t.Helper()
+	calls, lastUser = new(int), new(string)
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var req struct {
+			Messages []struct {
+				Role    string `json:"role"`
+				Content string `json:"content"`
+			} `json:"messages"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&req)
+		if n := len(req.Messages); n > 0 {
+			*lastUser = req.Messages[n-1].Content
+		}
+		reply := replies[len(replies)-1]
+		if *calls < len(replies) {
+			reply = replies[*calls]
+		}
+		*calls++
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"choices": []map[string]any{{"message": map[string]any{"role": "assistant", "content": reply}}},
+			"usage":   map[string]any{"prompt_tokens": 1, "completion_tokens": 1, "total_tokens": 2},
+		})
+	}))
+	t.Cleanup(ts.Close)
+	return ts.URL, calls, lastUser
+}
+
+func planWithAcceptance(command string) string {
+	data, _ := json.Marshal(map[string]any{
+		"project": "p",
+		"tasks": []map[string]any{{
+			"id": "T01", "title": "Docs", "type": "docs", "depends_on": []string{}, "worker": "w",
+			"max_retries": 2, "acceptance": []string{command}, "description": "d",
+		}},
+		"open_questions": []any{}, "assumptions": []any{},
+	})
+	return string(data)
+}
+
+func planningProject(t *testing.T, url string) (string, *config.Config) {
+	t.Helper()
+	t.Setenv("MOCK_KEY", "k")
+	t.Setenv("RINGMASTER_CONFIG_DIR", t.TempDir())
+	root := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(root, ".ringmaster"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, ".ringmaster", "BRIEF.md"), []byte("# Brief\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	cfg := config.DefaultConfig()
+	cfg.Providers["mock"] = config.ProviderConfig{Type: "openai", BaseURL: url, APIKeyEnv: "MOCK_KEY"}
+	cfg.Agents["m"] = config.AgentConfig{Provider: "mock", Model: "x", Role: "master"}
+	cfg.Agents["w"] = config.AgentConfig{Provider: "mock", Model: "x", Role: "worker", ToolCalling: true}
+	return root, cfg
+}
+
+const shellAcceptance = `python -c "import pathlib; t=pathlib.Path('README.md').read_text(); assert '--json' in t"`
+
+// The master wrote an acceptance command that needs a shell. It is told which
+// one and why, and its corrected plan is the one that is saved.
+func TestPlannerHasUnrunnableAcceptanceCorrected(t *testing.T) {
+	url, calls, lastUser := planServer(t, planWithAcceptance(shellAcceptance), planWithAcceptance("pytest -q"))
+	root, cfg := planningProject(t, url)
+
+	plan, _, err := GeneratePlan(context.Background(), root, cfg, cfg.Agents["m"], llm.NewProvider("openai", url, "MOCK_KEY"))
+	if err != nil {
+		t.Fatalf("GeneratePlan failed: %v", err)
+	}
+	if *calls != 2 {
+		t.Fatalf("master was called %d time(s), want 2 (plan, then correction)", *calls)
+	}
+	for _, want := range []string{"T01", "python -c", "NOT through a shell", "no quotes"} {
+		if !strings.Contains(*lastUser, want) {
+			t.Errorf("the correction request does not mention %q:\n%s", want, *lastUser)
+		}
+	}
+	if got := plan.Tasks[0].Acceptance; len(got) != 1 || got[0] != "pytest -q" {
+		t.Fatalf("saved acceptance = %v, want the corrected command", got)
+	}
+	saved, err := os.ReadFile(filepath.Join(root, ".ringmaster", "plan.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(saved), "python -c") {
+		t.Fatalf("plan.json still holds the unrunnable command:\n%s", saved)
+	}
+	specs, _ := filepath.Glob(filepath.Join(root, ".ringmaster", "tasks", "T01*.md"))
+	if len(specs) != 1 {
+		t.Fatalf("task spec files = %v", specs)
+	}
+	if spec, _ := os.ReadFile(specs[0]); !strings.Contains(string(spec), "pytest -q") || strings.Contains(string(spec), "python -c") {
+		t.Fatalf("task spec holds the wrong acceptance command:\n%s", spec)
+	}
+}
+
+// A master that never corrects itself must not leave a plan the user could
+// approve and run.
+func TestPlannerRefusesPlanWhoseAcceptanceCannotRun(t *testing.T) {
+	url, calls, _ := planServer(t, planWithAcceptance(shellAcceptance))
+	root, cfg := planningProject(t, url)
+
+	_, _, err := GeneratePlan(context.Background(), root, cfg, cfg.Agents["m"], llm.NewProvider("openai", url, "MOCK_KEY"))
+	if err == nil {
+		t.Fatal("a plan with an unrunnable acceptance command was accepted")
+	}
+	if !strings.Contains(err.Error(), "T01") || !strings.Contains(err.Error(), "python -c") {
+		t.Errorf("error does not name the task and command: %v", err)
+	}
+	if *calls != 3 {
+		t.Errorf("master was called %d time(s), want 3", *calls)
+	}
+	if _, statErr := os.Stat(filepath.Join(root, ".ringmaster", "plan.json")); statErr == nil {
+		t.Error("plan.json was written for a plan that was refused")
+	}
+}
+
+func TestPlainAcceptanceCommandsAreLeftAlone(t *testing.T) {
+	url, calls, _ := planServer(t, planWithAcceptance("go test ./..."))
+	root, cfg := planningProject(t, url)
+
+	if _, _, err := GeneratePlan(context.Background(), root, cfg, cfg.Agents["m"], llm.NewProvider("openai", url, "MOCK_KEY")); err != nil {
+		t.Fatalf("GeneratePlan failed: %v", err)
+	}
+	if *calls != 1 {
+		t.Errorf("master was called %d time(s) for a plan with nothing to correct", *calls)
+	}
+}
