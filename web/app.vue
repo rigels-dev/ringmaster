@@ -146,7 +146,10 @@
           </button>
           <button 
             @click="executeConfirmDialog" 
-            class="px-4 py-1.5 rounded text-body font-bold bg-red-950 text-red-400 hover:bg-red-900 border border-red-800 shadow"
+            class="px-4 py-1.5 rounded text-body font-bold border shadow"
+            :class="confirmDialog.danger === false
+              ? 'bg-gear-gold text-ink hover:bg-gear-glow border-gear-gold'
+              : 'bg-red-950 text-red-400 hover:bg-red-900 border-red-800'"
           >
             {{ confirmDialog.confirmLabel || 'Confirm' }}
           </button>

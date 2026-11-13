@@ -45,7 +45,7 @@ When a worker needs you (a decision, a value only you know, or approval for a co
 |---|---|
 | **Chat** | Brief the master planner, then generate the plan |
 | **Tasks** | The DAG, plan approval with open questions, and per-task detail (spec, report, transcripts, answers) |
-| **Branches** | Commit graph per task branch: where it forked, what each automaton committed, when it merged |
+| **Branches** | Commit graph per task branch: where it forked, what each automaton committed, when it merged. Set the git remote and push `main` and the task branches |
 | **Providers** | Providers and agents; pick the master and default worker |
 | **Logs** | Live and past runs, colored per task, with a lane for each working automaton |
 | **Analytics** | Tokens, cost and time per task and per agent |
@@ -148,9 +148,22 @@ ringmaster answer T06 --reply r1=approve --allow "docker build -t app ."
 ringmaster resume
 ringmaster usage         # token usage per agent and task
 ringmaster skills        # installed agent skills; enable or disable them
+ringmaster remote set https://github.com/you/project.git   # once: where to publish
+ringmaster push          # push main and the task branches there
 ```
 
 Project commands work from any subdirectory of a project, the way `go` finds `go.mod`, and refuse to run outside one.
+
+**Publishing the result.** Tasks are merged into your local `main`; nothing leaves your machine until you push. Give the project a remote once, then push from the command line or from the Branches view of the web UI:
+
+```bash
+ringmaster remote set git@github.com:you/project.git
+ringmaster remote        # the remote, and which branches still need pushing
+ringmaster push          # main and every rm/Txx branch, merged or not
+ringmaster push --main-only
+```
+
+Only `main` and the task branches are pushed; your other branches are left alone. A push is never forced: if the remote has commits this project does not, that branch is rejected and reported. Pushing uses your own git login (an SSH key or a credential helper) and never prompts, so a missing login fails at once. Ringmaster refuses a URL with credentials in it, since it would be stored in `.git/config`.
 
 **Using a remote server?** The web UI listens on localhost only. Forward it over SSH:
 
