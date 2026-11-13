@@ -3,7 +3,7 @@
 VERSION ?= $(shell cat VERSION)
 LDFLAGS := -s -w -X ringmaster/internal/version.Version=$(VERSION)
 
-.PHONY: all build web test test-web tag dist lockfile clean
+.PHONY: all build web test test-web tag release dist lockfile clean
 
 all: build web
 
@@ -35,6 +35,12 @@ dist: web
 tag:
 	@git diff --quiet HEAD || { echo "Commit your changes (including VERSION) before tagging" >&2; exit 1; }
 	git tag -a $(VERSION) -m "Ringmaster $(VERSION)"
+
+# Tag the release named in VERSION and push the tag, which starts the Release
+# workflow. Run on main once the release PR is merged and pulled. It checks
+# that first, so it is safe to run when unsure
+release:
+	@scripts/release.sh $(VERSION)
 
 clean:
 	rm -rf bin dist web/.output
