@@ -22,7 +22,7 @@ When a worker needs you (a decision, a value only you know, or approval for a co
 
 ## Features
 
-- **Works in your existing repository.** `ringmaster init` adds only `ringmaster.toml` and a `.ringmaster/` directory, kept out of git through `.git/info/exclude`. It never stages or commits your files.
+- **Works in your existing repository.** `ringmaster init` adds only `ringmaster.toml` and a `.ringmaster/` directory. Both are kept out of git through `.git/info/exclude`, so they never show up in `git status`, are never pushed, and your `.gitignore` is left alone. It never stages or commits your files. To share the manifest with your team, commit it yourself with `git add -f ringmaster.toml`.
 - **Merges that leave your checkout alone.** Merge commits are built without checking anything out. If you have `main` checked out with uncommitted changes that overlap a task, the merge waits for you instead of overwriting them.
 - **Traceable history.** Each attempt is committed on its task branch with trailers:
   ```
@@ -32,7 +32,7 @@ When a worker needs you (a decision, a value only you know, or approval for a co
   Ringmaster-Automaton: sonnet-5.5
   Ringmaster-Attempt: 2
   ```
-  You are the author of these commits and Ringmaster is the committer, so a git host shows them as yours, made through Ringmaster. The author is the identity you have set up for git (`user.name` and `user.email`); use an email your git host knows if you want the commits linked to your account. If git has no identity set, `ringmaster init`, `ringmaster run` and the web UI say so and show the two `git config` commands; until then the author is Ringmaster. Ringmaster never edits your git config.
+  These commits are yours: author and committer are the identity you have set up for git (`user.name` and `user.email`), so a git host shows them under your name alone. Ringmaster's part stays visible in the commit message and the trailers. Use an email your git host knows if you want the commits linked to your account. If git has no identity set, `ringmaster init`, `ringmaster run` and the web UI say so and show the two `git config` commands; until then the commits are made as Ringmaster. Ringmaster never edits your git config.
 - **Any provider.** OpenAI-compatible APIs (OpenAI, OpenRouter, Ollama, vLLM, DeepSeek and others), the Anthropic API, and a local Claude subscription through the Claude Code CLI.
 - **One fleet for all projects.** Providers and agents are configured once, globally; a project only assigns agents to its tasks.
 - **Guardrails for workers.** Workers run commands only from an allowlist, and their file tools are confined to the task's worktree. Worker and acceptance commands see only a built-in set of environment variables (`PATH`, `HOME`, toolchain paths, proxies) plus the ones you name in `pass_env`, so your API keys and other credentials stay out unless you list them. For agents on a Claude subscription, the Claude Code CLI runs the commands itself, so they also see the CLI's own `CLAUDE_*` and `ANTHROPIC_*` variables. These are guardrails, not isolation: an allowed command such as `go test` still runs code the worker wrote, with your user's permissions. Run Ringmaster inside a container or VM if you need a hard boundary. Each acceptance command has a time limit (default 300 s), adjustable per project or per task.

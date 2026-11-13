@@ -57,11 +57,11 @@ func identities(t *testing.T, repo, rev string) string {
 	return strings.TrimSpace(out)
 }
 
-func TestCommitIsAuthoredByTheUserAndCommittedByRingmaster(t *testing.T) {
+func TestCommitIsAuthoredAndCommittedByTheUser(t *testing.T) {
 	isolateGit(t, adaGlobal)
 	repo := newRepo(t)
 
-	if got, want := commitFile(t, repo), "Ada Lovelace <ada@example.com> | Ringmaster <ringmaster@local>"; got != want {
+	if got, want := commitFile(t, repo), "Ada Lovelace <ada@example.com> | Ada Lovelace <ada@example.com>"; got != want {
 		t.Fatalf("identities = %q, want %q", got, want)
 	}
 }
@@ -132,7 +132,7 @@ func TestMergeCommitIsAuthoredByTheUser(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got, want := identities(t, repo, strings.TrimSpace(sha)), "Ada Lovelace <ada@example.com> | Ringmaster <ringmaster@local>"; got != want {
+	if got, want := identities(t, repo, strings.TrimSpace(sha)), "Ada Lovelace <ada@example.com> | Ada Lovelace <ada@example.com>"; got != want {
 		t.Fatalf("identities = %q, want %q", got, want)
 	}
 }
