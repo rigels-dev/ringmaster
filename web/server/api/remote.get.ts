@@ -11,7 +11,7 @@ export default defineEventHandler(async () => {
       { cwd: resolveProjectDir(), timeout: 15000 }
     )
     const status = JSON.parse(stdout)
-    return { ok: true, name: status.name, url: status.url || '', branches: status.branches || [] }
+    return { ok: true, name: status.name, url: status.url || '', branches: status.branches || [], author: status.author || null }
   } catch (err: any) {
     return { ok: false, error: cliError(err, 'Failed to read the remote') }
   }

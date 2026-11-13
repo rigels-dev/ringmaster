@@ -123,6 +123,11 @@ func buildRemoteView(st remote.Status) string {
 	} else {
 		fmt.Fprintf(&sb, "%s  %s\n", st.Name, st.URL)
 	}
+	if st.Author.IsUser {
+		fmt.Fprintf(&sb, "author  %s <%s>\n", st.Author.Name, st.Author.Email)
+	} else {
+		sb.WriteString("author  Ringmaster (git has no user.name / user.email set; see 'git config --global user.name')\n")
+	}
 	if len(st.Branches) == 0 {
 		return sb.String()
 	}

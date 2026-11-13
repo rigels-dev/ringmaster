@@ -54,6 +54,10 @@ var runCmd = &cobra.Command{
 		defer stop()
 
 		fmt.Printf("🎪 Ringmaster starting orchestration for '%s' (max_parallel=%d)...\n", filepath.Base(projectDir), runMaxParallel)
+		// Said here, inside the run log, so the web UI's Logs view shows it too
+		if warning := gitIdentityWarning(ctx, projectDir); warning != "" {
+			fmt.Print(warning)
+		}
 		err = engine.Run(ctx)
 		if err != nil {
 			if ctx.Err() != nil {

@@ -66,6 +66,9 @@
           </div>
         </div>
 
+        <!-- Said before a run, because a commit's author cannot be changed afterwards -->
+        <GitIdentityNotice v-if="tasks.length > 0" class="mb-6" />
+
         <!-- Approval Gate Banner (Interactive Plan Review) -->
         <div v-if="tasks.length > 0" class="mb-6 p-4 rounded-xl border transition shadow-lg" :class="planApprovalState.isApproved ? 'bg-green-950/30 border-green-700/60' : 'bg-amber-950/30 border-amber-600/60'">
           <div class="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
