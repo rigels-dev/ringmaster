@@ -98,7 +98,8 @@
     </aside>
 
     <!-- Global Floating Toast Notification System (Replaces browser alert) -->
-    <div class="fixed top-5 right-5 z-50 flex flex-col gap-2 pointer-events-none max-w-sm">
+    <!-- Bottom-left of the content area: clear of the sidebar (w-64) and of the terminal bubble on the right -->
+    <div class="fixed bottom-5 left-[17.25rem] z-50 flex flex-col gap-2 pointer-events-none max-w-sm">
       <div 
         v-for="toast in toastList" 
         :key="toast.id"
