@@ -1,5 +1,5 @@
 <template>
-      <section class="flex-1 flex flex-col p-6 overflow-y-auto gap-4">
+      <section class="flex-1 flex flex-col p-6 pb-24 overflow-y-auto gap-4">
         <div class="flex items-end justify-between gap-3 flex-wrap">
           <div>
             <h2 class="text-lg font-bold text-gear-gold font-cinzel">Branches</h2>

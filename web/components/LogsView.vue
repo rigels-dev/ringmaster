@@ -94,7 +94,7 @@
           <div
             ref="consoleRef"
             @scroll="onConsoleScroll"
-            class="h-full bg-slate-inner/90 py-2 rounded-lg font-mono text-body leading-relaxed overflow-y-auto border border-steel/40 select-text"
+            class="h-full bg-slate-inner/90 pt-2 pb-16 rounded-lg font-mono text-body leading-relaxed overflow-y-auto border border-steel/40 select-text"
           >
             <div v-if="visibleLines.length === 0" class="h-full flex items-center justify-center text-zinc-500 text-body">
               {{ runLogs.length === 0 ? 'No output yet. Run an approved plan from Tasks.' : `No output for ${selectedTask} yet.` }}

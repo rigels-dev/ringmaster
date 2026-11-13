@@ -1,5 +1,5 @@
 <template>
-      <section class="flex-1 flex flex-col p-6 overflow-y-auto">
+      <section class="flex-1 flex flex-col p-6 pb-24 overflow-y-auto">
         <div class="mb-6">
           <h2 class="text-lg font-bold text-gear-gold font-cinzel">Analytics</h2>
           <p class="text-body text-zinc-400">Token usage, cost and time per task and per agent.</p>

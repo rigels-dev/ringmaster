@@ -1,5 +1,5 @@
 <template>
-      <section class="flex-1 flex flex-col p-6 overflow-y-auto">
+      <section class="flex-1 flex flex-col p-6 pb-24 overflow-y-auto">
         <div class="flex items-center justify-between mb-6">
           <div>
             <h2 class="text-lg font-bold text-gear-gold font-cinzel">Tasks</h2>

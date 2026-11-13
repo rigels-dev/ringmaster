@@ -269,7 +269,7 @@
             </span>
           </div>
 
-          <div class="flex-1 p-4 overflow-y-auto space-y-4">
+          <div class="flex-1 p-4 pb-24 overflow-y-auto space-y-4">
             <!-- Parallel Workers (Show if active) -->
             <div v-if="activeWorkersList.length > 0" class="space-y-2">
               <span class="text-xs uppercase font-bold text-zinc-400">Working automatons</span>
