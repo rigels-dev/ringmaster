@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"ringmaster/internal/remote"
+	"ringmaster/internal/workspace"
 )
 
 func TestRemoteViewWithoutRemote(t *testing.T) {
@@ -48,5 +49,17 @@ func TestPushViewMarksRejectedBranches(t *testing.T) {
 	})
 	if !strings.Contains(view, "✗ main") || !strings.Contains(view, "✓ rm/T01") {
 		t.Fatalf("unexpected push view:\n%s", view)
+	}
+}
+
+func TestRemoteViewNamesTheCommitAuthor(t *testing.T) {
+	st := remote.Status{Name: "origin", URL: "git@github.com:you/app.git"}
+	if view := buildRemoteView(st); !strings.Contains(view, "author  Ringmaster") || !strings.Contains(view, "user.name") {
+		t.Fatalf("view does not warn that commits are authored by Ringmaster:\n%s", view)
+	}
+
+	st.Author = workspace.Author{Name: "Ada Lovelace", Email: "ada@example.com", IsUser: true}
+	if view := buildRemoteView(st); !strings.Contains(view, "author  Ada Lovelace <ada@example.com>") {
+		t.Fatalf("view does not name the author:\n%s", view)
 	}
 }

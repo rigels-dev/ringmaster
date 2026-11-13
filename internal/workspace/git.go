@@ -23,7 +23,7 @@ func WorktreesDir(projectRoot string) string {
 }
 
 // Ringmaster is the committer of every commit it makes. The author is the
-// project's owner (see commitAuthor), so on a git host a commit reads
+// project's owner (see CommitAuthor), so on a git host a commit reads
 // "<owner> authored and Ringmaster committed".
 const (
 	committerName  = "Ringmaster"
@@ -48,8 +48,8 @@ func RunGit(ctx context.Context, repoPath string, args ...string) (string, error
 		"GIT_COMMITTER_EMAIL="+committerEmail,
 	)
 	if len(args) > 0 && commitCommands[args[0]] {
-		name, email := commitAuthor(ctx, repoPath)
-		cmd.Env = append(cmd.Env, "GIT_AUTHOR_NAME="+name, "GIT_AUTHOR_EMAIL="+email)
+		author := CommitAuthor(ctx, repoPath)
+		cmd.Env = append(cmd.Env, "GIT_AUTHOR_NAME="+author.Name, "GIT_AUTHOR_EMAIL="+author.Email)
 	}
 
 	var stdout, stderr bytes.Buffer
@@ -68,33 +68,41 @@ func RunGit(ctx context.Context, repoPath string, args ...string) (string, error
 	return outStr, nil
 }
 
-// commitAuthor returns who Ringmaster's commits in repoPath are attributed
-// to: the identity the user has set up for git, so the work shows up as
-// theirs. In order: GIT_AUTHOR_NAME/EMAIL from the environment, then
+// Author is who Ringmaster's commits in a repository are attributed to.
+type Author struct {
+	Name  string `json:"name"`
+	Email string `json:"email"`
+	// IsUser is false when the user has no git identity and Ringmaster's own
+	// is used instead; such commits will not link to anyone's account.
+	IsUser bool `json:"is_user"`
+}
+
+// CommitAuthor returns the author of Ringmaster's commits in repoPath: the
+// identity the user has set up for git, so the work shows up as theirs. In
+// order: GIT_AUTHOR_NAME/EMAIL from the environment, then
 // user.name/user.email from git config (the repository's, else the global
 // one). Ringmaster's own identity is the fallback when the user has none,
 // so a commit never fails for want of an author.
-func commitAuthor(ctx context.Context, repoPath string) (name, email string) {
+func CommitAuthor(ctx context.Context, repoPath string) Author {
 	if n, e := os.Getenv("GIT_AUTHOR_NAME"), os.Getenv("GIT_AUTHOR_EMAIL"); n != "" && e != "" {
-		return n, e
+		return Author{Name: n, Email: e, IsUser: true}
 	}
 
-	name = gitConfig(ctx, repoPath, "user.name")
-	email = gitConfig(ctx, repoPath, "user.email")
+	name := gitConfig(ctx, repoPath, "user.name")
+	email := gitConfig(ctx, repoPath, "user.email")
 
 	// Earlier versions wrote Ringmaster's identity into the repository's own
-	// config when the user had none. If that placeholder is still there but
-	// the user has since set a global identity, the global one is theirs.
+	// config when the user had none. If that placeholder is still there, the
+	// user's global identity is theirs, and without one they have none.
 	if email == committerEmail {
-		if n, e := gitConfig(ctx, repoPath, "--global", "user.name"), gitConfig(ctx, repoPath, "--global", "user.email"); n != "" && e != "" {
-			return n, e
-		}
+		name = gitConfig(ctx, repoPath, "--global", "user.name")
+		email = gitConfig(ctx, repoPath, "--global", "user.email")
 	}
 
-	if name == "" || email == "" {
-		return committerName, committerEmail
+	if name == "" || email == "" || email == committerEmail {
+		return Author{Name: committerName, Email: committerEmail}
 	}
-	return name, email
+	return Author{Name: name, Email: email, IsUser: true}
 }
 
 // gitConfig reads one git config value, "" when it is unset.

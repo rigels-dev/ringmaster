@@ -206,6 +206,9 @@ Write a concise description of the project goal and scope here.
 		fmt.Printf("  ⚠ %s\n", labelStyle.Render(fmt.Sprintf("Current branch is '%s'; task branches are merged into 'main'", branch)))
 	}
 	fmt.Println()
+	if warning := gitIdentityWarning(ctx, projectDir); warning != "" {
+		fmt.Println(warning)
+	}
 
 	// Next Steps Instructions Box
 	var nextSteps string

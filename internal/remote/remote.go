@@ -48,6 +48,9 @@ type Status struct {
 	Name     string   `json:"name"`
 	URL      string   `json:"url"` // "" when the project has no remote yet
 	Branches []Branch `json:"branches"`
+	// Author is who the project's commits are attributed to, which is what a
+	// git host will show once they are pushed.
+	Author workspace.Author `json:"author"`
 }
 
 // Pending counts the branches that a push would send something for.
@@ -140,7 +143,12 @@ func SetURL(ctx context.Context, projectRoot, remoteURL string) error {
 
 // GetStatus reports the remote and the state of main and every task branch.
 func GetStatus(ctx context.Context, projectRoot string) (Status, error) {
-	st := Status{Name: Name, URL: URL(ctx, projectRoot), Branches: []Branch{}}
+	st := Status{
+		Name:     Name,
+		URL:      URL(ctx, projectRoot),
+		Branches: []Branch{},
+		Author:   workspace.CommitAuthor(ctx, projectRoot),
+	}
 
 	out, err := workspace.RunGit(ctx, projectRoot, "for-each-ref",
 		"--format=%(refname) %(objectname)",

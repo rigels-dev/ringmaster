@@ -63,6 +63,8 @@
       <span v-if="errorHint" class="block mt-1 text-rose-300/80">{{ errorHint }}</span>
     </p>
 
+    <GitIdentityNotice :author="status.author" />
+
     <!-- Push state of each branch -->
     <div v-if="status.url && status.branches.length" class="flex flex-wrap gap-1.5">
       <span
@@ -90,7 +92,7 @@ const props = defineProps({
 
 const { showToast, confirmDialog } = useRingmaster()
 
-const status = ref({ url: '', branches: [] })
+const status = ref({ url: '', branches: [], author: null })
 const loaded = ref(false)
 const error = ref('')
 const errorHint = ref('')
@@ -117,7 +119,7 @@ async function load() {
     const res = await fetch('/api/remote')
     const data = await res.json()
     if (!data.ok) throw new Error(data.error || 'Failed to read the remote')
-    status.value = { url: data.url, branches: data.branches }
+    status.value = { url: data.url, branches: data.branches, author: data.author }
   } catch (err) {
     error.value = err.message
     errorHint.value = ''

@@ -136,3 +136,32 @@ func TestMergeCommitIsAuthoredByTheUser(t *testing.T) {
 		t.Fatalf("identities = %q, want %q", got, want)
 	}
 }
+
+func TestCommitAuthorSaysWhetherTheIdentityIsTheUsers(t *testing.T) {
+	ctx := context.Background()
+
+	isolateGit(t, adaGlobal)
+	repo := newRepo(t)
+	if a := CommitAuthor(ctx, repo); !a.IsUser || a.Name != "Ada Lovelace" || a.Email != "ada@example.com" {
+		t.Fatalf("with a global identity: %+v", a)
+	}
+
+	isolateGit(t, "")
+	if a := CommitAuthor(ctx, repo); a.IsUser || a.Name != "Ringmaster" {
+		t.Fatalf("with no identity: %+v", a)
+	}
+
+	// Only a name, no email: not a usable identity
+	isolateGit(t, "[user]\n\tname = Ada Lovelace\n")
+	if a := CommitAuthor(ctx, repo); a.IsUser {
+		t.Fatalf("with a name but no email: %+v", a)
+	}
+
+	// The placeholder older versions left in the repository is not the user's
+	isolateGit(t, "")
+	_, _ = RunGit(ctx, repo, "config", "user.name", "Ringmaster")
+	_, _ = RunGit(ctx, repo, "config", "user.email", "ringmaster@local")
+	if a := CommitAuthor(ctx, repo); a.IsUser {
+		t.Fatalf("with only the old placeholder: %+v", a)
+	}
+}
