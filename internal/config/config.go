@@ -55,7 +55,7 @@ type SandboxConfig struct {
 const DefaultAcceptanceTimeout = 300
 
 // DefaultWebPort is where the web UI listens unless told otherwise.
-const DefaultWebPort = 12053
+const DefaultWebPort = 2053
 
 type WebConfig struct {
 	// Port the web UI listens on (0 = DefaultWebPort). The --port flag and

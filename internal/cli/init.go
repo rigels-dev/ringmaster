@@ -107,7 +107,7 @@ created_at = %q
 # max_tokens_per_task = 300000
 #
 # [web]
-# port = 12053                                 # web UI port for this project
+# port = 2053                                 # web UI port for this project
 #
 # [skills]
 # disabled = ["deploy"]                        # installed skills this project's workers do not get

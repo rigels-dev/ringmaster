@@ -135,7 +135,7 @@ ringmaster init url-shortener && cd url-shortener
 # …or an existing repository (run at its root)
 cd my-repo && ringmaster init
 
-ringmaster               # launcher: open the web UI (http://localhost:12053) or the TUI
+ringmaster               # launcher: open the web UI (http://localhost:2053) or the TUI
 ```
 
 From the command line instead:
@@ -169,10 +169,10 @@ Only `main` and the task branches are pushed; your other branches are left alone
 **Using a remote server?** The web UI listens on localhost only. Forward it over SSH:
 
 ```bash
-ssh -N -L 12053:localhost:12053 user@your-server
+ssh -N -L 2053:localhost:2053 user@your-server
 ```
 
-**Port taken, or two projects open at once?** The web UI listens on port 12053 by default. Pick another for one run with `ringmaster --port 4000` or `RINGMASTER_PORT=4000`, or keep it in the project's `ringmaster.toml` (or in the fleet config, for every project):
+**Port taken, or two projects open at once?** The web UI listens on port 2053 by default. Pick another for one run with `ringmaster --port 4000` or `RINGMASTER_PORT=4000`, or keep it in the project's `ringmaster.toml` (or in the fleet config, for every project):
 
 ```toml
 [web]
