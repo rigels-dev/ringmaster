@@ -13,6 +13,7 @@ import (
 	"ringmaster/internal/schemas"
 	"ringmaster/internal/skills"
 	"ringmaster/internal/storage"
+	"ringmaster/internal/verify"
 )
 
 // GeneratePlan reads BRIEF.md, calls the master agent, validates Plan schema,
@@ -66,8 +67,10 @@ func GeneratePlan(
 	var totalUsage schemas.Usage
 	var plan *schemas.Plan
 
-	// Attempt generation (with 1 self-repair retry if JSON is malformed)
-	for attempt := 1; attempt <= 2; attempt++ {
+	// The master gets its mistakes back and may correct them: malformed JSON,
+	// an invalid DAG, or acceptance commands that cannot run.
+	const maxAttempts = 3
+	for attempt := 1; attempt <= maxAttempts; attempt++ {
 		resp, err := provider.Chat(ctx, masterAgent.Model, llm.ChatRequest{
 			Messages: messages,
 		})
@@ -102,7 +105,7 @@ func GeneratePlan(
 		}
 
 		if err := json.Unmarshal([]byte(content), &raw); err != nil {
-			if attempt == 1 {
+			if attempt < maxAttempts {
 				// Retry with error feedback
 				messages = append(messages, llm.Message{Role: "assistant", Content: resp.Content})
 				messages = append(messages, llm.Message{
@@ -145,7 +148,7 @@ func GeneratePlan(
 		}
 
 		if err := schemas.ValidatePlan(&p); err != nil {
-			if attempt == 1 {
+			if attempt < maxAttempts {
 				messages = append(messages, llm.Message{Role: "assistant", Content: resp.Content})
 				messages = append(messages, llm.Message{
 					Role:    "user",
@@ -154,6 +157,26 @@ func GeneratePlan(
 				continue
 			}
 			return nil, totalUsage, err
+		}
+
+		// Caught here, the master rewrites the command. Caught at run time, it
+		// costs the user a finished attempt that can never be accepted.
+		if problems := unrunnableAcceptance(p.Tasks); len(problems) > 0 {
+			if attempt < maxAttempts {
+				messages = append(messages, llm.Message{Role: "assistant", Content: resp.Content})
+				messages = append(messages, llm.Message{
+					Role: "user",
+					Content: "These acceptance commands cannot run:\n" + strings.Join(problems, "\n") +
+						"\n\nAcceptance commands are executed directly, NOT through a shell. Replace each of them with ONE plain command " +
+						"with space-separated arguments: no quotes, no $(...), backticks, pipes, &&, ||, ;, or redirects. " +
+						"If a check needs logic, have the task add a test file and run that (e.g. \"pytest -q\", \"go test ./...\", \"npm test\"). " +
+						"Return the complete corrected JSON.",
+				})
+				continue
+			}
+			return nil, totalUsage, fmt.Errorf("the master kept writing acceptance commands that cannot run:\n%s\n"+
+				"Generate the plan again, or tell the master in the brief to use plain commands such as 'pytest -q'",
+				strings.Join(problems, "\n"))
 		}
 
 		plan = &p
@@ -220,6 +243,20 @@ acceptance:
 	}
 
 	return plan, totalUsage, nil
+}
+
+// unrunnableAcceptance lists, one line per command, the acceptance commands
+// Ringmaster could never run.
+func unrunnableAcceptance(tasks []schemas.PlanTask) []string {
+	var problems []string
+	for _, t := range tasks {
+		for _, command := range t.Acceptance {
+			if why := verify.UnrunnableReason(strings.TrimSpace(command)); why != "" {
+				problems = append(problems, fmt.Sprintf("- %s: %s\n  %s", t.ID, command, why))
+			}
+		}
+	}
+	return problems
 }
 
 func formatSliceYAML(s []string) string {

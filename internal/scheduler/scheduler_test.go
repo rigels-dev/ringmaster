@@ -386,3 +386,70 @@ func TestSchedulerAwaitingInputAndAnswer(t *testing.T) {
 		t.Errorf("expected answer inbox to be drained, found %d file(s)", len(entries))
 	}
 }
+
+// An acceptance command that needs a shell can never pass. The task must
+// stop before the automaton is called, not after it has done the work.
+func TestTaskWithUnrunnableAcceptanceIsNotStarted(t *testing.T) {
+	projectRoot, cfg := setupTestProject(t)
+	t.Setenv("MOCK_KEY", "dummy")
+
+	spec := `---
+id: T01
+title: "Task One"
+type: backend
+depends_on: []
+worker: "test_worker"
+max_retries: 2
+acceptance:
+  - "python -c \"import pathlib; assert pathlib.Path('README.md').exists()\""
+---
+Implement task one.
+`
+	if err := os.WriteFile(filepath.Join(projectRoot, ".ringmaster", "tasks", "T01-task-one.md"), []byte(spec), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	var mu sync.Mutex
+	calls := 0
+	tsMock := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		calls++
+		mu.Unlock()
+		http.Error(w, "the automaton must not be called", http.StatusInternalServerError)
+	}))
+	defer tsMock.Close()
+	cfg.Providers["mock_prov"] = config.ProviderConfig{Type: "openai", BaseURL: tsMock.URL, APIKeyEnv: "MOCK_KEY"}
+
+	engine, err := NewEngine(projectRoot, cfg, 2)
+	if err != nil {
+		t.Fatalf("NewEngine failed: %v", err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	_ = engine.Run(ctx)
+	if ctx.Err() != nil {
+		t.Fatal("the run did not end on its own")
+	}
+
+	ts := engine.stateMgr.GetState().TaskStates["T01"]
+	if ts.Status != schemas.TaskStateReview {
+		t.Fatalf("T01 status = %s, want NEEDS_REVIEW (err: %s)", ts.Status, ts.Error)
+	}
+	for _, want := range []string{"cannot run as written", ".ringmaster/tasks/", "without a shell"} {
+		if !strings.Contains(ts.Error, want) {
+			t.Errorf("reason does not mention %q:\n%s", want, ts.Error)
+		}
+	}
+	if ts.Usage.TokensIn != 0 || ts.Attempt != 0 {
+		t.Errorf("the task spent an attempt: attempt=%d tokens_in=%d", ts.Attempt, ts.Usage.TokensIn)
+	}
+
+	mu.Lock()
+	defer mu.Unlock()
+	if calls != 0 {
+		t.Errorf("the automaton was called %d time(s) for a task that can never be accepted", calls)
+	}
+	if _, err := os.Stat(filepath.Join(projectRoot, ".ringmaster", "worktrees", "T01")); err == nil {
+		t.Error("a worktree was created for a task that was not started")
+	}
+}
