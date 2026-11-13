@@ -32,6 +32,7 @@ When a worker needs you (a decision, a value only you know, or approval for a co
   Ringmaster-Automaton: sonnet-5.5
   Ringmaster-Attempt: 2
   ```
+  You are the author of these commits and Ringmaster is the committer, so a git host shows them as yours, made through Ringmaster. The author is the identity you have set up for git (`user.name` and `user.email`); use an email your git host knows if you want the commits linked to your account.
 - **Any provider.** OpenAI-compatible APIs (OpenAI, OpenRouter, Ollama, vLLM, DeepSeek and others), the Anthropic API, and a local Claude subscription through the Claude Code CLI.
 - **One fleet for all projects.** Providers and agents are configured once, globally; a project only assigns agents to its tasks.
 - **Guardrails for workers.** Workers run commands only from an allowlist, and their file tools are confined to the task's worktree. Worker and acceptance commands see only a built-in set of environment variables (`PATH`, `HOME`, toolchain paths, proxies) plus the ones you name in `pass_env`, so your API keys and other credentials stay out unless you list them. For agents on a Claude subscription, the Claude Code CLI runs the commands itself, so they also see the CLI's own `CLAUDE_*` and `ANTHROPIC_*` variables. These are guardrails, not isolation: an allowed command such as `go test` still runs code the worker wrote, with your user's permissions. Run Ringmaster inside a container or VM if you need a hard boundary. Each acceptance command has a time limit (default 300 s), adjustable per project or per task.

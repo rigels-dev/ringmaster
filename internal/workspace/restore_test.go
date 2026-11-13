@@ -46,7 +46,6 @@ func TestRestoreFromBase(t *testing.T) {
 	ctx := context.Background()
 	repo := t.TempDir()
 	mustGit(t, repo, "init", "-b", "main")
-	_ = EnsureGitIdentity(ctx, repo)
 	for _, name := range []string{"a_test.go", "b_test.go", "c_test.go", "d_test.go", "sub dir/é_test.go", "code.go"} {
 		put(t, repo, name, "original "+name)
 	}
@@ -122,7 +121,6 @@ func TestRestoreFromBaseUsesUpstreamBranch(t *testing.T) {
 	ctx := context.Background()
 	repo := t.TempDir()
 	mustGit(t, repo, "init", "-b", "main")
-	_ = EnsureGitIdentity(ctx, repo)
 	put(t, repo, "code.go", "v0")
 	mustGit(t, repo, "add", "-A")
 	mustGit(t, repo, "commit", "-m", "base")
