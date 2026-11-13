@@ -59,10 +59,10 @@ allow = [
   "git diff"
 ]
 
-# Port for the web UI (default 12053). A project can set its own in its
+# Port for the web UI (default 2053). A project can set its own in its
 # ringmaster.toml; --port and RINGMASTER_PORT override both.
 # [web]
-# port = 12053
+# port = 2053
 
 # Skills (folders holding a SKILL.md) live in the skills/ directory next to this
 # file and are on until listed here. See "ringmaster skills".
