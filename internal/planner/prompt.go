@@ -74,9 +74,12 @@ INSTRUCTIONS:
 5. Provide at least one concrete, testable command in "acceptance" (e.g. ["go test ./...", "python -m pytest"]).
    Each acceptance command may run for 5 minutes by default. For slower ones (docker build, large
    integration suites) set "acceptance_timeout" on the task, in seconds (e.g. 900).
-   Acceptance commands are executed directly, NOT through a shell. Each entry must be ONE plain command with
-   space-separated arguments: no $(...), backticks, pipes, &&, ||, ;, redirects or quotes.
-   Use separate entries instead (e.g. ["go vet ./...", "go test -race ./..."]).
+   Acceptance commands are executed directly, NOT through a shell. Each entry must be ONE command:
+   no pipes, &&, ||, ;, redirects, $(...) or backticks. Use separate entries instead
+   (e.g. ["go vet ./...", "go test -race ./..."]).
+   An argument that contains spaces MUST be quoted, or it is split into several arguments:
+   write python -c "import mypkg", never python -c import mypkg. Nothing inside quotes is expanded.
+   Prefer a command that runs the project's tests over inline code.
    EXISTING TESTS are protected: a worker may add test files, but any change it makes to a test file that
    already exists in the repository is undone before the acceptance commands run. If a task must change
    existing tests because the intended behaviour changes, set "edits_tests": true on that task (omit it

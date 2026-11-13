@@ -401,7 +401,7 @@ depends_on: []
 worker: "test_worker"
 max_retries: 2
 acceptance:
-  - "python -c \"import pathlib; assert pathlib.Path('README.md').exists()\""
+  - "grep -q json README.md && echo ok"
 ---
 Implement task one.
 `

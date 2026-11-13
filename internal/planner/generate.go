@@ -167,8 +167,9 @@ func GeneratePlan(
 				messages = append(messages, llm.Message{
 					Role: "user",
 					Content: "These acceptance commands cannot run:\n" + strings.Join(problems, "\n") +
-						"\n\nAcceptance commands are executed directly, NOT through a shell. Replace each of them with ONE plain command " +
-						"with space-separated arguments: no quotes, no $(...), backticks, pipes, &&, ||, ;, or redirects. " +
+						"\n\nAcceptance commands are executed directly, NOT through a shell. Each must be ONE command: " +
+						"no pipes, &&, ||, ;, redirects, $(...) or backticks. An argument that contains spaces must be quoted " +
+						"(python -c \"import mypkg\", never python -c import mypkg). " +
 						"If a check needs logic, have the task add a test file and run that (e.g. \"pytest -q\", \"go test ./...\", \"npm test\"). " +
 						"Return the complete corrected JSON.",
 				})
