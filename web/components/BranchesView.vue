@@ -5,10 +5,12 @@
             <h2 class="text-lg font-bold text-gear-gold font-cinzel">Branches</h2>
             <p class="text-body text-zinc-400">Every task branch, where it forked, what each automaton committed, and when it merged into {{ data.main || 'main' }}.</p>
           </div>
-          <button @click="load" class="px-3 py-1.5 bg-slate-panel hover:bg-slate-inner text-zinc-300 text-body rounded border border-steel transition">↻ Refresh</button>
+          <button @click="refresh" class="px-3 py-1.5 bg-slate-panel hover:bg-slate-inner text-zinc-300 text-body rounded border border-steel transition">↻ Refresh</button>
         </div>
 
         <p v-if="error" class="p-3 rounded border border-rose-700 bg-rose-950 text-rose-300 text-body">{{ error }}</p>
+
+        <RemotePanel :refresh-key="refreshKey" />
 
         <!-- Summary -->
         <div v-if="branches.length" class="p-3 rounded-lg border border-steel bg-slate-panel flex flex-wrap gap-x-6 gap-y-2 text-body font-mono text-zinc-400">
@@ -231,6 +233,13 @@ const commits = computed(() => data.value.commits) // newest first
 const branches = computed(() =>
   [...data.value.branches].sort((a, b) => a.task.localeCompare(b.task, undefined, { numeric: true }))
 )
+
+// Refresh reloads the branches and tells the remote panel to reload too
+const refreshKey = ref(0)
+function refresh() {
+  refreshKey.value++
+  load()
+}
 
 async function load() {
   try {

@@ -1,5 +1,6 @@
 import { ringmasterBinPath, rootTomlPath, resolveProjectDir, runCommand } from '../utils/ringmaster'
 import { isSkillName } from '../utils/skills'
+import { cliError } from '../utils/cli'
 
 // Turn a skill on or off in the fleet config (ringmaster skills enable|disable).
 export default defineEventHandler(async (event) => {
@@ -19,9 +20,6 @@ export default defineEventHandler(async (event) => {
     )
     return { ok: true, message: stdout.trim().replace(/^✓\s*/, '') }
   } catch (err: any) {
-    const detail = String(err.stderr || err.message || 'Failed to change the skill')
-    // The CLI prints "Error: ..." followed by its usage text; keep the error line
-    const line = detail.split('\n').find((l) => l.startsWith('Error:')) || detail.split('\n')[0]
-    return { ok: false, error: line.replace(/^Error:\s*/, '').trim() }
+    return { ok: false, error: cliError(err, 'Failed to change the skill') }
   }
 })
