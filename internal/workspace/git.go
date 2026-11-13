@@ -22,9 +22,9 @@ func WorktreesDir(projectRoot string) string {
 	return filepath.Join(projectRoot, StateDirName, "worktrees")
 }
 
-// Ringmaster is the committer of every commit it makes. The author is the
-// project's owner (see CommitAuthor), so on a git host a commit reads
-// "<owner> authored and Ringmaster committed".
+// Ringmaster's own identity. It signs a commit only when the user has no git
+// identity (see CommitAuthor); otherwise commits are the user's alone, and
+// Ringmaster's part is recorded in the commit message and its trailers.
 const (
 	committerName  = "Ringmaster"
 	committerEmail = "ringmaster@local"
@@ -43,13 +43,19 @@ func RunGit(ctx context.Context, repoPath string, args ...string) (string, error
 	defer cancel()
 
 	cmd := exec.CommandContext(tCtx, "git", cmdArgs...)
+	// Git wants a committer for reflog entries too; a commit gets the real one below
 	cmd.Env = append(os.Environ(),
 		"GIT_COMMITTER_NAME="+committerName,
 		"GIT_COMMITTER_EMAIL="+committerEmail,
 	)
 	if len(args) > 0 && commitCommands[args[0]] {
+		// Author and committer are the same person, so a git host shows the
+		// commit under one name: the project owner's
 		author := CommitAuthor(ctx, repoPath)
-		cmd.Env = append(cmd.Env, "GIT_AUTHOR_NAME="+author.Name, "GIT_AUTHOR_EMAIL="+author.Email)
+		cmd.Env = append(cmd.Env,
+			"GIT_AUTHOR_NAME="+author.Name, "GIT_AUTHOR_EMAIL="+author.Email,
+			"GIT_COMMITTER_NAME="+author.Name, "GIT_COMMITTER_EMAIL="+author.Email,
+		)
 	}
 
 	var stdout, stderr bytes.Buffer
@@ -77,8 +83,9 @@ type Author struct {
 	IsUser bool `json:"is_user"`
 }
 
-// CommitAuthor returns the author of Ringmaster's commits in repoPath: the
-// identity the user has set up for git, so the work shows up as theirs. In
+// CommitAuthor returns who Ringmaster's commits in repoPath are made as,
+// both author and committer: the identity the user has set up for git, so
+// the work shows up as theirs. In
 // order: GIT_AUTHOR_NAME/EMAIL from the environment, then
 // user.name/user.email from git config (the repository's, else the global
 // one). Ringmaster's own identity is the fallback when the user has none,
@@ -117,10 +124,17 @@ func gitConfig(ctx context.Context, repoPath string, args ...string) string {
 	return strings.TrimSpace(string(out))
 }
 
-// EnsureStateExcluded lists .ringmaster/ in the repo's info/exclude so that
-// Ringmaster state never shows up in git status or gets committed, without
-// touching the project's own .gitignore. info/exclude lives in the common git
-// dir, so it also covers every task worktree.
+// ManifestName is the project manifest Ringmaster writes next to the code.
+const ManifestName = "ringmaster.toml"
+
+// EnsureStateExcluded lists .ringmaster/ and the project's ringmaster.toml in
+// the repo's info/exclude, so that neither shows up in git status or gets
+// committed, without touching the project's own .gitignore. info/exclude
+// lives in the common git dir, so it also covers every task worktree. It is
+// local to this clone: nothing about it is pushed.
+//
+// A manifest the user has chosen to commit (git add -f) stays tracked; an
+// exclude entry does not affect tracked files.
 func EnsureStateExcluded(ctx context.Context, repoPath string) error {
 	out, err := RunGit(ctx, repoPath, "rev-parse", "--git-common-dir")
 	if err != nil {
@@ -132,11 +146,23 @@ func EnsureStateExcluded(ctx context.Context, repoPath string) error {
 	}
 	excludePath := filepath.Join(commonDir, "info", "exclude")
 
+	// The leading slash anchors the manifest to the repository root, so a file
+	// of the same name deeper in the project is not hidden
+	wanted := []string{StateDirName + "/", "/" + ManifestName}
+
 	existing, _ := os.ReadFile(excludePath)
+	present := map[string]bool{}
 	for _, line := range strings.Split(string(existing), "\n") {
-		if strings.TrimSpace(line) == StateDirName+"/" {
-			return nil
+		present[strings.TrimSpace(line)] = true
+	}
+	var missing []string
+	for _, entry := range wanted {
+		if !present[entry] {
+			missing = append(missing, entry)
 		}
+	}
+	if len(missing) == 0 {
+		return nil
 	}
 
 	_ = os.MkdirAll(filepath.Dir(excludePath), 0755)
@@ -145,7 +171,7 @@ func EnsureStateExcluded(ctx context.Context, repoPath string) error {
 		return err
 	}
 	defer f.Close()
-	entry := "# Ringmaster state\n" + StateDirName + "/\n"
+	entry := "# Ringmaster\n" + strings.Join(missing, "\n") + "\n"
 	if len(existing) > 0 && !strings.HasSuffix(string(existing), "\n") {
 		entry = "\n" + entry
 	}

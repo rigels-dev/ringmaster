@@ -105,6 +105,12 @@ func TestInitExistingRepo(t *testing.T) {
 	if strings.Contains(status, ".ringmaster") {
 		t.Errorf(".ringmaster/ should be git-excluded, status:\n%s", status)
 	}
+	if strings.Contains(status, "ringmaster.toml") {
+		t.Errorf("ringmaster.toml should be git-excluded, status:\n%s", status)
+	}
+	if ignore, err := os.ReadFile(filepath.Join(repoDir, ".gitignore")); err == nil {
+		t.Errorf("init must not create or edit the project's .gitignore:\n%s", ignore)
+	}
 }
 
 // A new project created inside another checkout (e.g. examples/ of the
