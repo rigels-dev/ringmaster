@@ -381,7 +381,9 @@ func planningProject(t *testing.T, url string) (string, *config.Config) {
 	return root, cfg
 }
 
-const shellAcceptance = `python -c "import pathlib; t=pathlib.Path('README.md').read_text(); assert '--json' in t"`
+// What a master wrote in a real run after being told to drop its quotes: the
+// program is no longer one argument, so python would be given just "import".
+const shellAcceptance = `python -c import wordstat`
 
 // The master wrote an acceptance command that needs a shell. It is told which
 // one and why, and its corrected plan is the one that is saved.
@@ -396,7 +398,7 @@ func TestPlannerHasUnrunnableAcceptanceCorrected(t *testing.T) {
 	if *calls != 2 {
 		t.Fatalf("master was called %d time(s), want 2 (plan, then correction)", *calls)
 	}
-	for _, want := range []string{"T01", "python -c", "NOT through a shell", "no quotes"} {
+	for _, want := range []string{"T01", "python -c import wordstat", "NOT through a shell", "must be quoted"} {
 		if !strings.Contains(*lastUser, want) {
 			t.Errorf("the correction request does not mention %q:\n%s", want, *lastUser)
 		}
@@ -450,5 +452,35 @@ func TestPlainAcceptanceCommandsAreLeftAlone(t *testing.T) {
 	}
 	if *calls != 1 {
 		t.Errorf("master was called %d time(s) for a plan with nothing to correct", *calls)
+	}
+}
+
+// Quotes keep an argument together, so a quoted program is a valid check and
+// must not be sent back for correction.
+func TestQuotedAcceptanceCommandIsAccepted(t *testing.T) {
+	url, calls, _ := planServer(t, planWithAcceptance(`python -c "import wordstat; print(wordstat.__version__)"`))
+	root, cfg := planningProject(t, url)
+
+	plan, _, err := GeneratePlan(context.Background(), root, cfg, cfg.Agents["m"], llm.NewProvider("openai", url, "MOCK_KEY"))
+	if err != nil {
+		t.Fatalf("GeneratePlan failed: %v", err)
+	}
+	if *calls != 1 {
+		t.Errorf("master was called %d time(s) for a command that can run", *calls)
+	}
+	if got := plan.Tasks[0].Acceptance[0]; !strings.Contains(got, `"import wordstat;`) {
+		t.Errorf("the quotes were lost: %s", got)
+	}
+}
+
+func TestPlannerIsToldToQuoteArgumentsWithSpaces(t *testing.T) {
+	prompt := MasterSystemPrompt(config.DefaultConfig(), "w", nil)
+	for _, want := range []string{"MUST be quoted", `python -c "import mypkg"`, "NOT through a shell"} {
+		if !strings.Contains(prompt, want) {
+			t.Errorf("planner prompt lacks %q", want)
+		}
+	}
+	if strings.Contains(prompt, "redirects or quotes") {
+		t.Error("planner prompt still forbids quotes")
 	}
 }

@@ -69,13 +69,17 @@ func isWithin(root, path string) bool {
 // CheckCommand checks if cmd string matches the allowlist by token prefix (not substring).
 // e.g. "go test -v" matches allowlist "go test", but "rm -rf" does not.
 func CheckCommand(cmd string, allowlist []string) bool {
-	fields := strings.Fields(strings.TrimSpace(cmd))
-	if len(fields) == 0 {
+	// Split the way the command will be run, so quoting cannot hide what it is
+	fields, err := SplitCommand(cmd)
+	if err != nil {
 		return false
 	}
 
 	for _, allowed := range allowlist {
-		allowFields := strings.Fields(strings.TrimSpace(allowed))
+		allowFields, err := SplitCommand(allowed)
+		if err != nil {
+			allowFields = strings.Fields(strings.TrimSpace(allowed))
+		}
 		if len(allowFields) == 0 {
 			continue
 		}

@@ -85,7 +85,7 @@
             <template v-else>
               <div class="text-zinc-300"><span class="text-zinc-500">[{{ r.id }}]</span> {{ r.question }}</div>
               <div v-if="r.secret" class="text-xs text-amber-300">Secret: enter the NAME of the environment variable that holds it, never the value.</div>
-              <input v-model="form.replies[r.id]" :placeholder="r.secret ? 'e.g. SHORTENER_API_KEY' : 'Your answer'"
+              <input v-model="form.replies[r.id]" :placeholder="r.secret ? 'e.g. MY_SERVICE_API_KEY' : 'Your answer'"
                 class="w-full bg-slate-dark border border-steel rounded px-2 py-1 text-zinc-200" />
             </template>
           </div>
@@ -93,7 +93,7 @@
           <div>
             <label class="text-zinc-400 text-xs">{{ requests.length ? 'Extra notes (optional)' : noteLabel }}</label>
             <textarea v-model="form.text" rows="3" class="w-full mt-1 bg-slate-dark border border-steel rounded px-2 py-1 text-zinc-200"
-              :placeholder="requests.length ? 'Anything else the automaton should know' : 'e.g. Drop the gofmt check; go vet covers it.'"></textarea>
+              :placeholder="requests.length ? 'Anything else the automaton should know' : 'Tell the automaton what to do differently, or what you have already fixed yourself.'"></textarea>
           </div>
 
           <div class="flex items-center justify-between gap-2">
@@ -217,7 +217,7 @@ const requests = computed(() => detail.value?.state?.requests || [])
 const noteLabel = computed(() => ({
   BLOCKED: 'What does the automaton need to get unblocked?',
   NEEDS_REVIEW: 'Guidance for the next attempt',
-  PAUSED: 'Optional note before resuming (e.g. narrow the scope to save tokens)'
+  PAUSED: 'Optional note before resuming'
 }[detail.value?.state?.status] || 'Your answer'))
 
 const approvalOptions = [

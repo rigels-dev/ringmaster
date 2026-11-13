@@ -28,25 +28,19 @@ type CheckResult struct {
 	TimedOut bool `json:"timed_out,omitempty"`
 }
 
-// shellSyntax lists constructs that need a shell; acceptance commands are exec'd directly.
-var shellSyntax = []string{"$(", "`", "|", "&", ";", ">", "<", "\"", "'"}
-
-func hasShellSyntax(cmd string) bool {
-	for _, s := range shellSyntax {
-		if strings.Contains(cmd, s) {
-			return true
-		}
-	}
-	return false
-}
-
 // UnrunnableReason says why Ringmaster can never run cmd as an acceptance
 // command, or "" when it can. Acceptance commands are executed directly,
-// without a shell, so anything that needs one cannot pass however good the
-// work is. The planner and the scheduler ask this before any work is done.
+// without a shell: quotes keep an argument together, but pipes, &&, ;,
+// redirects and substitutions cannot work, so such a command would fail
+// however good the work is. The planner and the scheduler ask this before
+// any work is done.
 func UnrunnableReason(cmd string) string {
-	if hasShellSyntax(cmd) {
-		return "Shell syntax ($(), backticks, pipes, &, ;, redirects, quotes) is not supported: acceptance commands run without a shell. Use one plain command per entry."
+	args, err := worker.SplitCommand(cmd)
+	if err != nil {
+		return "Acceptance commands run without a shell: " + err.Error() + "."
+	}
+	if why := worker.UnquotedInlineCode(args); why != "" {
+		return "Acceptance commands run without a shell: " + why + "."
 	}
 	return ""
 }
@@ -86,7 +80,8 @@ func RunAcceptance(ctx context.Context, task schemas.TaskSpec, worktree string, 
 			continue
 		}
 
-		fields := strings.Fields(cmdStr)
+		// UnrunnableReason above has already accepted the command
+		fields, _ := worker.SplitCommand(cmdStr)
 		c := fields[0]
 		args := fields[1:]
 

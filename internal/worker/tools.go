@@ -100,8 +100,9 @@ func (ts *ToolSet) Definitions() []llm.ToolDefinition {
 		{
 			Type: "function",
 			Function: llm.ToolFunction{
-				Name:        "run_cmd",
-				Description: "Execute a command permitted by sandbox allowlist.",
+				Name: "run_cmd",
+				Description: "Execute one command permitted by the sandbox allowlist. It runs directly, not through a shell: " +
+					"pipes, &&, ;, redirects and $(...) do not work. Quote an argument that contains spaces, e.g. python -c \"import mypkg\".",
 				Parameters: map[string]any{
 					"type": "object",
 					"properties": map[string]any{
@@ -284,11 +285,16 @@ func (ts *ToolSet) runCmd(ctx context.Context, cmdStr string) string {
 		return "Error: empty command string"
 	}
 
+	fields, err := SplitCommand(cmdStr)
+	if err != nil {
+		return fmt.Sprintf("Error: command '%s' cannot be run: %v", cmdStr, err)
+	}
+	if why := UnquotedInlineCode(fields); why != "" {
+		return fmt.Sprintf("Error: command '%s' cannot be run: %s", cmdStr, why)
+	}
 	if !CheckCommand(cmdStr, ts.allowlist) {
 		return fmt.Sprintf("Error: command '%s' is not in sandbox allowlist", cmdStr)
 	}
-
-	fields := strings.Fields(cmdStr)
 	c := fields[0]
 	args := fields[1:]
 
@@ -303,7 +309,7 @@ func (ts *ToolSet) runCmd(ctx context.Context, cmdStr string) string {
 	cmd.Stdout = &outBuf
 	cmd.Stderr = &outBuf
 
-	err := cmd.Run()
+	err = cmd.Run()
 	output := outBuf.Bytes()
 
 	if len(output) > maxOutputBytes {

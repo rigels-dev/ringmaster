@@ -22,7 +22,7 @@
                 <input 
                   v-model="newProv.id" 
                   type="text" 
-                  placeholder="e.g. anthropic, 9router, ollama" 
+                  placeholder="A short name you choose, e.g. openrouter" 
                   class="w-full bg-slate-inner border border-steel text-parchment text-body px-3 py-2 rounded focus:outline-none focus:border-gear-gold"
                 />
               </div>
@@ -34,7 +34,7 @@
                   @change="handleTypeChange"
                   class="w-full bg-slate-inner border border-steel text-parchment text-body px-3 py-2 rounded focus:outline-none focus:border-gear-gold"
                 >
-                  <option value="openai">OpenAI Compatible (OpenAI, 9router, Ollama, OpenRouter)</option>
+                  <option value="openai">OpenAI-compatible (OpenAI, OpenRouter, Ollama and others)</option>
                   <option value="anthropic">Claude API (Anthropic Messages API)</option>
                   <option value="claude_subscription">Claude Subscription (Local Claude CLI / OAuth)</option>
                 </select>
@@ -46,7 +46,7 @@
                   v-model="newProv.base_url" 
                   :disabled="newProv.type === 'claude_subscription'"
                   type="text" 
-                  :placeholder="newProv.type === 'claude_subscription' ? '(Not needed - uses local Claude CLI)' : 'http://localhost:20128/v1 or https://api.openai.com/v1'" 
+                  :placeholder="newProv.type === 'claude_subscription' ? '(Not needed - uses local Claude CLI)' : 'The API base URL, e.g. https://api.openai.com/v1'" 
                   class="w-full bg-slate-inner border border-steel text-parchment text-body px-3 py-2 rounded focus:outline-none focus:border-gear-gold disabled:opacity-40 disabled:cursor-not-allowed"
                 />
               </div>
@@ -58,7 +58,7 @@
                     v-model="newProv.api_key_env" 
                     :disabled="newProv.type === 'claude_subscription'"
                     :type="showApiKey ? 'text' : 'password'" 
-                    :placeholder="newProv.type === 'claude_subscription' ? '(Not needed - uses ~/.claude/ credentials)' : 'e.g. sk-xxx or OPENAI_API_KEY'" 
+                    :placeholder="newProv.type === 'claude_subscription' ? '(Not needed - uses ~/.claude/ credentials)' : 'e.g. OPENAI_API_KEY'" 
                     class="w-full bg-slate-inner border border-steel text-parchment text-body px-3 py-2 pr-9 rounded focus:outline-none focus:border-gear-gold disabled:opacity-40 disabled:cursor-not-allowed tracking-widest font-mono"
                   />
                   <button 
@@ -159,7 +159,7 @@
             <div class="grid grid-cols-4 gap-3">
               <div>
                 <label class="block text-2xs text-zinc-400 mb-1">Agent name</label>
-                <input v-model="newAgent.id" type="text" placeholder="e.g. planner-gemini, coder-flash" class="w-full bg-slate-panel border border-steel text-body px-2.5 py-1.5 rounded text-parchment focus:outline-none focus:border-gear-gold" />
+                <input v-model="newAgent.id" type="text" placeholder="A short name you choose, e.g. planner" class="w-full bg-slate-panel border border-steel text-body px-2.5 py-1.5 rounded text-parchment focus:outline-none focus:border-gear-gold" />
               </div>
               <div>
                 <label class="block text-2xs text-zinc-400 mb-1">Provider</label>
@@ -180,7 +180,7 @@
                   </select>
                 </div>
                 <div v-else>
-                  <input v-model="newAgent.model" type="text" placeholder="e.g. ag/gemini-3.8-flash, gpt-4o" class="w-full bg-slate-panel border border-steel text-body px-2.5 py-1.5 rounded text-parchment focus:outline-none focus:border-gear-gold" />
+                  <input v-model="newAgent.model" type="text" placeholder="The model ID, as the provider names it" class="w-full bg-slate-panel border border-steel text-body px-2.5 py-1.5 rounded text-parchment focus:outline-none focus:border-gear-gold" />
                 </div>
               </div>
               <div>
