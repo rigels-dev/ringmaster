@@ -45,7 +45,7 @@ When a worker needs you (a decision, a value only you know, or approval for a co
 | View | What it shows |
 |---|---|
 | **Chat** | Brief the master planner, then generate the plan |
-| **Tasks** | The DAG, plan approval with open questions, and per-task detail (spec, report, transcripts, answers) |
+| **Tasks** | The DAG, plan approval with open questions, and per-task detail (spec, report, transcripts, answers). When every task is done: tag a release, download an archive, push |
 | **Branches** | Commit graph per task branch: where it forked, what each automaton committed, when it merged. Set the git remote and push `main` and the task branches |
 | **Providers** | Providers and agents; pick the master and default worker |
 | **Logs** | Live and past runs, colored per task, with a lane for each working automaton |
@@ -151,6 +151,7 @@ ringmaster usage         # token usage per agent and task
 ringmaster skills        # installed agent skills; enable or disable them
 ringmaster remote set https://github.com/you/project.git   # once: where to publish
 ringmaster push          # push main and the task branches there
+ringmaster release       # when everything is done: tag a release (suggests the next version)
 ```
 
 Project commands work from any subdirectory of a project, the way `go` finds `go.mod`, and refuse to run outside one.
@@ -165,6 +166,17 @@ ringmaster push --main-only
 ```
 
 Only `main` and the task branches are pushed; your other branches are left alone. A push is never forced: if the remote has commits this project does not, that branch is rejected and reported. Pushing uses your own git login (an SSH key or a credential helper) and never prompts, so a missing login fails at once. Ringmaster refuses a URL with credentials in it, since it would be stored in `.git/config`.
+
+**When every task is done.** The Tasks view shows what the run did and what comes next: release it, download it, push it, or plan the next change. From the command line:
+
+```bash
+ringmaster release                 # the last release, and suggested next versions
+ringmaster release v0.2.0          # tag main as v0.2.0
+ringmaster release v0.2.0 --push   # and push main and that tag to origin
+ringmaster archive v0.2.0          # .ringmaster/archives/<project>-v0.2.0.zip
+```
+
+A release is an annotated git tag on `main`, made in your name. The version is yours to choose, in any scheme. Ringmaster only suggests: from `v0.1.0` it offers `v0.1.1` (fixes only), `v0.2.0` (new features) and `v1.0.0` (breaking changes), and marks the one that fits what was built; with no tag yet it offers `v0.1.0`. A tag that is not a version number gets no suggestion. A version that exists is never moved or replaced, and a release is refused while tasks of the current plan are unfinished (`--force` overrides). An archive holds only the files git tracks at that tag, so Ringmaster's state and untracked files stay out; `--format tar.gz` is also available.
 
 **Using a remote server?** The web UI listens on localhost only. Forward it over SSH:
 

@@ -30,10 +30,13 @@ const (
 	committerEmail = "ringmaster@local"
 )
 
-// Git subcommands that write a commit, and so need an author.
+// Git subcommands that write a commit or an annotated tag, and so carry the
+// user's name.
 var commitCommands = map[string]bool{
 	"commit": true, "commit-tree": true, "merge": true,
 	"cherry-pick": true, "revert": true, "rebase": true, "am": true,
+	// An annotated tag names its tagger, who should be the user as well
+	"tag": true,
 }
 
 // RunGit runs a git command with -C <repoPath> explicitly.
