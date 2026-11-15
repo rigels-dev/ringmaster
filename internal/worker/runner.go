@@ -197,8 +197,11 @@ Do not ask about anything already answered under HUMAN ANSWERS & FEEDBACK.
 			break
 		}
 
-		// Check budget limit
-		if res.Usage.TokensTotal() >= maxTokens {
+		// The budget stops further work. It is checked here only, before a
+		// turn is paid for: a turn that has already run is never thrown away,
+		// so an attempt that finished its work while going over still gets
+		// its acceptance checks.
+		if res.Usage.BudgetTokens() >= maxTokens {
 			res.Status = schemas.ReportStatusNeedsReview
 			res.Reason = "BUDGET"
 			break
@@ -244,13 +247,6 @@ Do not ask about anything already answered under HUMAN ANSWERS & FEEDBACK.
 		res.Usage.TokensCached += resp.Usage.CachedTokens
 		res.Usage.CostUSD += resp.Usage.CostUSD
 		res.Usage.TokensOut += resp.Usage.CompletionTokens
-
-		// Check budget limit after turn tokens accumulated
-		if res.Usage.TokensTotal() >= maxTokens {
-			res.Status = schemas.ReportStatusNeedsReview
-			res.Reason = "BUDGET"
-			break
-		}
 
 		recordLog(TranscriptEntry{
 			Turn:      turn,

@@ -31,7 +31,14 @@
           </div>
           <div class="bg-slate-inner border border-steel/50 rounded p-2">
             <div class="text-zinc-500 text-2xs uppercase">Tokens in / out</div>
-            <div class="text-zinc-200">{{ detail.state?.usage?.tokens_in ?? 0 }} / {{ detail.state?.usage?.tokens_out ?? 0 }}</div>
+            <div class="text-zinc-200">{{ fmtTokens(detail.state?.usage?.tokens_in) }} / {{ fmtTokens(detail.state?.usage?.tokens_out) }}</div>
+            <div
+              v-if="detail.state?.usage?.tokens_cached"
+              class="text-zinc-500 text-2xs"
+              title="Read from the prompt cache. These are part of the input count, cost about a tenth, and count as a tenth toward the token budget."
+            >
+              {{ fmtTokens(detail.state.usage.tokens_cached) }} of the input from cache
+            </div>
           </div>
           <div class="bg-slate-inner border border-steel/50 rounded p-2">
             <div class="text-zinc-500 text-2xs uppercase">Duration</div>
@@ -281,6 +288,8 @@ async function submitAnswer() {
     await load()
   }
 }
+
+const fmtTokens = (n) => Number(n || 0).toLocaleString('en-US')
 
 const duration = computed(() => {
   const s = detail.value?.state

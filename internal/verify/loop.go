@@ -138,6 +138,9 @@ func RunTaskLoop(
 		}
 
 		decision := Decide(attemptRes.Report, checks, attempt, maxRetries, budgetExceeded)
+		if budgetExceeded {
+			decision.Reason = budgetPauseReason(attemptRes.Usage, budget)
+		}
 		if len(restored) > 0 && decision.Type == DecisionRETRY {
 			// The worker's next attempt must know why its test changes are gone
 			decision.FailureLogs = restoredTestsNote(restored) + "\n\n" + decision.FailureLogs
@@ -207,4 +210,18 @@ func acceptanceTimeout(task schemas.TaskSpec, sandboxCfg config.SandboxConfig) t
 		seconds = config.DefaultAcceptanceTimeout
 	}
 	return time.Duration(seconds) * time.Second
+}
+
+// budgetPauseReason tells the user what stopped the task and what they can
+// do, since the limit applies even when they never set one.
+func budgetPauseReason(used schemas.Usage, budget config.BudgetConfig) string {
+	limit := budget.MaxTokensPerTask
+	if limit == 0 {
+		limit = 300000
+	}
+	return fmt.Sprintf("This attempt reached the task's token budget before the work was finished: %d of %d budget tokens "+
+		"(%d in, of which %d were read from the cache and count as a tenth; %d out).\n\n"+
+		"Resume to give the task another %d, or raise the limit first with [budget] max_tokens_per_task in ringmaster.toml "+
+		"(the default is 300000 when it is not set).",
+		used.BudgetTokens(), limit, used.TokensIn, used.TokensCached, used.TokensOut, limit)
 }

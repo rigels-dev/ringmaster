@@ -121,7 +121,8 @@ func (e *Engine) Run(ctx context.Context) error {
 			_ = e.stateMgr.UpdateProject(func(ps *schemas.ProjectState) {
 				ps.Status = "PAUSED"
 			})
-			return fmt.Errorf("project paused: total tokens (%d) exceeded project budget (%d)",
+			return fmt.Errorf("project paused: %d budget tokens used, the project budget is %d. "+
+				"Raise [budget] max_tokens_per_project in ringmaster.toml to continue (the default is 2000000)",
 				consumed, e.cfg.Budget.MaxTokensPerProject)
 		}
 
