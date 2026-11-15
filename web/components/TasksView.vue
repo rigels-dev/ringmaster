@@ -66,6 +66,9 @@
           </div>
         </div>
 
+        <!-- Everything is merged: say so, and offer what comes next -->
+        <RunCompleteBanner v-if="allTasksDone" />
+
         <!-- Said before a run, because a commit's author cannot be changed afterwards -->
         <GitIdentityNotice v-if="tasks.length > 0" class="mb-6" />
 
@@ -318,6 +321,13 @@ watch(() => unansweredQuestions.value.length, (n, prev) => {
 })
 
 const openTask = computed(() => tasks.value.find(t => t.id === openTaskId.value) || null)
+
+// Shown only when nothing is left to do: every task done, and no run going
+const allTasksDone = computed(() =>
+  tasks.value.length > 0 &&
+  !isRunActive.value &&
+  tasks.value.every(t => t.status === 'COMPLETED' || t.status === 'DONE')
+)
 
 // Re-planning happens in the chat so its progress messages are visible there
 function replanInChat() {

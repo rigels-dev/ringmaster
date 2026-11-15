@@ -217,6 +217,27 @@ type PushResult struct {
 // hanging. The results list what happened to each branch even when the push
 // as a whole returns an error.
 func Push(ctx context.Context, projectRoot string, mainOnly bool) ([]PushResult, error) {
+	refspecs := []string{"refs/heads/" + MainBranch + ":refs/heads/" + MainBranch}
+	if !mainOnly {
+		refspecs = append(refspecs, "refs/heads/"+TaskPrefix+"*:refs/heads/"+TaskPrefix+"*")
+	}
+	return push(ctx, projectRoot, refspecs)
+}
+
+// PushRelease sends main and one release tag to origin. Only that tag is
+// pushed, never the user's other tags. Like Push it never forces, so a tag
+// that already exists on the remote with other contents is rejected.
+func PushRelease(ctx context.Context, projectRoot, tag string) ([]PushResult, error) {
+	if tag == "" || strings.HasPrefix(tag, "-") {
+		return nil, errors.New("no release tag to push")
+	}
+	return push(ctx, projectRoot, []string{
+		"refs/heads/" + MainBranch + ":refs/heads/" + MainBranch,
+		"refs/tags/" + tag + ":refs/tags/" + tag,
+	})
+}
+
+func push(ctx context.Context, projectRoot string, refspecs []string) ([]PushResult, error) {
 	remoteURL := URL(ctx, projectRoot)
 	if remoteURL == "" {
 		return nil, errors.New("this project has no remote yet; set one first (ringmaster remote set <url>)")
@@ -225,11 +246,7 @@ func Push(ctx context.Context, projectRoot string, mainOnly bool) ([]PushResult,
 		return nil, fmt.Errorf("the project has no %q branch to push", MainBranch)
 	}
 
-	args := []string{"-C", projectRoot, "push", "--porcelain", Name,
-		"refs/heads/" + MainBranch + ":refs/heads/" + MainBranch}
-	if !mainOnly {
-		args = append(args, "refs/heads/"+TaskPrefix+"*:refs/heads/"+TaskPrefix+"*")
-	}
+	args := append([]string{"-C", projectRoot, "push", "--porcelain", Name}, refspecs...)
 
 	tCtx, cancel := context.WithTimeout(ctx, pushTimeout)
 	defer cancel()
@@ -263,9 +280,14 @@ func parsePorcelain(out string) []PushResult {
 			continue // "To <url>" and "Done"
 		}
 		from, _, _ := strings.Cut(fields[1], ":")
+		// A branch is reported by its name, a tag as "tag <name>"
 		branch, ok := strings.CutPrefix(from, "refs/heads/")
 		if !ok {
-			continue
+			tag, isTag := strings.CutPrefix(from, "refs/tags/")
+			if !isTag {
+				continue
+			}
+			branch = "tag " + tag
 		}
 		res := PushResult{Branch: branch}
 		switch fields[0] {
