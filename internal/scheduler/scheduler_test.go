@@ -532,3 +532,122 @@ Implement task one.
 		t.Error("a worktree was created for a task that was not started")
 	}
 }
+
+// An automaton that finishes without a report Ringmaster can use is told
+// what was wrong and writes the report again. The user is not asked.
+func TestUnusableReportIsRetriedNotSentToTheUser(t *testing.T) {
+	projectRoot, cfg := setupTestProject(t)
+	t.Setenv("MOCK_KEY", "dummy")
+
+	var mu sync.Mutex
+	t01Calls := 0
+	var feedback string
+	tsMock := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var body map[string]any
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		messages, _ := body["messages"].([]any)
+		tID := "T01"
+		all := ""
+		for _, m := range messages {
+			content, _ := m.(map[string]any)["content"].(string)
+			all += content + "\n"
+			if strings.Contains(content, "T02") {
+				tID = "T02"
+			}
+		}
+		last, _ := messages[len(messages)-1].(map[string]any)
+
+		message := map[string]any{"role": "assistant", "content": "All done, the report is written."}
+		mu.Lock()
+		if tID == "T01" {
+			t01Calls++
+		}
+		// T01's first attempt says it is done but writes no report at all
+		skipReport := tID == "T01" && t01Calls == 1
+		if tID == "T01" && strings.Contains(all, "PREVIOUS ATTEMPT FAILED") {
+			feedback = all
+		}
+		mu.Unlock()
+
+		if !skipReport && last["role"] != "tool" {
+			report := fmt.Sprintf("---\nstatus: COMPLETED\nattempts: 1\ncalls: 1\ntokens_in: 1\ntokens_out: 1\nfiles_changed: []\n---\n\n## Summary\nFinished %s", tID)
+			message = map[string]any{"role": "assistant", "tool_calls": []map[string]any{{
+				"id": "call_0", "type": "function",
+				"function": map[string]any{"name": "write_file", "arguments": fmt.Sprintf(`{"path":".ringmaster/outputs/%s.md","content":%q}`, tID, report)},
+			}}}
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"choices": []map[string]any{{"message": message}},
+			"usage":   map[string]any{"prompt_tokens": 50, "completion_tokens": 20, "total_tokens": 70},
+		})
+	}))
+	defer tsMock.Close()
+	cfg.Providers["mock_prov"] = config.ProviderConfig{Type: "openai", BaseURL: tsMock.URL, APIKeyEnv: "MOCK_KEY"}
+
+	engine, err := NewEngine(projectRoot, cfg, 2)
+	if err != nil {
+		t.Fatalf("NewEngine failed: %v", err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	if err := engine.Run(ctx); err != nil {
+		t.Fatalf("engine.Run failed: %v", err)
+	}
+
+	state := engine.stateMgr.GetState()
+	t01 := state.TaskStates["T01"]
+	if t01.Status != schemas.TaskStateCompleted {
+		t.Fatalf("T01 status = %s, want COMPLETED (err: %s)", t01.Status, t01.Error)
+	}
+	if t01.Attempt != 2 {
+		t.Errorf("T01 took %d attempt(s), want 2 (one without a report, one with)", t01.Attempt)
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	for _, want := range []string{"there is no report file", ".ringmaster/outputs/T01.md", "do NOT redo", "status: COMPLETED"} {
+		if !strings.Contains(feedback, want) {
+			t.Errorf("the second attempt was not told %q", want)
+		}
+	}
+}
+
+// When it never writes a usable report, the user is told exactly that.
+func TestUnusableReportAfterAllRetriesIsExplained(t *testing.T) {
+	projectRoot, cfg := setupTestProject(t)
+	t.Setenv("MOCK_KEY", "dummy")
+
+	tsMock := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"choices": []map[string]any{{"message": map[string]any{"role": "assistant", "content": "T01 is done and the report is written."}}},
+			"usage":   map[string]any{"prompt_tokens": 50, "completion_tokens": 20, "total_tokens": 70},
+		})
+	}))
+	defer tsMock.Close()
+	cfg.Providers["mock_prov"] = config.ProviderConfig{Type: "openai", BaseURL: tsMock.URL, APIKeyEnv: "MOCK_KEY"}
+
+	engine, err := NewEngine(projectRoot, cfg, 2)
+	if err != nil {
+		t.Fatalf("NewEngine failed: %v", err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	_ = engine.Run(ctx)
+
+	t01 := engine.stateMgr.GetState().TaskStates["T01"]
+	if t01.Status != schemas.TaskStateReview {
+		t.Fatalf("T01 status = %s, want NEEDS_REVIEW", t01.Status)
+	}
+	if t01.Attempt != 3 {
+		t.Errorf("T01 took %d attempt(s), want 3 (max_retries is 2)", t01.Attempt)
+	}
+	for _, want := range []string{"no report Ringmaster could use", "there is no report file", "acceptance checks were not run"} {
+		if !strings.Contains(t01.Error, want) {
+			t.Errorf("the reason does not say %q:\n%s", want, t01.Error)
+		}
+	}
+	if strings.Contains(t01.Error, "requested human review") {
+		t.Errorf("the reason still claims the automaton asked for review:\n%s", t01.Error)
+	}
+}
