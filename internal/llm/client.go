@@ -218,6 +218,10 @@ func (c *OpenAICompatibleClient) Chat(ctx context.Context, model string, req Cha
 				PromptTokens     int `json:"prompt_tokens"`
 				CompletionTokens int `json:"completion_tokens"`
 				TotalTokens      int `json:"total_tokens"`
+				// Providers that cache prompts say how much of the input came from the cache
+				PromptTokensDetails struct {
+					CachedTokens int `json:"cached_tokens"`
+				} `json:"prompt_tokens_details"`
 			} `json:"usage"`
 		}
 
@@ -243,6 +247,7 @@ func (c *OpenAICompatibleClient) Chat(ctx context.Context, model string, req Cha
 				PromptTokens:     rawResp.Usage.PromptTokens,
 				CompletionTokens: rawResp.Usage.CompletionTokens,
 				TotalTokens:      rawResp.Usage.TotalTokens,
+				CachedTokens:     rawResp.Usage.PromptTokensDetails.CachedTokens,
 			},
 		}, nil
 	}

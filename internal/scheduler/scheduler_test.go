@@ -255,8 +255,15 @@ func TestSchedulerPausedTaskIsNotRedispatched(t *testing.T) {
 		mu.Unlock()
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]any{
-			"choices": []map[string]any{{"message": map[string]any{"role": "assistant", "content": "working"}}},
-			"usage":   map[string]any{"prompt_tokens": 50, "completion_tokens": 20, "total_tokens": 70},
+			// The automaton asks for another step, so it is not done when the budget runs out
+			"choices": []map[string]any{{"message": map[string]any{
+				"role": "assistant",
+				"tool_calls": []map[string]any{{
+					"id": "call_0", "type": "function",
+					"function": map[string]any{"name": "read_file", "arguments": `{"path":"README.md"}`},
+				}},
+			}}},
+			"usage": map[string]any{"prompt_tokens": 50, "completion_tokens": 20, "total_tokens": 70},
 		})
 	}))
 	defer tsMock.Close()
@@ -285,6 +292,78 @@ func TestSchedulerPausedTaskIsNotRedispatched(t *testing.T) {
 	}
 	if calls != 1 {
 		t.Errorf("expected exactly 1 LLM call (no re-dispatch loop), got %d", calls)
+	}
+	reason := state.TaskStates["T01"].Error
+	for _, want := range []string{"70 of 10 budget tokens", "max_tokens_per_task", "Resume"} {
+		if !strings.Contains(reason, want) {
+			t.Errorf("the pause reason does not say %q:\n%s", want, reason)
+		}
+	}
+}
+
+// An agentic automaton does a whole task in one call and reads its context
+// from the cache on every step. Its raw input count is far above the limit,
+// but most of it is cache reads, and the work is finished: the task must be
+// verified and merged, not paused.
+func TestFinishedTaskIsNotPausedForCacheReads(t *testing.T) {
+	projectRoot, cfg := setupTestProject(t)
+	t.Setenv("MOCK_KEY", "dummy")
+
+	tsMock := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var body map[string]any
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		messages, _ := body["messages"].([]any)
+		tID := "T01"
+		for _, m := range messages {
+			if content, _ := m.(map[string]any)["content"].(string); strings.Contains(content, "T02") {
+				tID = "T02"
+				break
+			}
+		}
+		// Second call of a task: the report is written, so the automaton stops
+		last, _ := messages[len(messages)-1].(map[string]any)
+		message := map[string]any{"role": "assistant", "content": "done"}
+		if last["role"] != "tool" {
+			report := fmt.Sprintf("---\nstatus: COMPLETED\nattempts: 1\ncalls: 1\ntokens_in: 1\ntokens_out: 1\nfiles_changed: []\n---\n\n## Summary\nFinished %s", tID)
+			message = map[string]any{"role": "assistant", "tool_calls": []map[string]any{{
+				"id": "call_0", "type": "function",
+				"function": map[string]any{"name": "write_file", "arguments": fmt.Sprintf(`{"path":".ringmaster/outputs/%s.md","content":%q}`, tID, report)},
+			}}}
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"choices": []map[string]any{{"message": message}},
+			// 400k input per call, 396k of it from the cache: 4k + 39.6k + 1k budget tokens
+			"usage": map[string]any{
+				"prompt_tokens": 400000, "completion_tokens": 1000, "total_tokens": 401000,
+				"prompt_tokens_details": map[string]any{"cached_tokens": 396000},
+			},
+		})
+	}))
+	defer tsMock.Close()
+	cfg.Providers["mock_prov"] = config.ProviderConfig{Type: "openai", BaseURL: tsMock.URL, APIKeyEnv: "MOCK_KEY"}
+	cfg.Budget.MaxTokensPerTask = 300000
+	cfg.Budget.MaxTokensPerProject = 2000000
+
+	engine, err := NewEngine(projectRoot, cfg, 2)
+	if err != nil {
+		t.Fatalf("NewEngine failed: %v", err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	if err := engine.Run(ctx); err != nil {
+		t.Fatalf("engine.Run failed: %v", err)
+	}
+
+	state := engine.stateMgr.GetState()
+	for _, id := range []string{"T01", "T02"} {
+		ts := state.TaskStates[id]
+		if ts.Status != schemas.TaskStateCompleted {
+			t.Errorf("%s status = %s, want COMPLETED (err: %s)", id, ts.Status, ts.Error)
+		}
+		if ts.Usage.TokensIn < 300000 {
+			t.Errorf("%s recorded %d input tokens; the test needs a raw count above the limit", id, ts.Usage.TokensIn)
+		}
 	}
 }
 

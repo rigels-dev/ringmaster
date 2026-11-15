@@ -119,14 +119,16 @@ func (sm *StateManager) UpdateProject(fn func(*schemas.ProjectState)) error {
 	return sm.saveLocked()
 }
 
-// TotalTokensConsumed calculates cumulative tokens across planning and task executions.
+// TotalTokensConsumed is what the project budget is measured against: the
+// budget tokens of planning and of every task (see Usage.BudgetTokens, which
+// counts a cache read as a tenth of a token).
 func (sm *StateManager) TotalTokensConsumed() int {
 	sm.mu.Lock()
 	defer sm.mu.Unlock()
 
-	total := sm.state.Planning.TokensTotal()
+	total := sm.state.Planning.BudgetTokens()
 	for _, ts := range sm.state.TaskStates {
-		total += ts.Usage.TokensTotal()
+		total += ts.Usage.BudgetTokens()
 	}
 	return total
 }

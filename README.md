@@ -250,6 +250,8 @@ pass_env = ["DATABASE_URL", "AWS_*"]         # extra environment variables those
 max_tokens_per_task = 300000
 ```
 
+Budgets apply even when you set none: 300,000 tokens per task and 2,000,000 per project by default. A token read from the prompt cache counts as a tenth of a token, which is what providers charge for it; agents that re-read their conversation from the cache on every step (a Claude subscription agent does) would otherwise hit the limit on small tasks. A task that reaches its budget before finishing is paused, and resuming gives it another full budget. An attempt that finishes its work is always verified, even if its last step went over.
+
 A project's `allow` replaces the fleet's list, while its `pass_env` adds to it; a trailing `*` matches a prefix. A task in the plan can also set its own `acceptance_timeout`.
 
 ### Protected tests
