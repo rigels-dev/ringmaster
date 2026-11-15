@@ -2,6 +2,8 @@ package schemas
 
 import (
 	"fmt"
+	"regexp"
+	"strconv"
 	"strings"
 
 	"gopkg.in/yaml.v3"
@@ -58,25 +60,46 @@ func ValidateWorkerReport(r *WorkerReport) error {
 	return nil
 }
 
+// ParseReportMarkdown reads an automaton's report: YAML frontmatter with at
+// least a status, then markdown sections.
+//
+// The status is the one thing Ringmaster needs from it, and what the report
+// claims is checked by the acceptance commands anyway. So a report is read
+// as generously as it can be: a code fence around it is ignored, the status
+// may be in any letter case, a number written as text or a list written as
+// one string does not spoil the rest, and a status line is found even when
+// the frontmatter is not valid YAML. Only a report with no recognisable
+// status is refused.
 func ParseReportMarkdown(content string) (*WorkerReport, error) {
-	trimmed := strings.TrimSpace(content)
-	if !strings.HasPrefix(trimmed, "---") {
-		return nil, fmt.Errorf("missing frontmatter delimiter '---'")
+	trimmed := stripCodeFence(strings.TrimSpace(content))
+	if trimmed == "" {
+		return nil, fmt.Errorf("the report file is empty")
 	}
 
-	parts := strings.SplitN(trimmed[3:], "---", 2)
-	if len(parts) < 2 {
-		return nil, fmt.Errorf("unterminated frontmatter delimiter '---'")
+	frontmatter, body := trimmed, ""
+	if strings.HasPrefix(trimmed, "---") {
+		parts := strings.SplitN(trimmed[3:], "\n---", 2)
+		if len(parts) < 2 {
+			return nil, fmt.Errorf("the frontmatter is not closed: there is no second '---' line")
+		}
+		frontmatter = parts[0]
+		body = strings.TrimSpace(strings.TrimLeft(parts[1], "-"))
+	} else {
+		if !statusLine.MatchString(trimmed) {
+			return nil, fmt.Errorf("the report does not start with '---' frontmatter and has no 'status:' line")
+		}
+		body = trimmed // no frontmatter to cut off: the whole text is the summary
 	}
-
-	frontmatter := parts[0]
-	body := strings.TrimSpace(parts[1])
 
 	var report WorkerReport
 	report.FilesChanged = []string{}
 
-	if err := yaml.Unmarshal([]byte(frontmatter), &report); err != nil {
-		return nil, fmt.Errorf("failed to parse report frontmatter: %w", err)
+	if err := yaml.Unmarshal([]byte(frontmatter), &report); err != nil || report.Status == "" {
+		report = lenientFrontmatter(frontmatter)
+	}
+	report.Status = ReportStatus(strings.ToUpper(strings.TrimSpace(string(report.Status))))
+	if report.FilesChanged == nil {
+		report.FilesChanged = []string{}
 	}
 
 	// Extract markdown sections
@@ -133,4 +156,78 @@ func (r *WorkerReport) RenderMarkdown() (string, error) {
 	}
 
 	return sb.String(), nil
+}
+
+var statusLine = regexp.MustCompile("(?mi)^\\s*status\\s*:\\s*[\"']?([A-Za-z_]+)")
+
+// stripCodeFence removes a ``` fence that wraps the whole report.
+func stripCodeFence(s string) string {
+	if !strings.HasPrefix(s, "```") {
+		return s
+	}
+	if nl := strings.Index(s, "\n"); nl != -1 {
+		s = s[nl+1:]
+	} else {
+		return ""
+	}
+	return strings.TrimSpace(strings.TrimSuffix(strings.TrimSpace(s), "```"))
+}
+
+// lenientFrontmatter recovers what it can from frontmatter that does not
+// match the report's types: the status above all, then counts and file
+// names, each on a best-effort basis.
+func lenientFrontmatter(frontmatter string) WorkerReport {
+	report := WorkerReport{FilesChanged: []string{}}
+
+	var loose map[string]any
+	if err := yaml.Unmarshal([]byte(frontmatter), &loose); err != nil || loose == nil {
+		if m := statusLine.FindStringSubmatch(frontmatter); m != nil {
+			report.Status = ReportStatus(m[1])
+		}
+		return report
+	}
+
+	if v, ok := loose["status"]; ok {
+		report.Status = ReportStatus(fmt.Sprint(v))
+	}
+	report.Attempts = looseInt(loose["attempts"])
+	report.Calls = looseInt(loose["calls"])
+	report.TokensIn = looseInt(loose["tokens_in"])
+	report.TokensOut = looseInt(loose["tokens_out"])
+
+	switch files := loose["files_changed"].(type) {
+	case []any:
+		for _, f := range files {
+			report.FilesChanged = append(report.FilesChanged, fmt.Sprint(f))
+		}
+	case string:
+		if strings.TrimSpace(files) != "" {
+			report.FilesChanged = append(report.FilesChanged, files)
+		}
+	}
+
+	// Requests keep their strict shape: a question the user must answer
+	// cannot be guessed at
+	if raw, ok := loose["requests"]; ok {
+		if data, err := yaml.Marshal(raw); err == nil {
+			_ = yaml.Unmarshal(data, &report.Requests)
+		}
+	}
+	return report
+}
+
+func looseInt(v any) int {
+	switch n := v.(type) {
+	case int:
+		return n
+	case int64:
+		return int(n)
+	case float64:
+		return int(n)
+	case string:
+		if i, err := strconv.Atoi(strings.TrimSpace(n)); err == nil {
+			return i
+		}
+	}
+	return 0
 }

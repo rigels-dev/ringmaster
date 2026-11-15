@@ -141,6 +141,12 @@ func RunTaskLoop(
 		if budgetExceeded {
 			decision.Reason = budgetPauseReason(attemptRes.Usage, budget)
 		}
+		// The automaton stopped on its own, but left no report Ringmaster could
+		// use. That is a slip in a file, not a question for the user: say what
+		// was wrong and let it write the report again.
+		if attemptRes.ReportProblem != "" && attemptRes.Reason == "COMPLETED" && !budgetExceeded {
+			decision = unusableReportDecision(task.ID, attemptRes.ReportProblem, attempt, maxRetries)
+		}
 		if len(restored) > 0 && decision.Type == DecisionRETRY {
 			// The worker's next attempt must know why its test changes are gone
 			decision.FailureLogs = restoredTestsNote(restored) + "\n\n" + decision.FailureLogs
@@ -224,4 +230,29 @@ func budgetPauseReason(used schemas.Usage, budget config.BudgetConfig) string {
 		"Resume to give the task another %d, or raise the limit first with [budget] max_tokens_per_task in ringmaster.toml "+
 		"(the default is 300000 when it is not set).",
 		used.BudgetTokens(), limit, used.TokensIn, used.TokensCached, used.TokensOut, limit)
+}
+
+// unusableReportDecision handles an attempt that ended normally without a
+// report Ringmaster could read. The acceptance checks are not run without
+// one: the report's status is the automaton's own statement that the work is
+// finished, and an automaton that stopped to ask something has not made it.
+func unusableReportDecision(taskID, problem string, attempt, maxRetries int) Decision {
+	if attempt <= maxRetries {
+		return Decision{
+			Type:   DecisionRETRY,
+			Reason: "The automaton finished, but " + problem + ".",
+			FailureLogs: fmt.Sprintf("Your previous attempt ended, but %s.\n"+
+				"If the work itself is finished, do NOT redo it or change any other file. Write only the report file "+
+				".ringmaster/outputs/%s.md, starting with this frontmatter (plain YAML, numbers as numbers, no code fence):\n"+
+				"---\nstatus: COMPLETED\nattempts: %d\ncalls: 0\ntokens_in: 0\ntokens_out: 0\nfiles_changed: []\n---\n\n## Summary\n...\n"+
+				"Use status AWAITING_INPUT with 'requests' instead if you need the user.",
+				problem, taskID, attempt+1),
+		}
+	}
+	return Decision{
+		Type: DecisionNEED_REVIEW,
+		Reason: fmt.Sprintf("The automaton finished %d attempt(s), but each time left no report Ringmaster could use; the last time, %s. "+
+			"The acceptance checks were not run. Its last message is in the task's Report tab. "+
+			"If the work looks finished, resume with a note asking it to write only the report file.", attempt, problem),
+	}
 }
