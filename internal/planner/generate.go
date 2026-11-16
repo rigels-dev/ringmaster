@@ -52,11 +52,20 @@ func GeneratePlan(
 	}
 
 	// The skills workers of this project will get: the fleet's switches plus the project's own
+	// The prompt is written from the project's point of view: its own
+	// allowlist, plus the commands the user has already approved for it
 	disabledSkills := cfg.Skills.Disabled
+	promptCfg := cfg
 	if manifest, mErr := config.LoadProjectManifest(projectRoot); mErr == nil {
-		disabledSkills = cfg.ForProject(manifest).Skills.Disabled
+		promptCfg = cfg.ForProject(manifest)
+		disabledSkills = promptCfg.Skills.Disabled
 	}
-	systemPrompt := MasterSystemPrompt(cfg, defaultWorker, skills.Enabled(skills.Discover(projectRoot), disabledSkills))
+	if approvals, aErr := storage.ReadJSON[schemas.CommandApprovals](filepath.Join(projectRoot, ".ringmaster", "approvals.json")); aErr == nil && approvals != nil && len(approvals.Project) > 0 {
+		withApproved := *promptCfg
+		withApproved.Sandbox.Allow = append(append([]string{}, promptCfg.Sandbox.Allow...), approvals.Project...)
+		promptCfg = &withApproved
+	}
+	systemPrompt := MasterSystemPrompt(promptCfg, defaultWorker, skills.Enabled(skills.Discover(projectRoot), disabledSkills))
 	userPrompt := fmt.Sprintf("Project Name: %s\n\n# BRIEF.MD:\n%s\n\nGenerate the complete project DAG Plan JSON now.", projectName, string(briefBytes))
 
 	messages := []llm.Message{
