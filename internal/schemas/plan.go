@@ -22,6 +22,9 @@ type PlanTask struct {
 	// EditsTests lets this task's worker change test files that already exist
 	// (see [sandbox] allow_test_edits). Part of the approved plan.
 	EditsTests bool `json:"edits_tests,omitempty"`
+	// Branch is the name the task's branch should have, e.g. "feat/link-store".
+	// Empty in plans made before branches were named; those use rm/<id>.
+	Branch string `json:"branch,omitempty"`
 }
 
 // PlanQuestion is a decision the master could not settle from the brief; it must be

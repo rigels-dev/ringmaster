@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"sync"
 	"testing"
@@ -767,5 +768,225 @@ Implement task one.
 	}
 	if got := state.TaskStates["T02"].Status; got != schemas.TaskStateCompleted {
 		t.Errorf("T02 status = %s, want COMPLETED", got)
+	}
+}
+
+// replacePlan swaps the project's plan and task files for a new approved plan,
+// the way generating and approving a plan does.
+func replacePlan(t *testing.T, projectRoot string, tasks []schemas.PlanTask) {
+	t.Helper()
+	tasksDir := filepath.Join(projectRoot, ".ringmaster", "tasks")
+	for _, task := range tasks {
+		deps, _ := json.Marshal(task.DependsOn)
+		spec := fmt.Sprintf("---\nid: %s\ntitle: %q\ntype: backend\ndepends_on: %s\nworker: \"test_worker\"\nmax_retries: 2\nacceptance:\n  - \"echo ok\"\n---\nImplement %s.\n",
+			task.ID, task.Title, deps, task.Title)
+		if err := os.WriteFile(filepath.Join(tasksDir, task.ID+"-task.md"), []byte(spec), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	plan := &schemas.Plan{Project: filepath.Base(projectRoot), Tasks: tasks}
+	data, _ := json.Marshal(plan)
+	if err := os.WriteFile(filepath.Join(projectRoot, ".ringmaster", "plan.json"), data, 0644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := planner.ApprovePlan(projectRoot, plan); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func planTask(id, title, branch string, deps ...string) schemas.PlanTask {
+	if deps == nil {
+		deps = []string{}
+	}
+	return schemas.PlanTask{
+		ID: id, Title: title, Type: schemas.TaskTypeBackend, DependsOn: deps, Worker: "test_worker",
+		MaxRetries: 2, Acceptance: []string{"echo ok"}, Branch: branch,
+	}
+}
+
+// anyTaskMock writes a COMPLETED report for whichever task is asking, taking
+// the id from the report path in the prompt.
+func anyTaskMock(t *testing.T) *httptest.Server {
+	t.Helper()
+	idPattern := regexp.MustCompile(`outputs/(T\d+)\.md`)
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var body map[string]any
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		messages, _ := body["messages"].([]any)
+		tID := ""
+		for _, m := range messages {
+			content, _ := m.(map[string]any)["content"].(string)
+			if found := idPattern.FindStringSubmatch(content); found != nil {
+				tID = found[1]
+			}
+		}
+		last, _ := messages[len(messages)-1].(map[string]any)
+		message := map[string]any{"role": "assistant", "content": "done"}
+		if last["role"] != "tool" {
+			report := fmt.Sprintf("---\nstatus: COMPLETED\nattempts: 1\ncalls: 1\ntokens_in: 1\ntokens_out: 1\nfiles_changed: []\n---\n\n## Summary\nFinished %s", tID)
+			message = map[string]any{"role": "assistant", "tool_calls": []map[string]any{
+				{"id": "c0", "type": "function", "function": map[string]any{"name": "write_file", "arguments": fmt.Sprintf(`{"path":"%s.txt","content":"work of %s"}`, strings.ToLower(tID), tID)}},
+				{"id": "c1", "type": "function", "function": map[string]any{"name": "write_file", "arguments": fmt.Sprintf(`{"path":".ringmaster/outputs/%s.md","content":%q}`, tID, report)}},
+			}}
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"choices": []map[string]any{{"message": message}},
+			"usage":   map[string]any{"prompt_tokens": 50, "completion_tokens": 20, "total_tokens": 70},
+		})
+	}))
+}
+
+func runToEnd(t *testing.T, projectRoot string, cfg *config.Config) schemas.ProjectState {
+	t.Helper()
+	engine, err := NewEngine(projectRoot, cfg, 2)
+	if err != nil {
+		t.Fatalf("NewEngine failed: %v", err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	if err := engine.Run(ctx); err != nil {
+		t.Fatalf("engine.Run failed: %v", err)
+	}
+	return engine.stateMgr.GetState()
+}
+
+func branchList(t *testing.T, projectRoot string) string {
+	t.Helper()
+	out, err := workspace.RunGit(context.Background(), projectRoot, "for-each-ref", "--format=%(refname:short)", "refs/heads")
+	if err != nil {
+		t.Fatal(err)
+	}
+	return strings.Join(strings.Fields(out), " ")
+}
+
+// Tasks work on the branch the plan names, never on one that already exists,
+// and a task that depends on another starts from that task's branch.
+func TestTasksUseNamedBranches(t *testing.T) {
+	projectRoot, cfg := setupTestProject(t)
+	t.Setenv("MOCK_KEY", "dummy")
+	ctx := context.Background()
+
+	// The user already has a branch with the name the plan wants for T01
+	if _, err := workspace.RunGit(ctx, projectRoot, "branch", "feat/link-store"); err != nil {
+		t.Fatal(err)
+	}
+	usersTip, _ := workspace.RunGit(ctx, projectRoot, "rev-parse", "feat/link-store")
+
+	replacePlan(t, projectRoot, []schemas.PlanTask{
+		planTask("T01", "Link store", "feat/link-store"),
+		planTask("T02", "HTTP API", "feat/http-api", "T01"),
+	})
+	tsMock := anyTaskMock(t)
+	defer tsMock.Close()
+	cfg.Providers["mock_prov"] = config.ProviderConfig{Type: "openai", BaseURL: tsMock.URL, APIKeyEnv: "MOCK_KEY"}
+
+	state := runToEnd(t, projectRoot, cfg)
+	for _, id := range []string{"T01", "T02"} {
+		if got := state.TaskStates[id].Status; got != schemas.TaskStateCompleted {
+			t.Fatalf("%s status = %s (err: %s)", id, got, state.TaskStates[id].Error)
+		}
+	}
+
+	if got := state.TaskStates["T01"].Branch; got != "feat/link-store-2" {
+		t.Errorf("T01 branch = %q, want feat/link-store-2 (the plain name belongs to the user)", got)
+	}
+	if got := state.TaskStates["T02"].Branch; got != "feat/http-api" {
+		t.Errorf("T02 branch = %q, want feat/http-api", got)
+	}
+	if got := state.TaskStates["T01"].Title; got != "Link store" {
+		t.Errorf("T01 title was not recorded: %q", got)
+	}
+	if tip, _ := workspace.RunGit(ctx, projectRoot, "rev-parse", "feat/link-store"); tip != usersTip {
+		t.Error("the user's own branch was moved")
+	}
+	if got, want := branchList(t, projectRoot), "feat/http-api feat/link-store feat/link-store-2 main"; got != want {
+		t.Errorf("branches = %q, want %q (no rm/ branches for a plan that names its own)", got, want)
+	}
+
+	// T02 was built on T01's branch, so T01's file is in T02's branch
+	if _, err := workspace.RunGit(ctx, projectRoot, "cat-file", "-e", "feat/http-api:t01.txt"); err != nil {
+		t.Error("T02's branch does not contain T01's work")
+	}
+	// Both are merged, and the merge names the task and its branch
+	log, _ := workspace.RunGit(ctx, projectRoot, "log", "--format=%s%n%b", "main")
+	for _, want := range []string{"Merge task T01 into main", "Ringmaster-Branch: feat/link-store-2", "Ringmaster-Branch: feat/http-api"} {
+		if !strings.Contains(log, want) {
+			t.Errorf("main's history lacks %q", want)
+		}
+	}
+}
+
+// A second plan on a finished project runs its own tasks: the first round's
+// tasks stay done, are not run again, and their state is kept as history.
+func TestSecondPlanRunsAfterTheFirstIsDone(t *testing.T) {
+	projectRoot, cfg := setupTestProject(t)
+	t.Setenv("MOCK_KEY", "dummy")
+	ctx := context.Background()
+
+	tsMock := anyTaskMock(t)
+	defer tsMock.Close()
+	cfg.Providers["mock_prov"] = config.ProviderConfig{Type: "openai", BaseURL: tsMock.URL, APIKeyEnv: "MOCK_KEY"}
+
+	replacePlan(t, projectRoot, []schemas.PlanTask{
+		planTask("T01", "Link store", "feat/link-store"),
+		planTask("T02", "HTTP API", "feat/http-api", "T01"),
+	})
+	first := runToEnd(t, projectRoot, cfg)
+	if first.Status != "COMPLETED" {
+		t.Fatalf("first round status = %s", first.Status)
+	}
+	firstFinish := first.TaskStates["T01"].FinishAt
+
+	// Round two: new IDs, as the planner now numbers them
+	replacePlan(t, projectRoot, []schemas.PlanTask{
+		planTask("T03", "Due dates", "feat/due-dates"),
+		planTask("T04", "Document due dates", "docs/due-dates", "T03"),
+	})
+	second := runToEnd(t, projectRoot, cfg)
+	if second.Status != "COMPLETED" {
+		t.Fatalf("second round status = %s", second.Status)
+	}
+	for _, id := range []string{"T03", "T04"} {
+		if got := second.TaskStates[id].Status; got != schemas.TaskStateCompleted {
+			t.Errorf("%s status = %s (err: %s)", id, got, second.TaskStates[id].Error)
+		}
+	}
+	// The first round is history: still there, still done, not touched
+	if ts := second.TaskStates["T01"]; ts.Status != schemas.TaskStateCompleted || ts.Branch != "feat/link-store" || !ts.FinishAt.Equal(*firstFinish) {
+		t.Errorf("T01 from the first round was changed: %+v", ts)
+	}
+
+	// T03 started from main as it is now, so it holds the first round's work
+	if _, err := workspace.RunGit(ctx, projectRoot, "cat-file", "-e", "feat/due-dates:t02.txt"); err != nil {
+		t.Error("the second round did not start from the finished first round")
+	}
+	for _, file := range []string{"t01.txt", "t02.txt", "t03.txt", "t04.txt"} {
+		if _, err := workspace.RunGit(ctx, projectRoot, "cat-file", "-e", "main:"+file); err != nil {
+			t.Errorf("main lacks %s", file)
+		}
+	}
+}
+
+// The project budget is for the plan being run, not for everything the
+// project has ever spent.
+func TestProjectBudgetCountsOnlyTheCurrentPlan(t *testing.T) {
+	projectRoot, cfg := setupTestProject(t)
+	t.Setenv("MOCK_KEY", "dummy")
+
+	tsMock := anyTaskMock(t)
+	defer tsMock.Close()
+	cfg.Providers["mock_prov"] = config.ProviderConfig{Type: "openai", BaseURL: tsMock.URL, APIKeyEnv: "MOCK_KEY"}
+	// One round costs 2 tasks x 2 calls x 70 tokens = 280; two rounds would exceed 400
+	cfg.Budget.MaxTokensPerTask = 300
+	cfg.Budget.MaxTokensPerProject = 400
+
+	replacePlan(t, projectRoot, []schemas.PlanTask{planTask("T01", "A", "feat/a"), planTask("T02", "B", "feat/b")})
+	if st := runToEnd(t, projectRoot, cfg); st.Status != "COMPLETED" {
+		t.Fatalf("first round status = %s", st.Status)
+	}
+	replacePlan(t, projectRoot, []schemas.PlanTask{planTask("T03", "C", "feat/c"), planTask("T04", "D", "feat/d")})
+	if st := runToEnd(t, projectRoot, cfg); st.Status != "COMPLETED" {
+		t.Fatalf("second round status = %s; the first round's tokens were counted against it", st.Status)
 	}
 }

@@ -98,7 +98,14 @@ INSTRUCTIONS:
    (storage engine, auth scheme, deployment target, ...), do NOT silently pick one. Add it to "open_questions"
    with 2-4 short options and your "recommended" option; the user answers before approving the plan.
    Record smaller defaults you chose yourself in "assumptions". Use [] for both when there are none.
-7. OUTPUT FORMAT:
+7. BRANCH: give every task a "branch", named the way people name branches by hand: <prefix>/<slug>.
+   The prefix is one of feat, fix, docs, test, refactor, chore. The slug is two to four lower-case words
+   joined by dashes that say what the change is (feat/link-store, fix/empty-file-exit-code, docs/usage).
+   Each task needs a different branch.
+8. EARLIER WORK: when the user's message lists tasks that are ALREADY DONE, their code is already in the
+   repository. Do not plan them again. Plan only what is still missing, number your tasks from the first
+   free ID you are given, and let "depends_on" name only tasks of this new plan.
+9. OUTPUT FORMAT:
 You MUST respond with a single, valid, raw JSON object matching this schema without any markdown formatting or commentary:
 
 {
@@ -112,6 +119,7 @@ You MUST respond with a single, valid, raw JSON object matching this schema with
       "worker": "%s",
       "max_retries": 2,
       "acceptance": ["go test -v ./..."],
+      "branch": "feat/short-slug",
       "description": "Full detailed specification of what to implement."
     }
   ],

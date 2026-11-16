@@ -248,10 +248,37 @@ func samePath(a, b string) bool {
 // It branches from baseRef (default "main", or "rm/<upstream>").
 // It is fully idempotent: if worktree already exists, it is safely reused.
 func CreateWorktree(ctx context.Context, projectRoot, taskID, baseRef string) (string, error) {
+	return CreateWorktreeOn(ctx, projectRoot, taskID, "rm/"+taskID, baseRef)
+}
+
+// BranchExists reports whether the repository has a local branch of that name.
+func BranchExists(ctx context.Context, projectRoot, branch string) bool {
+	_, err := RunGit(ctx, projectRoot, "rev-parse", "--verify", "--quiet", "refs/heads/"+branch)
+	return err == nil
+}
+
+// FreeBranchName returns desired when no branch has that name, and otherwise
+// desired with the first free numeric suffix (feat/login-2, feat/login-3, ...).
+// A task never takes over a branch that is already there, whether it is the
+// user's own or an earlier task's.
+func FreeBranchName(ctx context.Context, projectRoot, desired string) string {
+	if !BranchExists(ctx, projectRoot, desired) {
+		return desired
+	}
+	for n := 2; ; n++ {
+		candidate := fmt.Sprintf("%s-%d", desired, n)
+		if !BranchExists(ctx, projectRoot, candidate) {
+			return candidate
+		}
+	}
+}
+
+// CreateWorktreeOn is CreateWorktree for a task whose branch has its own name
+// (e.g. "feat/link-store"). The worktree directory is still named after the task.
+func CreateWorktreeOn(ctx context.Context, projectRoot, taskID, branchName, baseRef string) (string, error) {
 	repoPath := projectRoot
 	worktreesDir := WorktreesDir(projectRoot)
 	targetDir := filepath.Join(worktreesDir, taskID)
-	branchName := fmt.Sprintf("rm/%s", taskID)
 
 	if baseRef == "" {
 		baseRef = "main"
