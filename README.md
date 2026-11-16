@@ -14,7 +14,7 @@ Current release: **v0.6.2-fomalhaut**. Ringmaster runs on Linux and macOS.
 
 1. **Brief.** You describe what to build, in a chat with the master planner or in `.ringmaster/BRIEF.md`.
 2. **Plan.** The master agent splits the brief into a DAG of tasks, each with a worker, dependencies and acceptance commands. It asks you about decisions it should not guess, and nothing runs until you approve the plan (the approval is tied to the plan's SHA-256 hash). Acceptance commands run directly, without a shell: quotes keep an argument together (`python -c "import mypkg"`), but pipes, `&&`, `;`, redirects and substitutions do not work. A command that could never run is sent back to the master to rewrite before the plan reaches you, and a task that still has one is stopped before its automaton starts. The master is told which commands you allow. If a task's acceptance check still needs one that is not on the list, the task asks you to approve it before its automaton starts, the same way an automaton asks for a command.
-3. **Run.** Each task gets a branch `rm/Txx` and a worktree. Workers run in parallel where dependencies allow; a task that depends on another starts from that task's branch.
+3. **Run.** Each task gets its own branch, named for the change (`feat/link-store`, `docs/usage`), and a worktree. Workers run in parallel where dependencies allow; a task that depends on another starts from that task's branch.
 4. **Verify.** Ringmaster runs the acceptance commands itself instead of trusting the worker's report. Failures go back to the worker for another attempt; problems an attempt cannot fix (a timeout, a command that cannot run) go to you instead.
 5. **Merge.** Passing tasks are merged into `main` one at a time. Every attempt is a commit tagged with the automaton that made it.
 
@@ -161,11 +161,11 @@ Project commands work from any subdirectory of a project, the way `go` finds `go
 ```bash
 ringmaster remote set git@github.com:you/project.git
 ringmaster remote        # the remote, and which branches still need pushing
-ringmaster push          # main and every rm/Txx branch, merged or not
+ringmaster push          # main and every task branch, merged or not
 ringmaster push --main-only
 ```
 
-Only `main` and the task branches are pushed; your other branches are left alone. A push is never forced: if the remote has commits this project does not, that branch is rejected and reported. Pushing uses your own git login (an SSH key or a credential helper) and never prompts, so a missing login fails at once. Ringmaster refuses a URL with credentials in it, since it would be stored in `.git/config`.
+Only `main` and the task branches are pushed, each named explicitly from Ringmaster's own record of its tasks; your other branches are left alone, even ones with similar names. A push is never forced: if the remote has commits this project does not, that branch is rejected and reported. Pushing uses your own git login (an SSH key or a credential helper) and never prompts, so a missing login fails at once. Ringmaster refuses a URL with credentials in it, since it would be stored in `.git/config`.
 
 **When every task is done.** The Tasks view shows what the run did and what comes next: release it, download it, push it, or plan the next change. From the command line:
 
@@ -236,7 +236,7 @@ my-project/                          your code; the project is the git repositor
     ├── skills/<name>/SKILL.md       skills for this project's workers (optional)
     ├── run.pid                      present while a run is active
     ├── outputs/Txx.md               worker reports (archived, kept after merge)
-    ├── worktrees/Txx/               a task's checkout of branch rm/Txx while it is active
+    ├── worktrees/Txx/               a task's checkout of its branch while it is active
     │   └── .ringmaster/
     │       ├── skills/              the enabled skills, copied in for the worker
     │       ├── outputs/Txx.md       the report as the worker writes it
@@ -248,7 +248,11 @@ my-project/                          your code; the project is the git repositor
         └── Txx-attemptN.jsonl       per-attempt transcripts (archived)
 ```
 
-Task worktrees are removed once their branch is merged; the `rm/Txx` branches stay, so the history can still be traced in the Branches view or with `git log`.
+Task worktrees are removed once their branch is merged; the task branches stay, so the history can still be traced in the Branches view or with `git log`.
+
+**Branch names.** A task's branch is named the way people name them: `<prefix>/<slug>`, with the prefix one of `feat`, `fix`, `docs`, `test`, `refactor`, `chore`. The master proposes the name and you see it on the task card before approving; Ringmaster makes it valid and unique. A task never takes over a branch that already exists, yours or an earlier task's: it gets a numeric suffix (`feat/login-2`). The task ID (`T03`) stays in the UI, in commit trailers and in merge commits, which also carry a `Ringmaster-Branch` trailer. Projects from before v0.7 keep their `rm/Txx` branches.
+
+**The next change.** When a plan is finished, plan the next one from Chat. The master is told which tasks are already done and merged, plans only what is new, and numbers its tasks on from the last one (`T06` after `T05`), so finished tasks stay as history and nothing is run twice. Each plan gets the project token budget anew. From the command line, `ringmaster plan --force` generates a new plan although one exists.
 
 The manifest can tune how this project's tasks run:
 
@@ -262,7 +266,7 @@ pass_env = ["DATABASE_URL", "AWS_*"]         # extra environment variables those
 max_tokens_per_task = 300000
 ```
 
-Budgets apply even when you set none: 300,000 tokens per task and 2,000,000 per project by default. A token read from the prompt cache counts as a tenth of a token, which is what providers charge for it; agents that re-read their conversation from the cache on every step (a Claude subscription agent does) would otherwise hit the limit on small tasks. A task that reaches its budget before finishing is paused, and resuming gives it another full budget. An attempt that finishes its work is always verified, even if its last step went over.
+Budgets apply even when you set none: 300,000 tokens per task and 2,000,000 per project by default. The project budget is for the plan being run; a later plan starts from zero. A token read from the prompt cache counts as a tenth of a token, which is what providers charge for it; agents that re-read their conversation from the cache on every step (a Claude subscription agent does) would otherwise hit the limit on small tasks. A task that reaches its budget before finishing is paused, and resuming gives it another full budget. An attempt that finishes its work is always verified, even if its last step went over.
 
 A project's `allow` replaces the fleet's list, while its `pass_env` adds to it; a trailing `*` matches a prefix. A task in the plan can also set its own `acceptance_timeout`.
 

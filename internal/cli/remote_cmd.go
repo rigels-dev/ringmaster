@@ -137,8 +137,14 @@ func buildRemoteView(st remote.Status) string {
 		remote.StateAhead:    "has new commits",
 		remote.StateUnpushed: "not pushed",
 	}
+	width := 0
 	for _, b := range st.Branches {
-		fmt.Fprintf(&sb, "  %-12s %s\n", b.Name, labels[b.State])
+		if len(b.Name) > width {
+			width = len(b.Name)
+		}
+	}
+	for _, b := range st.Branches {
+		fmt.Fprintf(&sb, "  %-*s  %s\n", width, b.Name, labels[b.State])
 	}
 	if st.URL != "" && st.Pending() > 0 {
 		fmt.Fprintf(&sb, "\n%d branch(es) to push: ringmaster push\n", st.Pending())
@@ -154,12 +160,18 @@ func buildPushView(results []remote.PushResult) string {
 		remote.ResultSame:     "already up to date",
 		remote.ResultRejected: "rejected",
 	}
+	width := 0
+	for _, r := range results {
+		if len(r.Branch) > width {
+			width = len(r.Branch)
+		}
+	}
 	for _, r := range results {
 		mark := "✓"
 		if r.Result == remote.ResultRejected {
 			mark = "✗"
 		}
-		fmt.Fprintf(&sb, "%s %-12s %s\n", mark, r.Branch, labels[r.Result])
+		fmt.Fprintf(&sb, "%s %-*s  %s\n", mark, width, r.Branch, labels[r.Result])
 	}
 	return sb.String()
 }

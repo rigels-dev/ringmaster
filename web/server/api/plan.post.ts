@@ -1,6 +1,7 @@
 import path from 'node:path'
 import fs from 'node:fs'
 import { ringmasterBinPath, rootTomlPath, resolveProjectDir, runCommand } from '../utils/ringmaster'
+import { isGeneratePlanMessage } from '../utils/chat'
 
 export default defineEventHandler(async (event) => {
   const projectDir = resolveProjectDir()
@@ -141,7 +142,7 @@ export default defineEventHandler(async (event) => {
         try {
           const history = JSON.parse(fs.readFileSync(chatFile, 'utf-8'))
           const userMsgs = history
-            .filter((m: any) => m.role === 'user' && !m.text.includes('⚡ Generate DAG Plan'))
+            .filter((m: any) => m.role === 'user' && !isGeneratePlanMessage(m.text))
             .map((m: any) => m.text.trim())
             .filter(Boolean)
 
@@ -155,19 +156,17 @@ export default defineEventHandler(async (event) => {
         } catch {}
       }
 
-      // If force re-plan, remove old plan.json and approval
-      if (body.force) {
-        if (fs.existsSync(planFile)) {
-          try { fs.unlinkSync(planFile) } catch {}
-        }
-        if (fs.existsSync(approvedFile)) {
-          try { fs.unlinkSync(approvedFile) } catch {}
-        }
+      // A new plan needs a new approval. The old plan.json is left for the
+      // planner, which reads it to name the tasks already done, and replaces it.
+      if (body.force && fs.existsSync(approvedFile)) {
+        try { fs.unlinkSync(approvedFile) } catch {}
       }
 
       // Execute ringmaster plan --headless in projectDir with explicit config fallback
       const rootConfig = rootTomlPath()
-      const { stdout } = await runCommand(ringmasterBin, ['plan', '--headless', '--config', rootConfig], {
+      const planArgs = ['plan', '--headless', '--config', rootConfig]
+      if (body.force) planArgs.push('--force')
+      const { stdout } = await runCommand(ringmasterBin, planArgs, {
         cwd: projectDir,
         timeout: 120000
       })

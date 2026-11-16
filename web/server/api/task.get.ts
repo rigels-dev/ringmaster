@@ -44,6 +44,13 @@ export default defineEventHandler((event) => {
     }
   }
 
+  // Before a task starts, its branch is the one the plan names
+  let plannedBranch = ''
+  try {
+    const plan = JSON.parse(readText(path.join(projectDir, '.ringmaster', 'plan.json')))
+    plannedBranch = plan?.tasks?.find((t: any) => t.id === id)?.branch || ''
+  } catch {}
+
   let state = null
   try {
     state = JSON.parse(readText(path.join(projectDir, '.ringmaster', 'state.json')))?.task_states?.[id] || null
@@ -76,7 +83,8 @@ export default defineEventHandler((event) => {
   return {
     ok: true,
     id,
-    branch: `rm/${id}`,
+    // The branch the scheduler recorded for the task; rm/<id> before it starts or in older projects
+    branch: state?.branch || plannedBranch || `rm/${id}`,
     worktree: fs.existsSync(worktree) ? worktree : '',
     specFile,
     spec,

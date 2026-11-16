@@ -1,6 +1,7 @@
 import path from 'node:path'
 import fs from 'node:fs'
 import { rootTomlPath, resolveProjectDir, runCommand } from '../utils/ringmaster'
+import { isGeneratePlanMessage, finishedWorkNote } from '../utils/chat'
 
 export default defineEventHandler(async (event) => {
   const projectDir = resolveProjectDir()
@@ -103,6 +104,9 @@ export default defineEventHandler(async (event) => {
           }
         }
 
+        // On a project with finished tasks, the Master is planning a next change, not a first build
+        const finishedWork = finishedWorkNote(projectDir)
+
         const systemPrompt = `You are the Master AI Architect and Project Planner of Ringmaster (Control Plane).
 You are currently engaged in a live planning discussion with the project lead/developer.
 Your goals:
@@ -114,7 +118,7 @@ Your goals:
    - If the project scope, requirements, or architecture are still vague, ask clarifying questions. DO NOT append the readiness signal.
    - ONLY when you have evaluated that you have sufficient, actionable information (clear tech stack, clear endpoints/logic, and a viable task breakdown), you MUST append this exact signal at the very end of your response:
    [RINGMASTER_CAN_GENERATE: TRUE]
-Format with clean markdown.`
+Format with clean markdown.` + (finishedWork ? `\n\n${finishedWork}` : '')
 
         // Prepare conversation context
         const convMessages: Array<{ role: string; content: string }> = [
@@ -122,7 +126,7 @@ Format with clean markdown.`
         ]
 
         for (const m of history.slice(-8)) {
-          if (m.text && !m.text.includes('⚡ Generate DAG Plan')) {
+          if (m.text && !isGeneratePlanMessage(m.text)) {
             convMessages.push({
               role: m.role === 'user' ? 'user' : 'assistant',
               content: m.text
