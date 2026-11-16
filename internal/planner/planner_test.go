@@ -484,3 +484,57 @@ func TestPlannerIsToldToQuoteArgumentsWithSpaces(t *testing.T) {
 		t.Error("planner prompt still forbids quotes")
 	}
 }
+
+// The master is told which commands acceptance checks may use, taken from the
+// project's allowlist and the commands the user has approved for the project.
+func TestPlannerIsToldTheAllowedCommands(t *testing.T) {
+	cfg := config.DefaultConfig()
+	prompt := MasterSystemPrompt(cfg, "w", nil)
+	for _, want := range []string{"ALLOWED COMMANDS", "go test", "pytest", "stops the task until"} {
+		if !strings.Contains(prompt, want) {
+			t.Errorf("planner prompt lacks %q", want)
+		}
+	}
+
+	url, _, _ := planServer(t, planWithAcceptance("cargo test"))
+	root, cfg := planningProject(t, url)
+	write := func(name, content string) {
+		t.Helper()
+		if err := os.WriteFile(filepath.Join(root, name), []byte(content), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write("ringmaster.toml", "name = \"p\"\n\n[sandbox]\nallow = [\"cargo test\", \"cargo clippy\"]\n")
+	write(filepath.Join(".ringmaster", "approvals.json"), `{"project":["make lint"],"tasks":{"T09":["only-for-t09"]}}`)
+
+	var system string
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var req struct {
+			Messages []struct{ Role, Content string } `json:"messages"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&req)
+		for _, m := range req.Messages {
+			if m.Role == "system" {
+				system = m.Content
+			}
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"choices": []map[string]any{{"message": map[string]any{"role": "assistant", "content": planWithAcceptance("cargo test")}}},
+			"usage":   map[string]any{"prompt_tokens": 1, "completion_tokens": 1, "total_tokens": 2},
+		})
+	}))
+	defer ts.Close()
+	cfg.Providers["mock"] = config.ProviderConfig{Type: "openai", BaseURL: ts.URL, APIKeyEnv: "MOCK_KEY"}
+
+	if _, _, err := GeneratePlan(context.Background(), root, cfg, cfg.Agents["m"], llm.NewProvider("openai", ts.URL, "MOCK_KEY")); err != nil {
+		t.Fatalf("GeneratePlan failed: %v", err)
+	}
+	if !strings.Contains(system, "cargo test, cargo clippy, make lint") {
+		t.Errorf("the prompt does not list the project's allowlist and approved commands:\n%s", system[strings.Index(system, "ALLOWED COMMANDS"):][:200])
+	}
+	// "ruff" is only in the fleet's default list, which this project's own list replaces
+	if strings.Contains(system, "only-for-t09") || strings.Contains(system, "ruff") {
+		t.Error("the prompt lists a command approved for another task only, or the fleet's list the project replaced")
+	}
+}

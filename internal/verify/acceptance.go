@@ -75,7 +75,7 @@ func RunAcceptance(ctx context.Context, task schemas.TaskSpec, worktree string, 
 				ExitCode:   126,
 				Passed:     false,
 				Unrunnable: true,
-				StderrTail: "Command not in sandbox allowlist",
+				StderrTail: "The command is not on the command allowlist. Allow it with: ringmaster answer <task> --allow \"" + cmdStr + "\", or add it to [sandbox] allow in ringmaster.toml.",
 			})
 			continue
 		}

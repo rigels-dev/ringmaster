@@ -249,6 +249,39 @@ func (e *Engine) executeTask(ctx context.Context, planTask schemas.PlanTask) {
 		}
 	}
 
+	// An acceptance command the user has not allowed cannot be run either.
+	// Ask for it now, as an approval, before the automaton does work that
+	// could not be checked.
+	allowed := append(append([]string{}, e.cfg.Sandbox.Allow...), LoadApprovals(e.projectRoot).For(planTask.ID)...)
+	var approvals []schemas.HumanRequest
+	for _, command := range taskSpec.Acceptance {
+		command = strings.TrimSpace(command)
+		if command == "" || len(allowed) == 0 || worker.CheckCommand(command, allowed) {
+			continue
+		}
+		approvals = append(approvals, schemas.HumanRequest{
+			ID:      fmt.Sprintf("a%d", len(approvals)+1),
+			Type:    schemas.RequestApproval,
+			Command: command,
+			Reason: "This is one of the task's acceptance checks, and it is not on your command allowlist. " +
+				"Nothing has been run yet. If you would rather not allow it, replace it under 'acceptance:' in the task's file in .ringmaster/tasks/, or re-plan.",
+		})
+	}
+	if len(approvals) > 0 {
+		reason := fmt.Sprintf("The task has not started: %d of its acceptance checks need a command you have not allowed.", len(approvals))
+		fmt.Printf("🙋 [Scheduler] Task %s needs your approval before it starts:\n", planTask.ID)
+		for _, r := range approvals {
+			fmt.Printf("   [%s] approve command `%s` (an acceptance check)\n", r.ID, r.Command)
+		}
+		fmt.Println("   Answer in the Web UI task panel, or with 'ringmaster answer'.")
+		_ = e.stateMgr.UpdateTaskState(planTask.ID, func(ts *schemas.TaskState) {
+			ts.Status = schemas.TaskStateAwaiting
+			ts.Error = reason
+			ts.Requests = approvals
+		})
+		return
+	}
+
 	// 3. Determine baseRef for worktree branch
 	baseRef := "main"
 	if len(planTask.DependsOn) > 0 {

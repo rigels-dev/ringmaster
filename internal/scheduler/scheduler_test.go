@@ -651,3 +651,121 @@ func TestUnusableReportAfterAllRetriesIsExplained(t *testing.T) {
 		t.Errorf("the reason still claims the automaton asked for review:\n%s", t01.Error)
 	}
 }
+
+// reportingMock is an automaton that writes a COMPLETED report and stops.
+func reportingMock(t *testing.T, calls *int, mu *sync.Mutex) *httptest.Server {
+	t.Helper()
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var body map[string]any
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		messages, _ := body["messages"].([]any)
+		tID := "T01"
+		for _, m := range messages {
+			if content, _ := m.(map[string]any)["content"].(string); strings.Contains(content, "T02") {
+				tID = "T02"
+			}
+		}
+		mu.Lock()
+		*calls++
+		mu.Unlock()
+
+		last, _ := messages[len(messages)-1].(map[string]any)
+		message := map[string]any{"role": "assistant", "content": "done"}
+		if last["role"] != "tool" {
+			report := fmt.Sprintf("---\nstatus: COMPLETED\nattempts: 1\ncalls: 1\ntokens_in: 1\ntokens_out: 1\nfiles_changed: []\n---\n\n## Summary\nFinished %s", tID)
+			message = map[string]any{"role": "assistant", "tool_calls": []map[string]any{{
+				"id": "call_0", "type": "function",
+				"function": map[string]any{"name": "write_file", "arguments": fmt.Sprintf(`{"path":".ringmaster/outputs/%s.md","content":%q}`, tID, report)},
+			}}}
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"choices": []map[string]any{{"message": message}},
+			"usage":   map[string]any{"prompt_tokens": 50, "completion_tokens": 20, "total_tokens": 70},
+		})
+	}))
+}
+
+// An acceptance check that uses a command the user has not allowed is asked
+// about before the automaton starts, as an ordinary approval. Once allowed,
+// the task runs and the check is executed.
+func TestAcceptanceCommandOutsideAllowlistIsAskedBeforeStarting(t *testing.T) {
+	projectRoot, cfg := setupTestProject(t)
+	t.Setenv("MOCK_KEY", "dummy")
+
+	// "true" is a real command that passes, but only "echo" is on the allowlist
+	spec := `---
+id: T01
+title: "Task One"
+type: backend
+depends_on: []
+worker: "test_worker"
+max_retries: 2
+acceptance:
+  - "echo task_one_passed"
+  - "true --build ./..."
+---
+Implement task one.
+`
+	if err := os.WriteFile(filepath.Join(projectRoot, ".ringmaster", "tasks", "T01-task-one.md"), []byte(spec), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	var mu sync.Mutex
+	calls := 0
+	tsMock := reportingMock(t, &calls, &mu)
+	defer tsMock.Close()
+	cfg.Providers["mock_prov"] = config.ProviderConfig{Type: "openai", BaseURL: tsMock.URL, APIKeyEnv: "MOCK_KEY"}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	engine, err := NewEngine(projectRoot, cfg, 2)
+	if err != nil {
+		t.Fatalf("NewEngine failed: %v", err)
+	}
+	_ = engine.Run(ctx)
+
+	ts := engine.stateMgr.GetState().TaskStates["T01"]
+	if ts.Status != schemas.TaskStateAwaiting {
+		t.Fatalf("T01 status = %s, want AWAITING_INPUT (err: %s)", ts.Status, ts.Error)
+	}
+	if len(ts.Requests) != 1 || ts.Requests[0].Type != schemas.RequestApproval || ts.Requests[0].Command != "true --build ./..." {
+		t.Fatalf("requests = %+v, want one approval for the command outside the allowlist", ts.Requests)
+	}
+	if !strings.Contains(ts.Requests[0].Reason, "acceptance check") {
+		t.Errorf("the request does not say what the command is for: %s", ts.Requests[0].Reason)
+	}
+	mu.Lock()
+	if calls != 0 {
+		t.Errorf("the automaton was called %d time(s) before the command was approved", calls)
+	}
+	mu.Unlock()
+	if ts.Attempt != 0 {
+		t.Errorf("an attempt was spent: %d", ts.Attempt)
+	}
+
+	// The user allows it; the task then runs and is verified
+	if err := QueueAnswer(projectRoot, schemas.HumanAnswer{
+		TaskID:  "T01",
+		Replies: map[string]string{"a1": "approve (task scope)"},
+		Allow:   []string{"true --build ./..."},
+		Scope:   "task",
+	}); err != nil {
+		t.Fatalf("QueueAnswer failed: %v", err)
+	}
+	engine, err = NewEngine(projectRoot, cfg, 2)
+	if err != nil {
+		t.Fatalf("NewEngine (resume) failed: %v", err)
+	}
+	if err := engine.Run(ctx); err != nil {
+		t.Fatalf("engine.Run (resume) failed: %v", err)
+	}
+	state := engine.stateMgr.GetState()
+	if got := state.TaskStates["T01"].Status; got != schemas.TaskStateCompleted {
+		t.Fatalf("after approval T01 status = %s, want COMPLETED (err: %s)", got, state.TaskStates["T01"].Error)
+	}
+	if got := state.TaskStates["T02"].Status; got != schemas.TaskStateCompleted {
+		t.Errorf("T02 status = %s, want COMPLETED", got)
+	}
+}

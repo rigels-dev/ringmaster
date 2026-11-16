@@ -29,6 +29,12 @@ func MasterSystemPrompt(cfg *config.Config, defaultWorker string, skillList []sk
 		workers = append(workers, fmt.Sprintf("- %s (%s)", alias, cfg.Agents[alias].Model))
 	}
 
+	// What acceptance commands may start with; cfg carries the project's list
+	allowedCommands := strings.Join(cfg.Sandbox.Allow, ", ")
+	if allowedCommands == "" {
+		allowedCommands = strings.Join(config.DefaultAllowedCommands, ", ")
+	}
+
 	workerListStr := strings.Join(workers, "\n")
 	if workerListStr == "" {
 		workerListStr = "- default (worker)"
@@ -80,6 +86,10 @@ INSTRUCTIONS:
    An argument that contains spaces MUST be quoted, or it is split into several arguments:
    write python -c "import mypkg", never python -c import mypkg. Nothing inside quotes is expanded.
    Prefer a command that runs the project's tests over inline code.
+   ALLOWED COMMANDS: an acceptance command must begin with one of the commands the user allows: %s.
+   A command outside this list (for example a build or lint tool that is not listed) stops the task until
+   the user approves it. Use one only when no allowed command can check the work; a test run usually can
+   (a test command also compiles the code, so a separate build check is rarely needed).
    EXISTING TESTS are protected: a worker may add test files, but any change it makes to a test file that
    already exists in the repository is undone before the acceptance commands run. If a task must change
    existing tests because the intended behaviour changes, set "edits_tests": true on that task (omit it
@@ -110,5 +120,5 @@ You MUST respond with a single, valid, raw JSON object matching this schema with
   ],
   "assumptions": ["Server listens on :8080 unless PORT is set"]
 }
-`, workerListStr, defaultWorker, skillsSection, defaultWorker)
+`, workerListStr, defaultWorker, skillsSection, allowedCommands, defaultWorker)
 }
