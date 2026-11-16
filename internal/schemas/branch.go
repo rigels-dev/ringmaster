@@ -44,16 +44,16 @@ func BranchName(proposed string, taskType TaskType, title string) string {
 		if isBranchPrefix(head) {
 			prefix = head
 		}
-		slug = slugify(rest)
+		slug = slugify(rest, false)
 	} else {
-		slug = slugify(p)
+		slug = slugify(p, false)
 	}
 
 	if prefix == "" {
 		prefix = prefixForType(taskType)
 	}
 	if slug == "" {
-		slug = slugify(title)
+		slug = slugify(title, true)
 	}
 	if slug == "" {
 		slug = "task"
@@ -83,14 +83,15 @@ func prefixForType(t TaskType) string {
 	}
 }
 
-// slugify makes a short dash-separated slug, dropping filler words and
-// cutting at a word boundary.
-func slugify(s string) string {
+// slugify makes a short dash-separated slug, cut at a word boundary. Filler
+// words are dropped only from a slug made from a task title: a name the
+// planner chose is kept as written, so end-to-end stays end-to-end.
+func slugify(s string, dropFiller bool) string {
 	words := strings.Split(strings.Trim(notSlug.ReplaceAllString(strings.ToLower(s), "-"), "-"), "-")
 	var kept []string
 	length := 0
 	for _, w := range words {
-		if w == "" || (stopWords[w] && len(words) > 2) {
+		if w == "" || (dropFiller && stopWords[w] && len(words) > 2) {
 			continue
 		}
 		if length+len(w)+1 > maxBranchSlug && len(kept) > 0 {

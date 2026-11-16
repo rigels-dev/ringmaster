@@ -14,6 +14,9 @@ func TestBranchName(t *testing.T) {
 	}{
 		// What the planner is asked for is kept as it is
 		{"feat/link-store", TaskTypeBackend, "Thread-safe link store", "feat/link-store"},
+		// A name the planner chose keeps its small words
+		{"test/end-to-end-flow", TaskTypeTest, "x", "test/end-to-end-flow"},
+		{"docs/how-to-use-the-api", TaskTypeDocs, "x", "docs/how-to-use-the-api"},
 		{"fix/empty-file-exit-code", TaskTypeBackend, "x", "fix/empty-file-exit-code"},
 		// People also write a colon; a ref cannot hold one
 		{"feat:whatever", TaskTypeBackend, "x", "feat/whatever"},
