@@ -10,11 +10,14 @@ import (
 	"net/url"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"regexp"
 	"sort"
 	"strings"
 	"time"
 
+	"ringmaster/internal/schemas"
+	"ringmaster/internal/storage"
 	"ringmaster/internal/workspace"
 )
 
@@ -23,7 +26,8 @@ const (
 	Name = "origin"
 	// MainBranch is the branch tasks are merged into.
 	MainBranch = "main"
-	// TaskPrefix is the namespace of task branches.
+	// TaskPrefix is the namespace task branches had before they were given
+	// readable names. Branches in it are still treated as task branches.
 	TaskPrefix = "rm/"
 
 	pushTimeout = 3 * time.Minute
@@ -151,10 +155,15 @@ func GetStatus(ctx context.Context, projectRoot string) (Status, error) {
 	}
 
 	out, err := workspace.RunGit(ctx, projectRoot, "for-each-ref",
-		"--format=%(refname) %(objectname)",
-		"refs/heads/"+MainBranch, "refs/heads/"+strings.TrimSuffix(TaskPrefix, "/"), "refs/remotes/"+Name)
+		"--format=%(refname) %(objectname)", "refs/heads", "refs/remotes/"+Name)
 	if err != nil {
 		return st, err
+	}
+
+	// Only main and the task branches are Ringmaster's to report and push
+	mine := map[string]bool{MainBranch: true}
+	for _, b := range recordedTaskBranches(projectRoot) {
+		mine[b] = true
 	}
 
 	local := map[string]string{}
@@ -165,7 +174,9 @@ func GetStatus(ctx context.Context, projectRoot string) (Status, error) {
 			continue
 		}
 		if name, isLocal := strings.CutPrefix(ref, "refs/heads/"); isLocal {
-			local[name] = sha
+			if mine[name] || strings.HasPrefix(name, TaskPrefix) {
+				local[name] = sha
+			}
 		} else if name, isRemote := strings.CutPrefix(ref, "refs/remotes/"+Name+"/"); isRemote {
 			pushed[name] = sha
 		}
@@ -219,9 +230,50 @@ type PushResult struct {
 func Push(ctx context.Context, projectRoot string, mainOnly bool) ([]PushResult, error) {
 	refspecs := []string{"refs/heads/" + MainBranch + ":refs/heads/" + MainBranch}
 	if !mainOnly {
-		refspecs = append(refspecs, "refs/heads/"+TaskPrefix+"*:refs/heads/"+TaskPrefix+"*")
+		for _, branch := range TaskBranches(ctx, projectRoot) {
+			refspecs = append(refspecs, "refs/heads/"+branch+":refs/heads/"+branch)
+		}
 	}
 	return push(ctx, projectRoot, refspecs)
+}
+
+// TaskBranches lists the task branches that exist in the repository: the
+// ones Ringmaster recorded for its tasks, and any in the older rm/ namespace.
+// Named one by one, they are the only branches besides main that are ever
+// pushed; a branch of the user's own is never among them.
+func TaskBranches(ctx context.Context, projectRoot string) []string {
+	out, err := workspace.RunGit(ctx, projectRoot, "for-each-ref", "--format=%(refname:short)", "refs/heads")
+	if err != nil {
+		return nil
+	}
+	recorded := map[string]bool{}
+	for _, b := range recordedTaskBranches(projectRoot) {
+		recorded[b] = true
+	}
+	var branches []string
+	for _, name := range strings.Fields(out) {
+		if name != MainBranch && (recorded[name] || strings.HasPrefix(name, TaskPrefix)) {
+			branches = append(branches, name)
+		}
+	}
+	sort.Strings(branches)
+	return branches
+}
+
+// recordedTaskBranches reads the branch of every task from the project's
+// state, where the scheduler records it when a task first starts.
+func recordedTaskBranches(projectRoot string) []string {
+	state, err := storage.ReadJSON[schemas.ProjectState](filepath.Join(projectRoot, ".ringmaster", "state.json"))
+	if err != nil || state == nil {
+		return nil
+	}
+	var branches []string
+	for _, ts := range state.TaskStates {
+		if ts.Branch != "" && ts.Branch != MainBranch && !strings.HasPrefix(ts.Branch, "-") {
+			branches = append(branches, ts.Branch)
+		}
+	}
+	return branches
 }
 
 // PushRelease sends main and one release tag to origin. Only that tag is

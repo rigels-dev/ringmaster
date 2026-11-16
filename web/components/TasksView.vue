@@ -14,7 +14,7 @@
             </button>
             <!-- Runs the approved plan; while a run is active it leads to the logs instead -->
             <button
-              v-if="tasks.length > 0 && planApprovalState.isApproved"
+              v-if="tasks.length > 0 && planApprovalState.isApproved && !allTasksDone"
               @click="isRunActive ? setView('logs') : handleExecuteOrSpur()"
               class="px-4 py-2 rounded flex items-center gap-2 transition border text-body font-bold"
               :class="isRunActive
@@ -66,9 +66,6 @@
           </div>
         </div>
 
-        <!-- Everything is merged: say so, and offer what comes next -->
-        <RunCompleteBanner v-if="allTasksDone" />
-
         <!-- Said before a run, because a commit's author cannot be changed afterwards -->
         <GitIdentityNotice v-if="tasks.length > 0" class="mb-6" />
 
@@ -103,17 +100,18 @@
               </button>
               <button 
                 @click="replanInChat"
-                :disabled="isGeneratingPlan"
-                class="px-3.5 py-2 bg-slate-panel hover:bg-slate-dark text-gear-gold border border-gear-dark rounded text-body font-bold transition flex items-center gap-1.5"
-                title="Generate the plan again with the Master"
+                :disabled="isGeneratingPlan || allTasksDone"
+                class="px-3.5 py-2 bg-slate-panel hover:bg-slate-dark text-gear-gold border border-gear-dark rounded text-body font-bold transition flex items-center gap-1.5 disabled:opacity-40 disabled:cursor-not-allowed"
+                :title="allTasksDone ? doneTitle : 'Generate the plan again with the Master'"
               >
                 <span>↺</span>
                 <span>Re-plan</span>
               </button>
               <button 
                 @click="discardPlanAction"
-                class="px-3 py-2 bg-slate-dark hover:bg-rose-950/60 text-zinc-400 hover:text-rose-400 border border-steel rounded text-body transition"
-                title="Discard this plan and start over"
+                :disabled="allTasksDone"
+                class="px-3 py-2 bg-slate-dark hover:bg-rose-950/60 text-zinc-400 hover:text-rose-400 border border-steel rounded text-body transition disabled:opacity-40 disabled:cursor-not-allowed"
+                :title="allTasksDone ? doneTitle : 'Discard this plan and start over'"
               >
                 <span>✗ Discard</span>
               </button>
@@ -165,6 +163,9 @@
             </div>
           </div>
         </div>
+
+        <!-- Everything is merged: say so, and offer what comes next -->
+        <RunCompleteBanner v-if="allTasksDone" />
 
         <!-- If Blank Project -->
         <div v-if="tasks.length === 0" class="flex-1 flex flex-col items-center justify-center p-12 bg-slate-panel/30 border border-dashed border-steel rounded-lg text-center">
@@ -229,8 +230,13 @@
                 v-if="task.status === 'RUNNING'"
                 class="flex items-center justify-between gap-2 text-2xs min-w-0 bg-cyan-950/40 px-2.5 py-1.5 rounded border border-cyan-700/60"
               >
-                <code class="text-cyan-energy truncate" :title="`branch rm/${task.id}`">⎇ rm/{{ task.id }}</code>
+                <code class="text-cyan-energy truncate" :title="`branch ${task.branch}`">⎇ {{ task.branch }}</code>
                 <span class="text-zinc-400 truncate" :title="task.worker">{{ task.worker }}</span>
+              </div>
+
+              <!-- The branch this task works on, shown before it runs so the name can be reviewed with the plan -->
+              <div v-else class="text-2xs text-zinc-500 min-w-0 truncate" :title="`branch ${task.branch}`">
+                <code class="text-zinc-400">⎇ {{ task.branch }}</code>
               </div>
 
               <!-- Dependencies list -->
@@ -321,6 +327,9 @@ watch(() => unansweredQuestions.value.length, (n, prev) => {
 })
 
 const openTask = computed(() => tasks.value.find(t => t.id === openTaskId.value) || null)
+
+// A finished plan is not re-planned or discarded: its tasks are merged. The next change is planned from Chat.
+const doneTitle = 'Every task of this plan is done and merged. Plan the next change from Chat.'
 
 // Shown only when nothing is left to do: every task done, and no run going
 const allTasksDone = computed(() =>

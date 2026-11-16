@@ -298,7 +298,8 @@ const laneOf = (c) => laneMap.value[c.branch] ?? 0
 
 function colorOf(branch) {
   if (!branch || branch === 'main') return MAIN_COLOR
-  const n = parseInt(String(branch).replace(/\D/g, ''), 10) || 0
+  // Coloured by task number, so a branch keeps its hue whatever it is called
+  const n = parseInt(String(taskOf(branch)).replace(/\D/g, ''), 10) || 0
   return `rgb(var(--c-${TASK_HUES[n % TASK_HUES.length]}))`
 }
 
@@ -335,7 +336,8 @@ const isDim = (branch) => Boolean(focus.value) && branch !== focus.value && bran
 const rowDim = (c) => Boolean(focus.value) && (c.mergeOf ? c.mergeOf !== focus.value : c.branch !== focus.value)
 
 // ── Labels & facts ──────────────────────────────────────────────────────────
-const taskOf = (branch) => String(branch).replace(/^rm\//, '')
+// The task a branch belongs to: recorded by the API; an rm/ branch carries it in its name
+const taskOf = (branch) => branchByName(branch)?.task || String(branch).replace(/^rm\//, '')
 const taskOfCommit = (c) => c.task || (c.mergeOf ? taskOf(c.mergeOf) : c.branch && c.branch !== 'main' ? taskOf(c.branch) : null)
 const stripTask = (subject) => subject.replace(/^T\d{2,3}:\s*/, '')
 // Trailer first; older commits without trailers fall back to the task's recorded worker

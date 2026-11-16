@@ -353,6 +353,8 @@ function createRingmaster() {
         worker: t.worker || 'worker',
         depends_on: t.depends_on || [],
         editsTests: Boolean(t.edits_tests),
+        // The branch in use once the task has started, else the one the plan names
+        branch: ts.branch || t.branch || `rm/${t.id}`,
         status: ts.status || 'PENDING',
         error: ts.error || '',
         requests: ts.requests || [],
@@ -401,7 +403,7 @@ function createRingmaster() {
         role: 'worker',
         workerId: t.worker,
         taskId: t.id,
-        taskBranch: `rm/${t.id}`,
+        taskBranch: t.branch,
         statusTitle: `🙋 ${statusLabel(t.status)}`,
         text: lines.length ? `${reason}\n\n${lines.join('\n')}` : reason,
         time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),

@@ -36,17 +36,36 @@ export default defineEventHandler(async (event) => {
     }
   }
 
-  // Branch refs
+  // Task titles, workers, statuses and branches from the plan and state
+  const readJson = (file: string) => {
+    try {
+      return JSON.parse(fs.readFileSync(file, 'utf-8'))
+    } catch {
+      return null
+    }
+  }
+  const plan = readJson(path.join(projectDir, '.ringmaster', 'plan.json'))
+  const state = readJson(path.join(projectDir, '.ringmaster', 'state.json'))
+
+  // Which branch belongs to which task: the scheduler records it when a task
+  // starts. Branches in the older rm/ namespace carry the task id in their name.
+  const taskOfBranch: Record<string, string> = {}
+  for (const [id, ts] of Object.entries<any>(state?.task_states || {})) {
+    if (ts?.branch) taskOfBranch[ts.branch] = id
+  }
+
+  // Branch refs: only task branches, never the user's own
   let refsOut = ''
   try {
-    refsOut = await git(projectDir, ['for-each-ref', '--format=%(refname:short)' + FS + '%(objectname)', 'refs/heads/rm/'])
+    refsOut = await git(projectDir, ['for-each-ref', '--format=%(refname:short)' + FS + '%(objectname)', 'refs/heads'])
   } catch (err: any) {
     return { ok: false, error: `Not a git repository: ${err.message}` }
   }
   const tips: Record<string, string> = {}
   for (const line of refsOut.split('\n').filter(Boolean)) {
     const [name, sha] = line.split(FS)
-    tips[name] = sha
+    if (name.startsWith('rm/') && !taskOfBranch[name]) taskOfBranch[name] = name.slice(3)
+    if (taskOfBranch[name]) tips[name] = sha
   }
 
   let mainRef = 'main'
@@ -112,22 +131,11 @@ export default defineEventHandler(async (event) => {
     }
   }
 
-  // Task titles, workers and statuses from the plan and state
-  const readJson = (file: string) => {
-    try {
-      return JSON.parse(fs.readFileSync(file, 'utf-8'))
-    } catch {
-      return null
-    }
-  }
-  const plan = readJson(path.join(projectDir, '.ringmaster', 'plan.json'))
-  const state = readJson(path.join(projectDir, '.ringmaster', 'state.json'))
-
   const branches = Object.keys(tips).map((name) => {
     const own = commits.filter((c) => c.branch === name) // newest first
     const oldest = own[own.length - 1]
     const merge = commits.find((c) => c.mergeOf === name) || null
-    const taskId = name.replace(/^rm\//, '')
+    const taskId = taskOfBranch[name]
     const planTask = plan?.tasks?.find((t: any) => t.id === taskId)
     const ts = state?.task_states?.[taskId]
     const automatons = [...new Set(own.slice().reverse().map((c) => c.automaton).filter(Boolean))]
@@ -135,7 +143,8 @@ export default defineEventHandler(async (event) => {
     return {
       name,
       task: taskId,
-      title: planTask?.title || '',
+      // A task of an earlier plan is no longer in plan.json; its state keeps the title
+      title: planTask?.title || ts?.title || '',
       tip: tips[name],
       fork: oldest?.parents[0] || null,
       merge: merge ? { sha: merge.sha, time: merge.time } : null,

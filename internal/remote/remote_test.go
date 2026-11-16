@@ -286,3 +286,53 @@ func TestPushReportsAnUnreachableRemote(t *testing.T) {
 		t.Fatalf("error does not carry git's reason: %v", err)
 	}
 }
+
+// Task branches with readable names are pushed because Ringmaster recorded
+// them for its tasks; a branch of the user's own with a similar name is not.
+func TestPushSendsRecordedTaskBranchesNotTheUsers(t *testing.T) {
+	ctx := context.Background()
+	dir := project(t) // main, rm/T01, rm/T02, and the user's "scratch"
+	remotePath, remoteURL := bareRemote(t)
+	if err := SetURL(ctx, dir, remoteURL); err != nil {
+		t.Fatal(err)
+	}
+
+	git(t, dir, "branch", "feat/link-store")  // a task's
+	git(t, dir, "branch", "docs/usage")       // a task's
+	git(t, dir, "branch", "feat/my-own-idea") // the user's
+	if err := os.MkdirAll(filepath.Join(dir, ".ringmaster"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	state := `{"task_states":{
+	 "T03":{"id":"T03","status":"COMPLETED","branch":"feat/link-store"},
+	 "T04":{"id":"T04","status":"RUNNING","branch":"docs/usage"},
+	 "T05":{"id":"T05","status":"PENDING","branch":"feat/not-created-yet"},
+	 "T06":{"id":"T06","status":"PENDING","branch":"--force"}}}`
+	if err := os.WriteFile(filepath.Join(dir, ".ringmaster", "state.json"), []byte(state), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	if got, want := strings.Join(TaskBranches(ctx, dir), " "), "docs/usage feat/link-store rm/T01 rm/T02"; got != want {
+		t.Fatalf("task branches = %q, want %q", got, want)
+	}
+
+	st, err := GetStatus(ctx, dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var names []string
+	for _, b := range st.Branches {
+		names = append(names, b.Name)
+	}
+	if got, want := strings.Join(names, " "), "main docs/usage feat/link-store rm/T01 rm/T02"; got != want {
+		t.Fatalf("status lists %q, want %q", got, want)
+	}
+
+	if _, err := Push(ctx, dir, false); err != nil {
+		t.Fatal(err)
+	}
+	onRemote := strings.Join(strings.Fields(git(t, remotePath, "for-each-ref", "--format=%(refname:short)", "refs/heads")), " ")
+	if want := "docs/usage feat/link-store main rm/T01 rm/T02"; onRemote != want {
+		t.Fatalf("remote branches = %q, want %q", onRemote, want)
+	}
+}

@@ -20,6 +20,7 @@ import (
 var (
 	headlessPlan bool
 	approvePlan  bool
+	forcePlan    bool
 )
 
 var planCmd = &cobra.Command{
@@ -40,8 +41,10 @@ var planCmd = &cobra.Command{
 		planPath := filepath.Join(projectDir, ".ringmaster", "plan.json")
 		var p *schemas.Plan
 
-		// If plan.json doesn't exist, generate it using master agent
-		if _, err := os.Stat(planPath); os.IsNotExist(err) {
+		// Generate with the master agent when there is no plan yet, or when a new
+		// one is asked for. The old plan.json stays in place until the new one is
+		// written, because the planner reads it to name the tasks already done.
+		if _, err := os.Stat(planPath); os.IsNotExist(err) || forcePlan {
 			fmt.Printf("Generating plan for '%s' using Master Planner agent...\n", projectName)
 			reg := registry.NewRegistry(cfg)
 			masterAlias := cfg.Routing.DefaultMaster
@@ -67,6 +70,8 @@ var planCmd = &cobra.Command{
 				return fmt.Errorf("plan generation failed: %w", err)
 			}
 			p = generatedPlan
+			// An approval belongs to the plan it was given for
+			_ = os.Remove(filepath.Join(projectDir, ".ringmaster", "plan.approved.json"))
 			fmt.Printf("✓ Plan generated successfully! (Tokens used: %d)\n", usage.TokensTotal())
 		} else {
 			loadedPlan, err := storage.ReadJSON[schemas.Plan](planPath)
@@ -229,6 +234,7 @@ func printOpenQuestions(p *schemas.Plan) {
 }
 
 func init() {
+	planCmd.Flags().BoolVar(&forcePlan, "force", false, "Generate a new plan even though plan.json exists (the new plan replaces it and needs approval again)")
 	planCmd.Flags().BoolVar(&headlessPlan, "headless", false, "Generate plan without opening interactive terminal prompt")
 	planCmd.Flags().BoolVarP(&approvePlan, "approve", "y", false, "Directly approve current plan and generate plan.approved.json")
 	RootCmd.AddCommand(planCmd)

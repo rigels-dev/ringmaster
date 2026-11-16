@@ -37,10 +37,14 @@ func NewMergeQueue(projectRoot string) *MergeQueue {
 // It never checks out a branch in the project's working tree; on a conflict,
 // main is left untouched and the conflicted files are reported.
 func (mq *MergeQueue) Enqueue(ctx context.Context, taskID string) (*MergeResult, error) {
+	return mq.EnqueueBranch(ctx, taskID, "rm/"+taskID)
+}
+
+// EnqueueBranch is Enqueue for a task whose branch has its own name.
+func (mq *MergeQueue) EnqueueBranch(ctx context.Context, taskID, branchName string) (*MergeResult, error) {
 	mq.mu.Lock()
 	defer mq.mu.Unlock()
 
-	branchName := fmt.Sprintf("rm/%s", taskID)
 	result := &MergeResult{
 		TaskID: taskID,
 		Branch: branchName,
@@ -85,8 +89,11 @@ func (mq *MergeQueue) Enqueue(ctx context.Context, taskID string) (*MergeResult,
 	}
 
 	// 2. Record the merge commit (main first, so main's first-parent line stays intact)
+	// The task id stays in the subject so the history reads the same for
+	// every branch naming; the branch itself is named in a trailer
 	mergeMsg := fmt.Sprintf("Merge task %s into main [Ringmaster]", taskID)
-	commitOut, err := RunGit(ctx, mq.repoPath, "commit-tree", tree, "-p", mainTip, "-p", branchTip, "-m", mergeMsg, "-m", "Ringmaster-Task: "+taskID)
+	trailers := "Ringmaster-Task: " + taskID + "\nRingmaster-Branch: " + branchName
+	commitOut, err := RunGit(ctx, mq.repoPath, "commit-tree", tree, "-p", mainTip, "-p", branchTip, "-m", mergeMsg, "-m", trailers)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create merge commit: %w", err)
 	}

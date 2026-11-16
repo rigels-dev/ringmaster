@@ -16,7 +16,13 @@ const (
 )
 
 type TaskState struct {
-	ID       string              `json:"id"`
+	ID string `json:"id"`
+	// Title and Branch are recorded when the task first starts, so a task
+	// from an earlier plan can still be named and found after a new plan
+	// has replaced it. Branch is the branch actually used, which differs
+	// from the plan's when that name was already taken.
+	Title    string              `json:"title,omitempty"`
+	Branch   string              `json:"branch,omitempty"`
 	Status   TaskExecutionStatus `json:"status"`
 	Worker   string              `json:"worker"`
 	Attempt  int                 `json:"attempt"`

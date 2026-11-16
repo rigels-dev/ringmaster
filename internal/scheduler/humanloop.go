@@ -232,9 +232,11 @@ func (e *Engine) appendEvent(taskID, action string, payload any) {
 }
 
 // haltStatus is the project status when no task can make progress without the user.
-func haltStatus(ps *schemas.ProjectState) string {
+// Only the current plan's tasks count; tasks of earlier plans are history.
+func haltStatus(ps *schemas.ProjectState, tasks []schemas.PlanTask) string {
 	status := "HALTED"
-	for _, ts := range ps.TaskStates {
+	for _, t := range tasks {
+		ts := ps.TaskStates[t.ID]
 		switch ts.Status {
 		case schemas.TaskStateAwaiting:
 			return "AWAITING_INPUT"

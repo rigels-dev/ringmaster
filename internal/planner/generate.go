@@ -66,7 +66,11 @@ func GeneratePlan(
 		promptCfg = &withApproved
 	}
 	systemPrompt := MasterSystemPrompt(promptCfg, defaultWorker, skills.Enabled(skills.Discover(projectRoot), disabledSkills))
-	userPrompt := fmt.Sprintf("Project Name: %s\n\n# BRIEF.MD:\n%s\n\nGenerate the complete project DAG Plan JSON now.", projectName, string(briefBytes))
+	// What earlier plans already built: their tasks are not planned again,
+	// and their IDs and branches are not reused
+	prior := loadPriorWork(ctx, projectRoot)
+	userPrompt := fmt.Sprintf("Project Name: %s\n\n# BRIEF.MD:\n%s\n%s\nGenerate the complete project DAG Plan JSON now.",
+		projectName, string(briefBytes), prior.promptSection())
 
 	messages := []llm.Message{
 		{Role: "system", Content: systemPrompt},
@@ -144,7 +148,25 @@ func GeneratePlan(
 			}
 		}
 
+		// IDs and dependencies are made to fit what is already in the project
+		// before anything else looks at them
+		ids := make([]string, len(raw.Tasks))
+		deps := make([][]string, len(raw.Tasks))
 		for i, rt := range raw.Tasks {
+			ids[i], deps[i] = rt.ID, rt.DependsOn
+		}
+		ids, deps = prior.fitIDs(ids, deps)
+		branchTaken := map[string]bool{}
+
+		for i, rt := range raw.Tasks {
+			rt.ID, rt.DependsOn = ids[i], deps[i]
+			// A readable, valid branch name, different for every task of the plan
+			rt.Branch = schemas.BranchName(rt.Branch, rt.Type, rt.Title)
+			for n, base := 2, rt.Branch; branchTaken[rt.Branch]; n++ {
+				rt.Branch = fmt.Sprintf("%s-%d", base, n)
+			}
+			branchTaken[rt.Branch] = true
+
 			if rt.MaxRetries <= 0 {
 				rt.MaxRetries = 2
 			}

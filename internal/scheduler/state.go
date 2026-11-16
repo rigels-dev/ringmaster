@@ -49,9 +49,8 @@ func NewStateManager(projectRoot, planHash string) (*StateManager, error) {
 				sm.state.TaskStates[id] = ts
 			}
 		}
-		if sm.state.PlanHash == "" {
-			sm.state.PlanHash = planHash
-		}
+		// A new plan replaces the old one; the task states of earlier plans stay as history
+		sm.state.PlanHash = planHash
 	} else {
 		projectName := filepath.Base(projectRoot)
 		sm.state = schemas.NewProjectState(projectName, planHash)
@@ -120,15 +119,16 @@ func (sm *StateManager) UpdateProject(fn func(*schemas.ProjectState)) error {
 }
 
 // TotalTokensConsumed is what the project budget is measured against: the
-// budget tokens of planning and of every task (see Usage.BudgetTokens, which
-// counts a cache read as a tenth of a token).
-func (sm *StateManager) TotalTokensConsumed() int {
+// budget tokens of planning and of the given plan's tasks (see
+// Usage.BudgetTokens, which counts a cache read as a tenth of a token).
+// Tasks of earlier plans are not counted, so each plan gets the budget anew.
+func (sm *StateManager) TotalTokensConsumed(tasks []schemas.PlanTask) int {
 	sm.mu.Lock()
 	defer sm.mu.Unlock()
 
 	total := sm.state.Planning.BudgetTokens()
-	for _, ts := range sm.state.TaskStates {
-		total += ts.Usage.BudgetTokens()
+	for _, t := range tasks {
+		total += sm.state.TaskStates[t.ID].Usage.BudgetTokens()
 	}
 	return total
 }

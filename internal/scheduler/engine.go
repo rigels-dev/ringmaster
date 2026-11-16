@@ -34,6 +34,9 @@ type Engine struct {
 	briefContent string
 	eventsPath   string
 	maxParallel  int
+	// branchMu makes choosing a task's branch name one-at-a-time, so two
+	// tasks starting together cannot settle on the same name
+	branchMu sync.Mutex
 }
 
 // NewEngine creates and validates an execution engine for a project.
@@ -114,7 +117,7 @@ func (e *Engine) Run(ctx context.Context) error {
 		}
 
 		// 2. Check project budget
-		consumed := e.stateMgr.TotalTokensConsumed()
+		consumed := e.stateMgr.TotalTokensConsumed(e.plan.Tasks)
 		if e.cfg.Budget.MaxTokensPerProject > 0 && consumed >= e.cfg.Budget.MaxTokensPerProject {
 			// Let in-flight tasks record their outcome instead of leaving them RUNNING
 			wg.Wait()
@@ -164,7 +167,7 @@ func (e *Engine) Run(ctx context.Context) error {
 				if allCompleted {
 					ps.Status = "COMPLETED"
 				} else {
-					ps.Status = haltStatus(ps)
+					ps.Status = haltStatus(ps, e.plan.Tasks)
 				}
 			})
 			break
@@ -182,7 +185,7 @@ func (e *Engine) Run(ctx context.Context) error {
 			if !hasRunning {
 				// Halted: remaining tasks wait on paused or failed upstream tasks
 				_ = e.stateMgr.UpdateProject(func(ps *schemas.ProjectState) {
-					ps.Status = haltStatus(ps)
+					ps.Status = haltStatus(ps, e.plan.Tasks)
 				})
 				break
 			}
@@ -198,6 +201,7 @@ func (e *Engine) Run(ctx context.Context) error {
 				ts.Status = schemas.TaskStateRunning
 				ts.StartAt = &now
 				ts.Worker = task.Worker
+				ts.Title = task.Title
 			})
 
 			fmt.Printf("⚡ [Scheduler] Dispatching task %s to worker automaton '%s'...\n", task.ID, task.Worker)
@@ -286,11 +290,12 @@ func (e *Engine) executeTask(ctx context.Context, planTask schemas.PlanTask) {
 	baseRef := "main"
 	if len(planTask.DependsOn) > 0 {
 		// Use most recent upstream branch if applicable
-		baseRef = "rm/" + planTask.DependsOn[len(planTask.DependsOn)-1]
+		baseRef = e.branchOf(planTask.DependsOn[len(planTask.DependsOn)-1])
 	}
 
-	// 4. Create isolated git worktree
-	worktree, err := workspace.CreateWorktree(ctx, e.projectRoot, planTask.ID, baseRef)
+	// 4. Create isolated git worktree, on the task's own branch
+	branch := e.taskBranch(ctx, planTask)
+	worktree, err := workspace.CreateWorktreeOn(ctx, e.projectRoot, planTask.ID, branch, baseRef)
 	if err != nil {
 		e.failTask(planTask.ID, fmt.Sprintf("worktree creation failed: %v", err))
 		return
@@ -375,7 +380,7 @@ func (e *Engine) executeTask(ctx context.Context, planTask schemas.PlanTask) {
 		_, _ = workspace.CommitAll(ctx, worktree, fmt.Sprintf("Complete task %s", planTask.ID), taskTrailers(planTask.ID, workerAlias, loopRes.TotalAttempts))
 
 		// Enqueue to serialized Merge Queue
-		mergeRes, mErr := e.mergeQueue.Enqueue(ctx, planTask.ID)
+		mergeRes, mErr := e.mergeQueue.EnqueueBranch(ctx, planTask.ID, branch)
 		if mErr != nil || mergeRes == nil || !mergeRes.Merged {
 			// Not merged (conflict, the user's checkout in the way, or a git error) -> NEEDS_REVIEW
 			reason := "merge failed"
@@ -477,6 +482,54 @@ func (e *Engine) updateSkippedTasks(state *schemas.ProjectState, taskMap map[str
 			}
 		}
 	}
+}
+
+// branchOf returns the branch of a task that has started: the one recorded
+// for it, or rm/<id> for a task from before branches were named.
+func (e *Engine) branchOf(taskID string) string {
+	if b := e.stateMgr.GetState().TaskStates[taskID].Branch; b != "" {
+		return b
+	}
+	return schemas.LegacyBranch(taskID)
+}
+
+// taskBranch returns the branch a task works on. The first time, it settles
+// the name and records it: the plan's name if that is free, else the same
+// name with a numeric suffix, so a task never takes over a branch that is
+// already there (the user's own, or an earlier task's). A plan made before
+// branches were named has none, and its tasks keep rm/<id>. Afterwards the
+// recorded branch is used, so a resumed task continues where it was.
+func (e *Engine) taskBranch(ctx context.Context, task schemas.PlanTask) string {
+	e.branchMu.Lock()
+	defer e.branchMu.Unlock()
+
+	state := e.stateMgr.GetState()
+	if b := state.TaskStates[task.ID].Branch; b != "" {
+		return b
+	}
+
+	branch := schemas.LegacyBranch(task.ID)
+	if task.Branch != "" {
+		// Names promised to other tasks count as taken even before their branch exists
+		taken := map[string]bool{}
+		for id, ts := range state.TaskStates {
+			if id != task.ID && ts.Branch != "" {
+				taken[ts.Branch] = true
+			}
+		}
+		branch = task.Branch
+		for n := 2; taken[branch] || workspace.BranchExists(ctx, e.projectRoot, branch); n++ {
+			branch = fmt.Sprintf("%s-%d", task.Branch, n)
+		}
+	}
+
+	_ = e.stateMgr.UpdateTaskState(task.ID, func(ts *schemas.TaskState) {
+		ts.Branch = branch
+		if ts.Title == "" {
+			ts.Title = task.Title
+		}
+	})
+	return branch
 }
 
 // GetState returns current project state from StateManager.
