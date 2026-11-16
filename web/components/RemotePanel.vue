@@ -11,16 +11,24 @@
           <span class="text-xs" :class="pending > 0 ? 'text-amber-300' : 'text-zinc-400'">
             {{ pending > 0 ? `${pending} of ${status.branches.length} branches not pushed` : 'Everything is pushed' }}
           </span>
+          <!-- Something to push: push it -->
           <button
+            v-if="pending > 0 || pushing"
             @click="confirmPush"
-            :disabled="pushing || status.branches.length === 0"
-            class="px-3.5 py-1.5 rounded text-body font-bold border transition disabled:opacity-40 disabled:cursor-not-allowed"
-            :class="pending > 0
-              ? 'bg-gear-gold hover:bg-gear-glow border-gear-gold text-ink'
-              : 'bg-slate-inner hover:bg-slate-dark border-steel text-zinc-300'"
+            :disabled="pushing"
+            class="px-3.5 py-1.5 rounded text-body font-bold border transition bg-gear-gold hover:bg-gear-glow border-gear-gold text-ink disabled:opacity-40 disabled:cursor-not-allowed"
             title="Push main and every task branch to the remote. Nothing is forced."
           >
             {{ pushing ? 'Pushing…' : '↑ Push' }}
+          </button>
+          <!-- Everything is pushed and the plan is finished: the next step is a new plan -->
+          <button
+            v-else-if="planFinished"
+            @click="setView('chat')"
+            class="px-3.5 py-1.5 rounded text-body font-bold border transition bg-gear-gold hover:bg-gear-glow border-gear-gold text-ink"
+            title="Everything is pushed. Plan the next change with the Master in Chat."
+          >
+            Go to next plan ▸
           </button>
         </div>
       </template>
@@ -90,7 +98,14 @@ const props = defineProps({
   refreshKey: { type: Number, default: 0 }
 })
 
-const { showToast, confirmDialog } = useRingmaster()
+const { showToast, confirmDialog, setView, tasks, isRunActive } = useRingmaster()
+
+// The current plan has run to the end: every task done, and no run going
+const planFinished = computed(() =>
+  tasks.value.length > 0 &&
+  !isRunActive.value &&
+  tasks.value.every(t => t.status === 'COMPLETED' || t.status === 'DONE')
+)
 
 const status = ref({ url: '', branches: [], author: null })
 const loaded = ref(false)
