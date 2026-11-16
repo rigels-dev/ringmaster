@@ -124,16 +124,27 @@ func ValidateVersion(ctx context.Context, projectRoot, version string) error {
 // Tag marks main's tip as release version with an annotated tag. It refuses
 // to move or replace a tag: a version that exists is a release already made.
 func Tag(ctx context.Context, projectRoot, version string) error {
+	if _, err := workspace.RunGit(ctx, projectRoot, "rev-parse", "--verify", "--quiet", "refs/heads/"+MainBranch); err != nil {
+		return fmt.Errorf("the project has no %q branch to release", MainBranch)
+	}
+	return TagAt(ctx, projectRoot, version, "refs/heads/"+MainBranch)
+}
+
+// TagAt is Tag for a given commit of main, such as the end of an earlier step.
+func TagAt(ctx context.Context, projectRoot, version, commit string) error {
 	if err := ValidateVersion(ctx, projectRoot, version); err != nil {
 		return err
 	}
-	if _, err := workspace.RunGit(ctx, projectRoot, "rev-parse", "--verify", "--quiet", "refs/heads/"+MainBranch); err != nil {
-		return fmt.Errorf("the project has no %q branch to release", MainBranch)
+	if strings.HasPrefix(commit, "-") {
+		return errors.New("a commit cannot start with '-'")
+	}
+	if _, err := workspace.RunGit(ctx, projectRoot, "rev-parse", "--verify", "--quiet", commit+"^{commit}"); err != nil {
+		return fmt.Errorf("%q is not a commit of this project", commit)
 	}
 	if _, err := workspace.RunGit(ctx, projectRoot, "rev-parse", "--verify", "--quiet", "refs/tags/"+version); err == nil {
 		return fmt.Errorf("%s already exists; choose another version", version)
 	}
-	if _, err := workspace.RunGit(ctx, projectRoot, "tag", "-a", version, "-m", "Release "+version, "refs/heads/"+MainBranch); err != nil {
+	if _, err := workspace.RunGit(ctx, projectRoot, "tag", "-a", version, "-m", "Release "+version, commit); err != nil {
 		return err
 	}
 	return nil

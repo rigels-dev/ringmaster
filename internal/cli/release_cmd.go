@@ -11,6 +11,7 @@ import (
 	"ringmaster/internal/release"
 	"ringmaster/internal/remote"
 	"ringmaster/internal/schemas"
+	"ringmaster/internal/steps"
 	"ringmaster/internal/storage"
 )
 
@@ -18,6 +19,7 @@ var (
 	releaseJSON   bool
 	releasePush   bool
 	releaseForce  bool
+	releaseStep   int
 	archiveFormat string
 	archiveOutDir string
 	archiveJSON   bool
@@ -81,19 +83,36 @@ current plan are unfinished the release is refused; --force overrides that.`,
 			return err
 		}
 
-		if len(report.Unfinished) > 0 && !releaseForce {
-			return fail(fmt.Errorf("%d task(s) are not done yet (%s); finish them first, or use --force",
-				len(report.Unfinished), strings.Join(report.Unfinished, ", ")))
-		}
-		if err := release.Tag(ctx, projectDir, version); err != nil {
-			return fail(err)
+		if releaseStep > 0 {
+			// A finished step is released where it ended, even if main has moved on since
+			step, err := steps.Get(ctx, projectDir, releaseStep)
+			if err != nil {
+				return fail(err)
+			}
+			if err := release.TagAt(ctx, projectDir, version, step.Commit); err != nil {
+				return fail(err)
+			}
+			if !releaseJSON {
+				fmt.Printf("✓ Tagged %s (commit %.7s) as %s\n", step.Title(), step.Commit, version)
+			}
+		} else {
+			if len(report.Unfinished) > 0 && !releaseForce {
+				return fail(fmt.Errorf("%d task(s) are not done yet (%s); finish them first, or use --force",
+					len(report.Unfinished), strings.Join(report.Unfinished, ", ")))
+			}
+			if err := release.Tag(ctx, projectDir, version); err != nil {
+				return fail(err)
+			}
+			if !releaseJSON {
+				fmt.Printf("✓ Tagged main as %s\n", version)
+			}
 		}
 		report.Tagged = version
-		report.Current, report.Latest = version, version
-		report.Suggestions = release.Suggest(version)
-		if !releaseJSON {
-			fmt.Printf("✓ Tagged main as %s\n", version)
+		if refreshed, err := release.GetInfo(ctx, projectDir); err == nil {
+			report.Info = refreshed
 		}
+		report.Latest = version
+		report.Suggestions = release.Suggest(version)
 
 		if releasePush {
 			results, pushErr := remote.PushRelease(ctx, projectDir, version)
@@ -239,6 +258,7 @@ func buildReleaseView(r releaseReport) string {
 func init() {
 	releaseCmd.Flags().BoolVar(&releaseJSON, "json", false, "Print the release information as JSON")
 	releaseCmd.Flags().BoolVar(&releasePush, "push", false, "Also push main and the new tag to origin")
+	releaseCmd.Flags().IntVar(&releaseStep, "step", 0, "Release a finished step (see 'ringmaster steps') at the commit where it ended")
 	releaseCmd.Flags().BoolVar(&releaseForce, "force", false, "Release even though tasks of the current plan are unfinished")
 	archiveCmd.Flags().StringVar(&archiveFormat, "format", release.FormatZip, "Archive format: zip or tar.gz")
 	archiveCmd.Flags().StringVar(&archiveOutDir, "out", "", "Directory to write the archive to (default: .ringmaster/archives)")

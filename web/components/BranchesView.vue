@@ -12,6 +12,9 @@
 
         <RemotePanel :refresh-key="refreshKey" />
 
+        <!-- Finished plans: release them, or finish them without a release -->
+        <StepsPanel :steps="steps" @changed="refresh" />
+
         <!-- Summary -->
         <div v-if="branches.length" class="p-3 rounded-lg border border-steel bg-slate-panel flex flex-wrap gap-x-6 gap-y-2 text-body font-mono text-zinc-400">
           <span>Branches <strong class="text-zinc-200">{{ branches.length }}</strong></span>
@@ -90,6 +93,12 @@
                       <span class="font-bold mr-1.5" :style="{ color: colorOf(c.mergeOf) }">⇢ {{ c.mergeOf }}</span>
                       <span class="text-zinc-500">merged into {{ data.main }}</span>
                     </template>
+                    <!-- Where a step ended, and the release on it -->
+                    <span
+                      v-if="stepAt[c.sha]"
+                      class="ml-2 text-2xs px-1.5 py-0.5 rounded border border-gear-dark text-gear-gold font-sans font-bold whitespace-nowrap"
+                      :title="`${stepAt[c.sha].name || 'Step ' + stepAt[c.sha].number} ends here`"
+                    >◆ Step {{ stepAt[c.sha].number }}<template v-if="stepAt[c.sha].releases.length"> · {{ stepAt[c.sha].releases.join(', ') }}</template></span>
                     <template v-else>
                       <span class="font-bold mr-1.5" :style="{ color: colorOf(c.branch) }">{{ c.branch && c.branch !== 'main' ? taskOf(c.branch) : (c.branch || 'other') }}</span>
                       <span class="text-zinc-200">{{ stripTask(c.subject) }}</span>
@@ -234,11 +243,21 @@ const branches = computed(() =>
   [...data.value.branches].sort((a, b) => a.task.localeCompare(b.task, undefined, { numeric: true }))
 )
 
-// Refresh reloads the branches and tells the remote panel to reload too
+// Refresh reloads the branches and steps, and tells the remote panel to reload too
 const refreshKey = ref(0)
 function refresh() {
   refreshKey.value++
   load()
+  loadSteps()
+}
+
+const steps = ref([])
+const stepAt = computed(() => Object.fromEntries(steps.value.map((st) => [st.commit, st])))
+async function loadSteps() {
+  try {
+    const json = await (await fetch('/api/steps')).json()
+    if (json.ok) steps.value = json.steps
+  } catch {}
 }
 
 async function load() {
@@ -390,6 +409,7 @@ function openTask(id) {
 let timer = null
 onMounted(() => {
   load()
+  loadSteps()
   timer = setInterval(load, 5000)
 })
 onUnmounted(() => clearInterval(timer))

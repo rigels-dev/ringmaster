@@ -1,8 +1,8 @@
 import { ringmasterBinPath, rootTomlPath, resolveProjectDir, runCommand } from '../utils/ringmaster'
 import { cliError } from '../utils/cli'
 
-// { version, push? }  tag main as a release, and optionally push main and
-// that tag. The CLI validates the version and never moves an existing tag.
+// { version, push?, step? }  tag main (or a finished step) as a release, and
+// optionally push main and that tag. The CLI validates the version and never moves an existing tag.
 export default defineEventHandler(async (event) => {
   const body = (await readBody(event)) || {}
   const version = typeof body.version === 'string' ? body.version.trim() : ''
@@ -10,6 +10,9 @@ export default defineEventHandler(async (event) => {
 
   const args = ['release', '--json', '--config', rootTomlPath()]
   if (body.push === true) args.push('--push')
+  // A finished step is released where it ended
+  const step = Number(body.step)
+  if (Number.isInteger(step) && step > 0) args.push('--step', String(step))
   // "--" keeps a version that starts with a dash from being read as a flag
   args.push('--', version)
 
