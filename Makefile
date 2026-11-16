@@ -3,7 +3,7 @@
 VERSION ?= $(shell cat VERSION)
 LDFLAGS := -s -w -X ringmaster/internal/version.Version=$(VERSION)
 
-.PHONY: all build web test test-web tag release dist lockfile clean
+.PHONY: all build web test test-web tag bump release dist lockfile clean
 
 all: build web
 
@@ -35,6 +35,15 @@ dist: web
 tag:
 	@git diff --quiet HEAD || { echo "Commit your changes (including VERSION) before tagging" >&2; exit 1; }
 	git tag -a $(VERSION) -m "Ringmaster $(VERSION)"
+
+# Prepare a release branch: VERSION and the README's "Current release" line,
+# committed and pushed as chore/release-<version>, ready for a pull request.
+#   make bump KIND=patch    fixes:    v0.8.0-hadar -> v0.8.1-hadar
+#   make bump KIND=minor    features: v0.8.1-hadar -> v0.9.0-izar
+#   make bump KIND=major    breaking: v0.9.0-izar  -> v1.0.0-jabbah
+#   make bump KIND=v0.9.0-izar   an exact version
+bump:
+	@scripts/bump.sh $(KIND)
 
 # Tag the release named in VERSION and push the tag, which starts the Release
 # workflow. Run on main once the release PR is merged and pulled. It checks
