@@ -49,3 +49,34 @@ test('older conversations: readiness is read from the wording, only since the la
   // The wording only counts for messages saved before readiness was recorded
   assert.equal(readyToPlan([master('Task Breakdown follows once you answer', { ready: false, step: 2 })]), false)
 })
+
+import { requestsByStep, briefByStep, isGeneratePlanMessage } from '../utils/chatSteps.js'
+
+test('requests are grouped by step, without the Generate plan button presses', () => {
+  const msgs = [
+    user('Build a link store', { step: 1 }),
+    master('Questions?', { step: 1 }),
+    user('Use SQLite', { step: 1 }),
+    user('Generate the plan from this conversation.', { step: 1 }),
+    master('The plan is ready', { planReady: true, step: 1 }),
+    user('Add a simple web UI', { step: 2 }),
+    user('   ', { step: 2 })
+  ]
+  assert.deepEqual(requestsByStep(msgs, 1, true), [
+    { step: 1, requests: ['Build a link store', 'Use SQLite'] },
+    { step: 2, requests: ['Add a simple web UI'] }
+  ])
+  assert.equal(isGeneratePlanMessage('⚡ Generate DAG Plan from current requirements'), true)
+})
+
+test('the brief has a section per step', () => {
+  const brief = briefByStep([
+    user('Build a link store'),
+    master('The plan is ready', { planReady: true }),
+    user('buatkan UI sederhana')
+  ], 1, true)
+  assert.equal(brief, '# Project Requirements & Specifications\n\n' +
+    '## Step 1\n\n### Request 1\nBuild a link store\n\n' +
+    '## Step 2\n\n### Request 1\nbuatkan UI sederhana\n')
+  assert.equal(briefByStep([master('hello')], 0, false), '')
+})

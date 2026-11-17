@@ -328,6 +328,9 @@
                 <p v-else>Empty. The brief is written from your conversation with the Master.</p>
               </div>
             </div>
+
+            <!-- What each step asked for and built -->
+            <StepHistory />
           </div>
         </div>
       </section>
