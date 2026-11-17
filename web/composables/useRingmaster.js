@@ -1,4 +1,5 @@
 import { statusLabel } from '~/utils/status'
+import { stepsOfMessages, readyToPlan } from '~/utils/chatSteps'
 
 import { ref, computed, watch } from 'vue'
 
@@ -190,6 +191,25 @@ function createRingmaster() {
   const chatContainerRef = ref(null)
   const canGeneratePlan = ref(false)
 
+  // The project's finished steps (ringmaster steps). The step being worked on
+  // is the one after them: a plan that is not finished is not a step yet,
+  // and once it is, the conversation moves on to the next.
+  const steps = ref([])
+  async function loadSteps() {
+    try {
+      const data = await (await fetch('/api/steps')).json()
+      if (data.ok) steps.value = data.steps || []
+    } catch {}
+  }
+  const currentStep = computed(() => steps.value.length + 1)
+
+  // Each message records the step it was written in, so the chat can show
+  // where one step ended and the next began
+  function pushMessage(msg) {
+    if (!msg.step) msg.step = currentStep.value
+    messages.value.push(msg)
+  }
+
   const currentKinematicStatus = computed(() => {
     if (isRunActive.value) {
       return 'overdrive' // Rapid gear & ring spin when automatons are active in worktrees!
@@ -222,21 +242,7 @@ function createRingmaster() {
       const data = await res.json()
       if (data.ok && Array.isArray(data.messages) && data.messages.length > 0) {
         messages.value = data.messages
-        // Check if previous discussion already reached sufficient readiness
-        const hasPlanRecommendation = data.messages.some(m => 
-          m.role === 'master' && (
-            m.text.includes('Generate Plan') || 
-            m.text.includes('Rencana Proyek') || 
-            m.text.includes('Pembagian Task (DAG)') ||
-            m.text.includes('Rencana Pembagian Task') ||
-            m.text.includes('Rencana Eksekusi') ||
-            m.text.includes('Task Breakdown') ||
-            m.text.includes('Rencana ini sudah actionable')
-          )
-        )
-        if (hasPlanRecommendation) {
-          canGeneratePlan.value = true
-        }
+        canGeneratePlan.value = readyToPlan(data.messages)
         return true
       }
     } catch {}
@@ -399,7 +405,7 @@ function createRingmaster() {
         ? `• [${r.id}] Approve command: ${r.command}${r.reason ? ` (${r.reason})` : ''}`
         : `• [${r.id}] ${r.question}${r.options?.length ? ` (${r.options.join(' / ')})` : ''}`)
       const reason = t.error.length > 400 ? `${t.error.slice(0, 400)}…` : t.error
-      messages.value.push({
+      pushMessage({
         role: 'worker',
         workerId: t.worker,
         taskId: t.id,
@@ -906,7 +912,7 @@ function createRingmaster() {
     isGeneratingPlan.value = true
     isThinking.value = true
 
-    messages.value.push({
+    pushMessage({
       role: 'user',
       targetLabel: 'Master',
       text: 'Generate the plan from this conversation.',
@@ -925,7 +931,9 @@ function createRingmaster() {
       const data = await res.json()
       if (data.ok) {
         showToast('Plan Ready', 'Review it in Tasks.', 'success')
-        messages.value.push({
+        // This plan used up the Master's readiness; a new one needs a new discussion
+        canGeneratePlan.value = false
+        pushMessage({
           role: 'master',
           targetLabel: 'You',
           planReady: true,
@@ -938,7 +946,7 @@ function createRingmaster() {
         await refreshProject()
       } else {
         showToast('Plan Generation Failed', data.error || 'Unknown error', 'error')
-        messages.value.push({
+        pushMessage({
           role: 'master',
           targetLabel: 'You',
           text: `The plan could not be generated: ${data.error}\n\n${data.output || ''}`,
@@ -962,7 +970,7 @@ function createRingmaster() {
     const text = inputMsg.value
     const target = selectedTarget.value
 
-    messages.value.push({
+    pushMessage({
       role: 'user',
       targetLabel: target === 'master' ? 'Master' : target,
       text: text,
@@ -991,9 +999,11 @@ function createRingmaster() {
         }
 
         if (data && data.reply) {
-          messages.value.push({
+          pushMessage({
             role: 'master',
             targetLabel: 'You',
+            // Kept with the message, so readiness survives a reload
+            ready: data.canGenerate === true,
             text: data.reply,
             time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
           })
@@ -1001,7 +1011,7 @@ function createRingmaster() {
           await saveChatHistory()
           await refreshProject()
         } else {
-          messages.value.push({
+          pushMessage({
             role: 'master',
             targetLabel: 'You',
             text: data.error ? `Error: ${data.error}` : `The Master received your message.`,
@@ -1012,7 +1022,7 @@ function createRingmaster() {
           saveChatHistory()
         }
       } catch (err) {
-        messages.value.push({
+        pushMessage({
           role: 'master',
           targetLabel: 'You',
           text: `Could not reach the Master: ${err.message}`,
@@ -1029,7 +1039,7 @@ function createRingmaster() {
       // Nothing carries a chat message to a running automaton yet, so say so
       // instead of showing an acknowledgement that never happened.
       isThinking.value = false
-      messages.value.push({
+      pushMessage({
         role: 'worker',
         workerId: target,
         taskId: 'not delivered',
@@ -1163,12 +1173,32 @@ function createRingmaster() {
     }
   }
 
+  // The current plan has run to the end: every task done, and no run going
+  const planFinished = computed(() =>
+    tasks.value.length > 0 &&
+    !isRunActive.value &&
+    tasks.value.every(t => t.status === 'COMPLETED' || t.status === 'DONE')
+  )
+  // A plan that has just finished becomes a step
+  watch(planFinished, (done) => { if (done) loadSteps() })
+
+  // The step of every chat message (see utils/chatSteps)
+  const messageSteps = computed(() => stepsOfMessages(messages.value, steps.value.length, planFinished.value))
+
+  // Where the current step stands, for the chat header
+  const stepStatus = computed(() => {
+    if (isRunActive.value) return 'running'
+    if (!tasks.value.length || planFinished.value) return 'planning'
+    return planApprovalState.value.isApproved ? 'approved' : 'plan ready'
+  })
+
   function start() {
     syncViewFromHash()
     if (typeof window !== 'undefined') {
       window.addEventListener('hashchange', syncViewFromHash)
     }
     loadProjectData()
+    loadSteps()
     loadProvidersData()
     checkPlanApproval()
     pollRunStatus()
@@ -1230,6 +1260,12 @@ function createRingmaster() {
     isThinking,
     chatContainerRef,
     canGeneratePlan,
+    steps,
+    currentStep,
+    loadSteps,
+    planFinished,
+    messageSteps,
+    stepStatus,
     currentKinematicStatus,
     scrollToBottom,
     loadChatHistory,

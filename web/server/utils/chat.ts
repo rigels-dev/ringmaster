@@ -1,13 +1,8 @@
 import fs from 'node:fs'
 import path from 'node:path'
 
-// The message the UI adds to the chat when "Generate plan" is clicked. It is
-// a button press, not a requirement, so it is left out of the brief and of
-// the conversation the Master sees. The older wording is still recognised.
-export function isGeneratePlanMessage(text: unknown): boolean {
-  const t = String(text ?? '')
-  return t.includes('⚡ Generate DAG Plan') || t.trim() === 'Generate the plan from this conversation.'
-}
+// Shared with the UI, which groups the chat by step the same way
+export { isGeneratePlanMessage } from '../../utils/chatSteps.js'
 
 // What earlier plans already built, for the Master in chat: the tasks that
 // are done and merged, read from the project's state. Empty for a new project.
@@ -31,8 +26,32 @@ export function finishedWorkNote(projectDir: string): string {
     .map(([id, ts]) => ({ id, title: ts.title || titles[id] || '' }))
     .sort((a, b) => a.id.localeCompare(b.id, undefined, { numeric: true }))
   if (!done.length) return ''
+  const line = (t: { id: string; title: string }) => `- ${t.id}${t.title ? ': ' + t.title : ''}`
 
-  const lines = done.map((t) => `- ${t.id}${t.title ? ': ' + t.title : ''}`)
+  // Grouped by the step each task was part of, when the steps are recorded
+  let steps: any[] = []
+  try {
+    steps = JSON.parse(fs.readFileSync(path.join(projectDir, '.ringmaster', 'steps.json'), 'utf-8'))?.steps || []
+  } catch {}
+  const lines: string[] = []
+  const placed = new Set<string>()
+  for (const st of steps) {
+    const own = done.filter((t) => st.tasks?.includes(t.id))
+    if (!own.length) continue
+    lines.push(`Step ${st.number}${st.name ? ' (' + st.name + ')' : ''}:`)
+    for (const t of own) {
+      lines.push('  ' + line(t))
+      placed.add(t.id)
+    }
+  }
+  const rest = done.filter((t) => !placed.has(t.id))
+  if (rest.length) {
+    // Without recorded steps the list stays flat
+    const indent = lines.length ? '  ' : ''
+    if (lines.length) lines.push('Also done:')
+    for (const t of rest) lines.push(indent + line(t))
+  }
+
   return [
     'PROJECT STATUS: this project already has finished work. These tasks are done and merged into main:',
     ...lines,

@@ -1,7 +1,7 @@
 import path from 'node:path'
 import fs from 'node:fs'
 import { ringmasterBinPath, rootTomlPath, resolveProjectDir, runCommand } from '../utils/ringmaster'
-import { isGeneratePlanMessage } from '../utils/chat'
+import { briefByStep } from '../../utils/chatSteps.js'
 
 export default defineEventHandler(async (event) => {
   const projectDir = resolveProjectDir()
@@ -137,21 +137,17 @@ export default defineEventHandler(async (event) => {
       }
 
       // 4. ACTION: GENERATE (HEADLESS)
-      // Synthesize BRIEF.md comprehensively from the entire user chat history
+      // BRIEF.md is written from everything the user asked in the chat,
+      // grouped by step, so the planner has the whole history
       if (fs.existsSync(chatFile)) {
         try {
+          // Listing the steps records a plan that has just finished, so the count below is current
+          await runCommand(ringmasterBin, ['steps', '--json', '--config', rootTomlPath()], { cwd: projectDir, timeout: 15000 }).catch(() => {})
           const history = JSON.parse(fs.readFileSync(chatFile, 'utf-8'))
-          const userMsgs = history
-            .filter((m: any) => m.role === 'user' && !isGeneratePlanMessage(m.text))
-            .map((m: any) => m.text.trim())
-            .filter(Boolean)
-
-          if (userMsgs.length > 0) {
-            // Join all user requirements chronologically so no prompt instruction is lost
-            const consolidatedBrief = `# Project Requirements & Specifications\n\n` + 
-              userMsgs.map((msg: string, idx: number) => `### Instruction / Requirement #${idx + 1}\n${msg}`).join('\n\n')
+          const brief = briefByStep(history, finishedStepCount(projectDir), currentPlanFinished(projectDir))
+          if (brief) {
             fs.mkdirSync(path.dirname(briefPath), { recursive: true })
-            fs.writeFileSync(briefPath, consolidatedBrief, 'utf-8')
+            fs.writeFileSync(briefPath, brief, 'utf-8')
           }
         } catch {}
       }
@@ -194,3 +190,24 @@ export default defineEventHandler(async (event) => {
     }
   }
 })
+
+// How many steps the project has finished, as recorded in steps.json
+function finishedStepCount(projectDir: string): number {
+  try {
+    return JSON.parse(fs.readFileSync(path.join(projectDir, '.ringmaster', 'steps.json'), 'utf-8'))?.steps?.length || 0
+  } catch {
+    return 0
+  }
+}
+
+// Whether every task of the current plan is done
+function currentPlanFinished(projectDir: string): boolean {
+  try {
+    const plan = JSON.parse(fs.readFileSync(path.join(projectDir, '.ringmaster', 'plan.json'), 'utf-8'))
+    const state = JSON.parse(fs.readFileSync(path.join(projectDir, '.ringmaster', 'state.json'), 'utf-8'))
+    const tasks = plan?.tasks || []
+    return tasks.length > 0 && tasks.every((t: any) => state?.task_states?.[t.id]?.status === 'COMPLETED')
+  } catch {
+    return false
+  }
+}

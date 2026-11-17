@@ -45,3 +45,24 @@ test('finished tasks are listed in order, with titles from the state or the plan
   assert.ok(!note.includes('Not done'))
   assert.match(note, /do not propose building it again/)
 })
+
+test('finished tasks are grouped by the step they were part of', () => {
+  const note = finishedWorkNote(project({
+    'state.json': JSON.stringify({
+      task_states: {
+        T01: { status: 'COMPLETED', title: 'Link store' },
+        T02: { status: 'COMPLETED', title: 'HTTP API' },
+        T03: { status: 'COMPLETED', title: 'Web UI' }
+      }
+    }),
+    'steps.json': JSON.stringify({ steps: [
+      { number: 1, name: 'First version', tasks: ['T01', 'T02'] },
+      { number: 2, tasks: ['T03'] }
+    ] })
+  }))
+  const lines = note.split('\n')
+  assert.deepEqual(lines.slice(1, 6), [
+    'Step 1 (First version):', '  - T01: Link store', '  - T02: HTTP API',
+    'Step 2:', '  - T03: Web UI'
+  ])
+})
