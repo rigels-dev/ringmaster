@@ -10,6 +10,13 @@
 #
 # A minor or major release moves the codename to the next star in
 # internal/version/version.go; a patch release keeps it.
+#
+# The release notes are written from the pull requests merged since the last
+# release (scripts/release-notes.sh) and go into the release commit, the pull
+# request and, through 'make release', the GitHub release. NOTES adds a
+# summary at the top:
+#
+#   NOTES="Steps can be released from Branches." scripts/bump.sh minor
 set -eu
 
 kind="${1:-}"
@@ -27,6 +34,20 @@ step() {
 fail() {
 	echo "bump: $1" >&2
 	exit 1
+}
+
+# urlencode percent-encodes everything but unreserved characters, byte by
+# byte, with tools every system has
+urlencode() {
+	printf '%s' "$1" | od -An -v -tx1 | tr -s ' \n' '\n\n' | awk '
+		NF {
+			h = tolower($1)
+			d = (index("0123456789abcdef", substr(h, 1, 1)) - 1) * 16 + index("0123456789abcdef", substr(h, 2, 1)) - 1
+			if ((d >= 48 && d <= 57) || (d >= 65 && d <= 90) || (d >= 97 && d <= 122) || d == 45 || d == 46 || d == 95 || d == 126)
+				printf "%c", d
+			else
+				printf "%%%s", toupper(h)
+		}'
 }
 
 [ -n "$kind" ] || usage
@@ -83,6 +104,26 @@ git rev-parse --quiet --verify "refs/heads/$release_branch" >/dev/null &&
 	fail "a local branch $release_branch exists. Delete it with: git branch -D $release_branch"
 echo "      main matches $remote/main, and $version is new"
 
+# The repository on GitHub, for links: owner/name, or empty
+url=$(git remote get-url "$remote")
+repo=$(printf '%s\n' "$url" | sed -n -e 's#^git@github\.com:\(.*\)$#\1#p' -e 's#^https://github\.com/\(.*\)$#\1#p' -e 's#^ssh://git@github\.com/\(.*\)$#\1#p' | sed 's#\.git$##')
+
+# Release notes: the summary given, then what changed since the last release
+last=$(git describe --tags --abbrev=0 --match 'v*' HEAD 2>/dev/null || true)
+changes=$(scripts/release-notes.sh "$last" HEAD)
+notes="${NOTES:-}"
+if [ -n "$changes" ]; then
+	notes="${notes:+$notes
+
+}$changes"
+fi
+if [ -n "$last" ] && [ -n "$repo" ]; then
+	notes="${notes:+$notes
+
+}Full changelog: https://github.com/$repo/compare/$last...$version"
+fi
+[ -n "$changes" ] || echo "      note: nothing was merged since ${last:-the start}; the notes hold only what NOTES says"
+
 step 3 "Writing $version to VERSION and the README"
 git checkout -q -b "$release_branch"
 printf '%s\n' "$version" > VERSION
@@ -110,18 +151,22 @@ else
 fi
 
 step 5 "Committing, and pushing $release_branch to $remote (connects to the remote)"
-git commit -q -am "chore: release $version"
+message=$(mktemp)
+trap 'rm -f "$message"' EXIT
+printf 'chore: release %s\n\n%s\n' "$version" "$notes" > "$message"
+git commit -q -a --cleanup=verbatim -F "$message"
 git push -u "$remote" "$release_branch" ||
 	fail "the push failed. The branch is committed locally; retry with: git push -u $remote $release_branch"
 
-# A link to open the pull request, for a GitHub remote
-url=$(git remote get-url "$remote")
-repo=$(printf '%s\n' "$url" | sed -n -e 's#^git@github\.com:\(.*\)$#\1#p' -e 's#^https://github\.com/\(.*\)$#\1#p' -e 's#^ssh://git@github\.com/\(.*\)$#\1#p' | sed 's#\.git$##')
+echo
+echo "Release notes:"
+printf '%s\n' "$notes" | sed 's/^/  /'
 echo
 echo "Done. $release_branch is pushed."
 if [ -n "$repo" ]; then
-	title=$(printf 'chore: release %s' "$version" | sed 's/ /%20/g; s/:/%3A/g')
-	echo "Open the pull request: https://github.com/$repo/compare/main...$release_branch?quick_pull=1&title=$title"
+	title=$(urlencode "chore: release $version")
+	body=$(urlencode "$notes")
+	echo "Open the pull request: https://github.com/$repo/compare/main...$release_branch?quick_pull=1&title=$title&body=$body"
 else
 	echo "Open a pull request from $release_branch into main."
 fi

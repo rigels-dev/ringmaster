@@ -55,6 +55,14 @@ jobs:
           # A release written by hand keeps its notes; only the files are added
           if gh release view "$TAG" >/dev/null 2>&1; then
             gh release upload "$TAG" dist/*.tar.gz dist/*-checksums.txt --clobber
+            exit 0
+          fi
+          # The notes are the tag's message, written by 'make bump' and 'make release'.
+          # A tag without them (made by hand) gets GitHub's generated notes.
+          git fetch --quiet --force origin "refs/tags/$TAG:refs/tags/$TAG" || true
+          git tag -l --format='%(contents:body)' "$TAG" > notes.md
+          if grep -q '[^[:space:]]' notes.md; then
+            gh release create "$TAG" dist/*.tar.gz dist/*-checksums.txt --title "$TAG" --notes-file notes.md
           else
             gh release create "$TAG" dist/*.tar.gz dist/*-checksums.txt --title "$TAG" --generate-notes
           fi

@@ -51,8 +51,19 @@ if tagged=$(git rev-parse --quiet --verify "refs/tags/$version^{commit}"); then
 		fail "a local tag $version points at another commit. Remove it with: git tag -d $version"
 	echo "      the tag already exists on this commit"
 else
-	git tag -a "$version" -m "Ringmaster $version"
-	echo "      tagged"
+	# The notes 'make bump' wrote into the release commit become the tag's
+	# message, which the Release workflow publishes as the GitHub release
+	notes=$(git log -1 --format=%b -- VERSION)
+	message=$(mktemp)
+	trap 'rm -f "$message"' EXIT
+	printf 'Ringmaster %s\n\n%s\n' "$version" "$notes" > "$message"
+	# verbatim: the notes' "### Features" headings would otherwise be stripped as comments
+	git tag -a --cleanup=verbatim "$version" -F "$message"
+	if [ -n "$notes" ]; then
+		echo "      tagged, with the release notes from the release commit"
+	else
+		echo "      tagged (the release commit has no notes; GitHub will write them)"
+	fi
 fi
 
 step 4 "Pushing the tag $version to $remote (connects to the remote)"
