@@ -8,9 +8,16 @@
               <div class="flex items-center gap-2">
                 <h2 class="text-sm font-bold text-gear-gold font-cinzel">Chat</h2>
                 <span class="w-2 h-2 rounded-full" :class="project.isBlank ? 'bg-amber-400' : 'bg-green-500'"></span>
+                <!-- The step this conversation is about, and where it stands -->
+                <span
+                  class="ml-1 px-2 py-0.5 rounded border border-gear-dark/60 text-2xs font-bold text-gear-gold whitespace-nowrap"
+                  :title="steps.length ? `${steps.length} step${steps.length === 1 ? '' : 's'} finished so far` : 'No step finished yet'"
+                >◆ Step {{ currentStep }} · {{ stepStatus }}</span>
               </div>
               <p class="text-xs text-zinc-400">
-                {{ project.isBlank ? 'Tell the Master what to build. The conversation becomes your brief.' : 'Talk to the Master and see what automatons report.' }}
+                {{ project.isBlank ? 'Tell the Master what to build. The conversation becomes your brief.'
+                  : planFinished ? `Step ${currentStep - 1} is done. Tell the Master what to change next.`
+                  : 'Talk to the Master and see what automatons report.' }}
               </p>
             </div>
             
@@ -57,9 +64,19 @@
               <p class="text-body text-zinc-400 max-w-md mt-1">Tell the Master what you want to build. It asks what it needs, then splits the work into tasks for automatons.</p>
             </div>
 
+            <template v-for="(msg, i) in messages" :key="i">
+            <div
+              v-if="i === 0 ? steps.length > 0 : messageSteps[i] !== messageSteps[i - 1]"
+              class="flex items-center gap-3 py-1 select-none"
+            >
+              <span class="flex-1 border-t border-dashed border-steel"></span>
+              <span v-if="i > 0 && stepByNumber(messageSteps[i - 1])" class="text-2xs text-zinc-500 whitespace-nowrap">
+                Step {{ messageSteps[i - 1] }} done<template v-if="stepByNumber(messageSteps[i - 1]).releases.length"> · {{ stepByNumber(messageSteps[i - 1]).releases.join(', ') }}</template>
+              </span>
+              <span class="text-xs font-bold text-gear-gold whitespace-nowrap">◆ Step {{ messageSteps[i] }}</span>
+              <span class="flex-1 border-t border-dashed border-steel"></span>
+            </div>
             <div 
-              v-for="(msg, i) in messages" 
-              :key="i"
               class="flex flex-col max-w-2xl"
               :class="msg.role === 'user' ? 'ml-auto items-end' : 'mr-auto items-start'"
             >
@@ -123,6 +140,8 @@
                 </div>
               </div>
             </div>
+
+            </template>
 
             <!-- Thinking / Typing Indicator with Animated Kinematics Emblem -->
             <div v-if="isThinking" class="flex flex-col mr-auto items-start max-w-xl animate-fade-in">
@@ -208,26 +227,26 @@
               <!-- Dedicated Generate DAG Plan Button (Only active when Master signals CAN_GENERATE) -->
               <div class="flex items-center gap-2">
                 <span 
-                  v-if="!canGeneratePlan && !isGeneratingPlan" 
+                  v-if="!canPlan && !isGeneratingPlan" 
                   class="text-xs text-zinc-500 italic hidden sm:inline"
                 >
-                  Unlocks when the Master has enough detail
+                  {{ planLockReason }}
                 </span>
                 <button
                   @click="triggerGeneratePlan"
-                  :disabled="isGeneratingPlan || !hasMasterPlanner || !canGeneratePlan"
+                  :disabled="isGeneratingPlan || !hasMasterPlanner || !canPlan"
                   class="px-3.5 py-1.5 rounded flex items-center gap-1.5 shadow transition font-bold text-body whitespace-nowrap"
-                  :class="canGeneratePlan 
+                  :class="canPlan 
                     ? 'bg-gradient-to-r from-gear-gold to-amber-500 hover:from-amber-400 hover:to-gear-gold text-ink cursor-pointer' 
                     : 'bg-slate-dark text-zinc-500 border border-steel/60 opacity-60 cursor-not-allowed'"
-                  :title="canGeneratePlan ? 'The Master has enough detail. Generate the plan.' : 'The Master is still asking questions. Keep going to unlock this.'"
+                  :title="canPlan ? `The Master has enough detail. Generate the plan for step ${currentStep}.` : planLockReason"
                 >
                   <svg v-if="isGeneratingPlan" class="w-3.5 h-3.5 animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <circle cx="12" cy="12" r="10" stroke-opacity="0.25"></circle>
                     <path d="M12 2a10 10 0 0 1 10 10" stroke-linecap="round"></path>
                   </svg>
-                  <span v-else>{{ canGeneratePlan ? '⚡' : '🔒' }}</span>
-                  <span>{{ isGeneratingPlan ? 'Generating plan…' : 'Generate plan' }}</span>
+                  <span v-else>{{ canPlan ? '⚡' : '🔒' }}</span>
+                  <span>{{ isGeneratingPlan ? 'Generating plan…' : `Generate plan · step ${currentStep}` }}</span>
                 </button>
               </div>
             </div>
@@ -334,8 +353,24 @@ const {
   isGeneratingPlan,
   triggerGeneratePlan,
   sendMessage,
-  instructWorker
+  instructWorker,
+  steps,
+  currentStep,
+  planFinished,
+  messageSteps,
+  stepStatus
 } = useRingmaster()
+
+const stepByNumber = (n) => steps.value.find(st => st.number === n) || null
+
+// A plan is generated for the step being discussed, once the Master has said
+// it has enough detail; never while a run is going
+const canPlan = computed(() => canGeneratePlan.value && !isRunActive.value)
+const planLockReason = computed(() => {
+  if (isRunActive.value) return 'A run is going. Plan the next step once it finishes.'
+  if (planFinished.value) return `Step ${currentStep.value - 1} is done. Describe the next change to unlock.`
+  return 'Unlocks when the Master has enough detail'
+})
 
 // Resizable input: dragging the panel's top edge up grows the textarea and
 // shrinks the message list. Height is remembered per browser.
