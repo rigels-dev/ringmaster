@@ -1,6 +1,8 @@
 package verify
 
 import (
+	"os"
+	"strings"
 	"testing"
 
 	"ringmaster/internal/schemas"
@@ -63,5 +65,17 @@ func TestNormalizeRequest(t *testing.T) {
 	r = schemas.NormalizeRequest(schemas.HumanRequest{ID: "r3", Type: schemas.RequestApproval, Command: "make"})
 	if r.Type != schemas.RequestApproval {
 		t.Errorf("an approval was changed: %+v", r)
+	}
+}
+
+// The web UI shows the acceptance editor when this option is picked, so it
+// names the option word for word.
+func TestWebUIKnowsTheChangeAcceptanceOption(t *testing.T) {
+	data, err := os.ReadFile("../../web/components/TaskDetail.vue")
+	if err != nil {
+		t.Skip("web UI not found:", err)
+	}
+	if !strings.Contains(string(data), "'"+OptionChangeAcceptance+"'") {
+		t.Errorf("web/components/TaskDetail.vue does not name %q", OptionChangeAcceptance)
 	}
 }

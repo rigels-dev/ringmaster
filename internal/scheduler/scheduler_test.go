@@ -505,7 +505,7 @@ Implement task one.
 	if ts.Status != schemas.TaskStateReview {
 		t.Fatalf("T01 status = %s, want NEEDS_REVIEW (err: %s)", ts.Status, ts.Error)
 	}
-	for _, want := range []string{"cannot run as written", ".ringmaster/tasks/", "without a shell"} {
+	for _, want := range []string{"cannot run:", ".ringmaster/tasks/", "without a shell"} {
 		if !strings.Contains(ts.Error, want) {
 			t.Errorf("reason does not mention %q:\n%s", want, ts.Error)
 		}
@@ -1031,4 +1031,84 @@ func taskAsking(messages []any) string {
 		}
 	}
 	return "T01"
+}
+
+// A check whose program is not installed stops the task before any work,
+// and only the user can change it: their new acceptance commands replace
+// the task's own, and the task then runs against those.
+func TestUserReplacesAcceptanceCommands(t *testing.T) {
+	projectRoot, cfg := setupTestProject(t)
+	t.Setenv("MOCK_KEY", "dummy")
+
+	specFile := filepath.Join(projectRoot, ".ringmaster", "tasks", "T01-task-one.md")
+	spec := "---\nid: T01\ntitle: \"Task One\"\ntype: backend\ndepends_on: []\nworker: \"test_worker\"\nmax_retries: 2\n" +
+		"acceptance:\n  - \"ringmaster-no-such-program build .\"\n  - \"echo task_one_passed\"\nacceptance_timeout: 900\n---\nImplement task one.\n"
+	if err := os.WriteFile(specFile, []byte(spec), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	var mu sync.Mutex
+	calls := 0
+	tsMock := reportingMock(t, &calls, &mu)
+	defer tsMock.Close()
+	cfg.Providers["mock_prov"] = config.ProviderConfig{Type: "openai", BaseURL: tsMock.URL, APIKeyEnv: "MOCK_KEY"}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	engine, err := NewEngine(projectRoot, cfg, 2)
+	if err != nil {
+		t.Fatalf("NewEngine failed: %v", err)
+	}
+	_ = engine.Run(ctx)
+
+	ts := engine.stateMgr.GetState().TaskStates["T01"]
+	if ts.Status != schemas.TaskStateReview || !strings.Contains(ts.Error, "not installed") {
+		t.Fatalf("T01 = %s, want NEEDS_REVIEW saying the program is not installed (err: %s)", ts.Status, ts.Error)
+	}
+	if len(ts.Requests) != 1 || ts.Requests[0].Options[0] != verify.OptionChangeAcceptance {
+		t.Fatalf("requests = %+v, want the offer to change the acceptance commands first", ts.Requests)
+	}
+	mu.Lock()
+	if calls != 0 {
+		t.Errorf("the automaton was called %d time(s) for a check that cannot run", calls)
+	}
+	mu.Unlock()
+
+	// Commands that can never run are refused before they are queued
+	if err := QueueAnswer(projectRoot, schemas.HumanAnswer{TaskID: "T01", Acceptance: []string{"go test ./... | tee out"}}); err == nil {
+		t.Error("an acceptance command that needs a shell was queued")
+	}
+
+	if err := QueueAnswer(projectRoot, schemas.HumanAnswer{
+		TaskID:     "T01",
+		Replies:    map[string]string{verify.NextStepID: verify.OptionChangeAcceptance},
+		Acceptance: []string{" echo task_one_passed ", ""},
+	}); err != nil {
+		t.Fatalf("QueueAnswer failed: %v", err)
+	}
+	engine, err = NewEngine(projectRoot, cfg, 2)
+	if err != nil {
+		t.Fatalf("NewEngine (resume) failed: %v", err)
+	}
+	if err := engine.Run(ctx); err != nil {
+		t.Fatalf("engine.Run (resume) failed: %v", err)
+	}
+	if got := engine.stateMgr.GetState().TaskStates["T01"]; got.Status != schemas.TaskStateCompleted {
+		t.Fatalf("T01 = %s after the new commands, want COMPLETED (err: %s)", got.Status, got.Error)
+	}
+
+	content, err := os.ReadFile(specFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	task, err := schemas.ParseTaskMarkdown(string(content))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(task.Acceptance) != 1 || task.Acceptance[0] != "echo task_one_passed" || task.AcceptanceTimeout != 900 {
+		t.Errorf("task file = %+v", task)
+	}
+	if !strings.Contains(string(content), "replaced this task's acceptance commands with: `echo task_one_passed`") {
+		t.Errorf("the automaton is not told the commands changed:\n%s", content)
+	}
 }

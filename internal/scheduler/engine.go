@@ -242,7 +242,11 @@ func (e *Engine) executeTask(ctx context.Context, planTask schemas.PlanTask) {
 	// An acceptance command that can never run would fail the task after the
 	// automaton has done all its work. Stop before any tokens are spent.
 	for _, command := range taskSpec.Acceptance {
-		if why := verify.UnrunnableReason(strings.TrimSpace(command)); why != "" {
+		why := verify.UnrunnableReason(strings.TrimSpace(command))
+		if why == "" {
+			why = verify.MissingProgram(strings.TrimSpace(command))
+		}
+		if why != "" {
 			reason := verify.UnrunnableAcceptanceMessage(command) + "\n\n" + why
 			fmt.Printf("⚠ [Scheduler] Task %s was not started: %s\n", planTask.ID, reason)
 			_ = e.stateMgr.UpdateTaskState(planTask.ID, func(ts *schemas.TaskState) {

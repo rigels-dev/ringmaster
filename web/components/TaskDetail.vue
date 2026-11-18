@@ -85,7 +85,18 @@
                   {{ opt }}<span v-if="opt === r.recommended" class="text-emerald-400"> ★ recommended</span>
                 </button>
               </div>
-              <input :value="r.options.includes(form.replies[r.id]) ? '' : form.replies[r.id]"
+              <!-- New acceptance commands: Ringmaster runs these, and only the user can change them -->
+              <div v-if="form.replies[r.id] === CHANGE_ACCEPTANCE" class="space-y-1">
+                <label class="text-xs text-zinc-400" :for="`acceptance-${r.id}`">
+                  Acceptance commands, one per line. Ringmaster runs only these to decide whether the task is done.
+                </label>
+                <textarea :id="`acceptance-${r.id}`" v-model="form.acceptance" rows="4" spellcheck="false"
+                  class="w-full bg-slate-dark border border-steel rounded px-2 py-1 text-zinc-200 font-mono text-xs"></textarea>
+                <div class="text-xs text-zinc-500">
+                  Run without a shell: no pipes, &amp;&amp;, ; or redirects. A line you delete is no longer checked.
+                </div>
+              </div>
+              <input v-else :value="r.options.includes(form.replies[r.id]) ? '' : form.replies[r.id]"
                 @input="form.replies[r.id] = $event.target.value" placeholder="…or write what it should do instead"
                 class="w-full bg-slate-dark border border-steel rounded px-2 py-1 text-zinc-200" />
             </template>
@@ -238,7 +249,10 @@ const approvalOptions = [
   { value: 'deny', label: '✗ Deny', active: 'bg-red-950 border-red-700 text-red-300' }
 ]
 
-const form = reactive({ approvals: {}, replies: {}, text: '' })
+// Must match verify.OptionChangeAcceptance in Go
+const CHANGE_ACCEPTANCE = 'Change the acceptance commands, then check again'
+
+const form = reactive({ approvals: {}, replies: {}, text: '', acceptance: '' })
 
 // Ringmaster's own question after a stop comes with its recommended answer
 // picked, so the usual case is one click; a single option is always picked.
@@ -249,6 +263,11 @@ watch(requests, (list) => {
     if (r.options?.length === 1) form.replies[r.id] = r.options[0]
     else if (r.id === 'next' && r.recommended) form.replies[r.id] = r.recommended
   }
+}, { immediate: true })
+
+// The editor starts with the task's current commands
+watch(() => detail.value?.acceptance, (list) => {
+  if (!form.acceptance && list?.length) form.acceptance = list.join('\n')
 }, { immediate: true })
 const sending = ref(false)
 const formError = ref('')
@@ -282,6 +301,14 @@ async function submitAnswer() {
       replies[r.id] = v
     }
   }
+  let acceptance
+  if (requests.value.some(r => replies[r.id] === CHANGE_ACCEPTANCE)) {
+    acceptance = form.acceptance.split('\n').map(c => c.trim()).filter(Boolean)
+    if (!acceptance.length) {
+      formError.value = 'Keep at least one acceptance command.'
+      return
+    }
+  }
   // One answer carries one scope: mixed choices fall back to the narrower task scope
   const scope = scopes.length && scopes.every(s => s === 'project') ? 'project' : 'task'
   const status = detail.value?.state?.status
@@ -295,11 +322,12 @@ async function submitAnswer() {
   }
 
   sending.value = true
-  const ok = await answerTask(props.taskId, { replies, allow, scope, text })
+  const ok = await answerTask(props.taskId, { replies, allow, scope, text, ...(acceptance ? { acceptance } : {}) })
   sending.value = false
   if (ok) {
     form.approvals = {}
     form.replies = {}
+    form.acceptance = ''
     form.text = ''
     await load()
   }

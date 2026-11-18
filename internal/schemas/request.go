@@ -78,6 +78,9 @@ type HumanAnswer struct {
 	Scope string   `json:"scope,omitempty"`
 	// Text is free-form guidance, e.g. for BLOCKED or NEEDS_REVIEW tasks.
 	Text string `json:"text,omitempty"`
+	// Acceptance, when set, replaces the task's acceptance commands. Only
+	// the user can change them: an automaton cannot skip or change a check.
+	Acceptance []string `json:"acceptance,omitempty"`
 }
 
 // CommandApprovals records commands the user approved beyond the sandbox allow list.

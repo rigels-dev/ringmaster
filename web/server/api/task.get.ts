@@ -1,6 +1,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { resolveProjectDir } from '../utils/ringmaster'
+import { acceptanceOf } from '../utils/acceptance'
 
 // Everything a human needs to trace one task: spec, state, audit events,
 // the worker report and the per-attempt transcripts from its worktree.
@@ -43,6 +44,10 @@ export default defineEventHandler((event) => {
       spec = readText(specFile)
     }
   }
+
+  // The commands that decide whether the task is done, from the spec's
+  // frontmatter: Ringmaster runs these, and only the user can change them
+  const acceptance = acceptanceOf(spec)
 
   // Before a task starts, its branch is the one the plan names
   let plannedBranch = ''
@@ -88,6 +93,7 @@ export default defineEventHandler((event) => {
     worktree: fs.existsSync(worktree) ? worktree : '',
     specFile,
     spec,
+    acceptance,
     state,
     events,
     reportFile: report ? reportFile : '',
@@ -95,3 +101,4 @@ export default defineEventHandler((event) => {
     attempts
   }
 })
+
