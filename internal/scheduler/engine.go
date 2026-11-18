@@ -248,6 +248,7 @@ func (e *Engine) executeTask(ctx context.Context, planTask schemas.PlanTask) {
 			_ = e.stateMgr.UpdateTaskState(planTask.ID, func(ts *schemas.TaskState) {
 				ts.Status = schemas.TaskStateReview
 				ts.Error = reason
+				ts.Requests = verify.UnrunnableAcceptanceRequests()
 			})
 			return
 		}
@@ -406,6 +407,7 @@ func (e *Engine) executeTask(ctx context.Context, planTask schemas.PlanTask) {
 			_ = e.stateMgr.UpdateTaskState(planTask.ID, func(ts *schemas.TaskState) {
 				ts.Status = schemas.TaskStateReview
 				ts.Error = reason
+				ts.Requests = verify.MergeConflictRequests()
 			})
 			return
 		}
@@ -420,9 +422,11 @@ func (e *Engine) executeTask(ctx context.Context, planTask schemas.PlanTask) {
 
 	case verify.DecisionBLOCKED:
 		fmt.Printf("❌ [Scheduler] Task %s reported BLOCKED: %s\n", planTask.ID, loopRes.Decision.Reason)
+		printStopQuestions(planTask.ID, loopRes.Decision.Requests)
 		_ = e.stateMgr.UpdateTaskState(planTask.ID, func(ts *schemas.TaskState) {
 			ts.Status = schemas.TaskStateBlocked
 			ts.Error = loopRes.Decision.Reason
+			ts.Requests = loopRes.Decision.Requests
 		})
 
 	case verify.DecisionNEED_REVIEW:
@@ -431,10 +435,12 @@ func (e *Engine) executeTask(ctx context.Context, planTask schemas.PlanTask) {
 			reason += "\n\n" + loopRes.Decision.FailureLogs
 		}
 		fmt.Printf("⚠ [Scheduler] Task %s needs review: %s\n", planTask.ID, reason)
+		printStopQuestions(planTask.ID, loopRes.Decision.Requests)
 		fmt.Printf("   Transcript: %s\n", filepath.Join(worktree, ".ringmaster", "logs"))
 		_ = e.stateMgr.UpdateTaskState(planTask.ID, func(ts *schemas.TaskState) {
 			ts.Status = schemas.TaskStateReview
 			ts.Error = reason
+			ts.Requests = loopRes.Decision.Requests
 		})
 
 	case verify.DecisionAWAITING_INPUT:
@@ -459,6 +465,7 @@ func (e *Engine) executeTask(ctx context.Context, planTask schemas.PlanTask) {
 		_ = e.stateMgr.UpdateTaskState(planTask.ID, func(ts *schemas.TaskState) {
 			ts.Status = schemas.TaskStatePaused
 			ts.Error = loopRes.Decision.Reason
+			ts.Requests = loopRes.Decision.Requests
 		})
 	}
 }
@@ -627,4 +634,19 @@ func firstLine(s string) string {
 		return line
 	}
 	return ""
+}
+
+// printStopQuestions says in the run log what a stopped task asks, and how to
+// answer it from the command line.
+func printStopQuestions(taskID string, requests []schemas.HumanRequest) {
+	for _, r := range requests {
+		if len(r.Options) > 0 {
+			fmt.Printf("   [%s] %s Options: %s\n", r.ID, r.Question, strings.Join(r.Options, " / "))
+		} else {
+			fmt.Printf("   [%s] %s\n", r.ID, r.Question)
+		}
+	}
+	if len(requests) > 0 {
+		fmt.Printf("   Answer in the Web UI task panel, or with: ringmaster answer %s --reply %s=\"...\"\n", taskID, requests[0].ID)
+	}
 }

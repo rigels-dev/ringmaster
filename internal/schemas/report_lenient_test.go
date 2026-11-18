@@ -76,3 +76,16 @@ func TestRequestsSurviveLooseFrontmatter(t *testing.T) {
 		t.Fatalf("report = %+v", report)
 	}
 }
+
+// A request whose type does not fit what it holds is read as what it is,
+// so the user gets the right control.
+func TestReportRequestsFollowTheirContent(t *testing.T) {
+	content := "---\nstatus: AWAITING_INPUT\nrequests:\n  - id: r1\n    type: input\n    question: Which database?\n    options: [SQLite, Postgres]\n  - id: r2\n    type: choice\n    question: Which port?\n---\n\n## Summary\nWaiting."
+	report, err := ParseReportMarkdown(content)
+	if err != nil {
+		t.Fatalf("refused: %v", err)
+	}
+	if report.Requests[0].Type != RequestChoice || report.Requests[1].Type != RequestInput {
+		t.Fatalf("requests = %+v", report.Requests)
+	}
+}

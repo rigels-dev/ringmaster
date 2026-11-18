@@ -17,6 +17,7 @@ import (
 	"ringmaster/internal/config"
 	"ringmaster/internal/planner"
 	"ringmaster/internal/schemas"
+	"ringmaster/internal/verify"
 	"ringmaster/internal/workspace"
 )
 
@@ -293,6 +294,9 @@ func TestSchedulerPausedTaskIsNotRedispatched(t *testing.T) {
 	}
 	if calls != 1 {
 		t.Errorf("expected exactly 1 LLM call (no re-dispatch loop), got %d", calls)
+	}
+	if reqs := state.TaskStates["T01"].Requests; len(reqs) != 1 || reqs[0].Options[0] != verify.OptionContinueBudget {
+		t.Errorf("a paused task does not offer to continue: %+v", reqs)
 	}
 	reason := state.TaskStates["T01"].Error
 	for _, want := range []string{"70 of 10 budget tokens", "max_tokens_per_task", "Resume"} {
@@ -650,6 +654,9 @@ func TestUnusableReportAfterAllRetriesIsExplained(t *testing.T) {
 	}
 	if strings.Contains(t01.Error, "requested human review") {
 		t.Errorf("the reason still claims the automaton asked for review:\n%s", t01.Error)
+	}
+	if len(t01.Requests) != 1 || t01.Requests[0].Type != schemas.RequestChoice || t01.Requests[0].Options[0] != verify.OptionReportOnly {
+		t.Errorf("the stop does not offer a choice of what to do next: %+v", t01.Requests)
 	}
 }
 

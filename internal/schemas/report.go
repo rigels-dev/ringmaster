@@ -119,6 +119,10 @@ func ParseReportMarkdown(content string) (*WorkerReport, error) {
 		report.Verification = strings.TrimSpace(body[idxVer+len("## Verification"):])
 	}
 
+	for i := range report.Requests {
+		report.Requests[i] = NormalizeRequest(report.Requests[i])
+	}
+
 	if err := ValidateWorkerReport(&report); err != nil {
 		return nil, err
 	}

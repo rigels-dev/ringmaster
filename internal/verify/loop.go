@@ -254,7 +254,7 @@ func unusableReportDecision(taskID, problem string, attempt, maxRetries int) Dec
 	return Decision{
 		Type: DecisionNEED_REVIEW,
 		Reason: fmt.Sprintf("The automaton finished %d attempt(s), but each time left no report Ringmaster could use; the last time, %s. "+
-			"The acceptance checks were not run. Its last message is in the task's Report tab. "+
-			"If the work looks finished, resume with a note asking it to write only the report file.", attempt, problem),
+			"The acceptance checks were not run. Its last message is in the task's Report tab.", attempt, problem),
+		Requests: unusableReportRequests(),
 	}
 }

@@ -18,7 +18,7 @@ Current release: **v0.9.0-izar**. Ringmaster runs on Linux and macOS.
 4. **Verify.** Ringmaster runs the acceptance commands itself instead of trusting the worker's report. Failures go back to the worker for another attempt; problems an attempt cannot fix (a timeout, a command that cannot run) go to you instead.
 5. **Merge.** Passing tasks are merged into `main` one at a time. Every attempt is a commit tagged with the automaton that made it.
 
-When a worker needs you (a decision, a value only you know, or approval for a command outside its allowlist), the task waits until you answer.
+When a worker needs you (a decision, a value only you know, or approval for a command outside its allowlist), the task waits until you answer. Every stop says what kind of answer it needs: approve or deny a command, pick one of a few options (and still write your own if none fits), or write an answer. When Ringmaster stops a task itself (checks that keep failing, a used-up budget, a report it could not read), it offers the usual next steps with the recommended one picked, so the common case is one click.
 
 ## Features
 
