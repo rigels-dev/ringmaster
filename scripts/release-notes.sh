@@ -1,8 +1,12 @@
 #!/bin/sh
 # Print release notes, in markdown, for the changes on main's own line
-# between two refs: the pull requests merged and the commits pushed
-# directly, grouped as features, fixes and other changes. Release commits
-# themselves are left out.
+# between two refs, grouped as features, fixes and other changes.
+#
+# A merged pull request is described by its own commits, whose subjects say
+# what changed ("feat: command presets per language"), and linked to the
+# pull request; its title is used only when it brought no commits of its
+# own. A commit pushed to main directly is described by its subject. Release
+# commits are left out.
 #
 #   scripts/release-notes.sh v0.8.0-hadar HEAD
 #
@@ -14,21 +18,43 @@ to="${2:-HEAD}"
 range="$to"
 [ -z "$from" ] || range="$from..$to"
 
-# One record per commit: subject and body, separated by \037, records by \036
-git log --first-parent --format='%s%x1f%b%x1e' "$range" | awk '
-	BEGIN { RS = "\036"; FS = "\037" }
+# One line per change, oldest first: "<pull request number>\t<title>"
+changes() {
+	git log --first-parent --reverse --format='%H %P%x1f%s%x1f%b%x1e' "$range" |
+		awk 'BEGIN { RS = "\036"; FS = "\037" } NF >= 2 {
+			sub(/^\n+/, "", $1)
+			n = split($1, ids, " ")
+			# Only the first line of the body: a pull request title, for merges
+			m = split($3, lines, "\n"); first = ""
+			for (i = 1; i <= m; i++) if (lines[i] ~ /[^ \t]/) { first = lines[i]; break }
+			gsub(/\t/, " ", first)
+			# hash, first parent, second parent (merges only), subject, title
+			# Empty fields are written as "-": read would merge two tabs into one
+			printf "%s\t%s\t%s\t%s\t%s\n", ids[1], (n > 1 ? ids[2] : "-"), (n > 2 ? ids[3] : "-"), $2, (first != "" ? first : "-")
+		}' |
+		while IFS="$(printf '\t')" read -r hash parent merged subject body; do
+			case "$subject" in
+			"Merge pull request #"*)
+				pr=$(printf '%s' "$subject" | sed -n 's/^Merge pull request #\([0-9]*\) .*/\1/p')
+				own=""
+				[ "$merged" = "-" ] || own=$(git log --no-merges --reverse --format='%s' "$parent..$merged")
+				if [ -n "$own" ]; then
+					printf '%s\n' "$own" | while IFS= read -r line; do
+						[ -n "$line" ] && printf '%s\t%s\n' "$pr" "$line"
+					done
+				else
+					[ "$body" != "-" ] || body="$subject"
+					printf '%s\t%s\n' "$pr" "$body"
+				fi
+				;;
+			*) printf '\t%s\n' "$subject" ;;
+			esac
+		done
+}
+
+changes | awk -F '\t' '
 	{
-		subject = $1; body = $2
-		sub(/^\n+/, "", subject)
-		title = subject; ref = ""
-		# A merged pull request is named by its title, the first line of the merge body
-		if (match(subject, /^Merge pull request #[0-9]+ /)) {
-			ref = substr(subject, 21, RLENGTH - 21)
-			n = split(body, lines, "\n")
-			title = ""
-			for (i = 1; i <= n; i++) if (lines[i] != "") { title = lines[i]; break }
-			if (title == "") title = subject
-		}
+		ref = $1; title = $2
 		if (title == "" || title ~ /^chore: release /) next
 
 		# Conventional commit prefix: type, optional (scope), optional !
@@ -46,8 +72,10 @@ git log --first-parent --format='%s%x1f%b%x1e' "$range" | awk '
 		if (type == "chore" && tolower(text) ~ /^release /) next
 		if (type == "feat" || type == "feature") group = "feat"
 		else if (type == "fix" || type == "bugfix" || type == "hotfix") group = "fix"
+
 		text = toupper(substr(text, 1, 1)) substr(text, 2)
 		line = "- " text (ref != "" ? " (#" ref ")" : "")
+		if (seen[line]++) next
 		items[group] = items[group] line "\n"
 	}
 	END {

@@ -17,6 +17,11 @@
 # summary at the top:
 #
 #   NOTES="Steps can be released from Branches." scripts/bump.sh minor
+#
+# Notes written by hand go in RELEASE_NOTES.md at the repository root, with
+# the version as the first line ("# v0.11.0-kochab"). They replace the
+# generated ones, and the file is removed once the release branch is pushed.
+# A release with nothing merged since the last one and no notes is refused.
 set -eu
 
 kind="${1:-}"
@@ -108,21 +113,39 @@ echo "      main matches $remote/main, and $version is new"
 url=$(git remote get-url "$remote")
 repo=$(printf '%s\n' "$url" | sed -n -e 's#^git@github\.com:\(.*\)$#\1#p' -e 's#^https://github\.com/\(.*\)$#\1#p' -e 's#^ssh://git@github\.com/\(.*\)$#\1#p' | sed 's#\.git$##')
 
-# Release notes: the summary given, then what changed since the last release
+# Release notes. Written by hand in RELEASE_NOTES.md (git-ignored) when that
+# file names this version on its first line ("# v0.11.0-kochab"); otherwise
+# generated from what was merged since the last release, after NOTES.
 last=$(git describe --tags --abbrev=0 --match 'v*' HEAD 2>/dev/null || true)
 changes=$(scripts/release-notes.sh "$last" HEAD)
-notes="${NOTES:-}"
-if [ -n "$changes" ]; then
+notes_file="${NOTES_FILE:-RELEASE_NOTES.md}"
+written=""
+if [ -f "$notes_file" ]; then
+	heading=$(sed -n '1s/^#[[:space:]]*//p' "$notes_file" | tr -d '[:space:]')
+	[ "$heading" = "$version" ] ||
+		fail "$notes_file is written for '${heading:-no version}', but this release is $version. Fix its first line (# $version) or remove the file"
+	written=$(sed '1d' "$notes_file" | sed '/./,$!d')
+	[ -n "$written" ] || fail "$notes_file has no notes under its heading"
+fi
+
+[ -n "$changes" ] || [ -n "$written" ] ||
+	fail "nothing has been merged since ${last:-the start}, so there is nothing to release"
+
+if [ -n "$written" ]; then
+	notes="$written"
+	echo "      release notes from $notes_file"
+else
+	notes="${NOTES:-}"
 	notes="${notes:+$notes
 
 }$changes"
+	echo "      release notes generated from what was merged since ${last:-the start}"
 fi
 if [ -n "$last" ] && [ -n "$repo" ]; then
-	notes="${notes:+$notes
+	notes="$notes
 
-}Full changelog: https://github.com/$repo/compare/$last...$version"
+Full changelog: https://github.com/$repo/compare/$last...$version"
 fi
-[ -n "$changes" ] || echo "      note: nothing was merged since ${last:-the start}; the notes hold only what NOTES says"
 
 step 3 "Writing $version to VERSION and the README"
 git checkout -q -b "$release_branch"
@@ -157,6 +180,9 @@ printf 'chore: release %s\n\n%s\n' "$version" "$notes" > "$message"
 git commit -q -a --cleanup=verbatim -F "$message"
 git push -u "$remote" "$release_branch" ||
 	fail "the push failed. The branch is committed locally; retry with: git push -u $remote $release_branch"
+
+# The notes now live in the release commit; the file has done its job
+[ -z "$written" ] || rm -f "$notes_file"
 
 echo
 echo "Release notes:"

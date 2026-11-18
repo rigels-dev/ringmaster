@@ -43,7 +43,8 @@ tag:
 #   make bump KIND=major    breaking: v0.9.0-izar  -> v1.0.0-jabbah
 #   make bump KIND=v0.9.0-izar   an exact version
 # Release notes are written from the pull requests merged since the last
-# release; NOTES="..." adds a summary at the top.
+# release; NOTES="..." adds a summary at the top. Notes written by hand go in
+# RELEASE_NOTES.md (git-ignored), headed "# <version>", and replace them.
 bump: export NOTES := $(NOTES)
 bump:
 	@scripts/bump.sh $(KIND)
