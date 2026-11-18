@@ -123,15 +123,7 @@ func TestSchedulerDAGExecution(t *testing.T) {
 
 		// Determine which task is asking
 		messages, _ := body["messages"].([]any)
-		tID := "T01"
-		for _, m := range messages {
-			mMap, _ := m.(map[string]any)
-			content, _ := mMap["content"].(string)
-			if strings.Contains(content, "T02") {
-				tID = "T02"
-				break
-			}
-		}
+		tID := taskAsking(messages)
 
 		reportYAML := fmt.Sprintf("---\nstatus: COMPLETED\nattempts: 1\ncalls: 1\ntokens_in: 50\ntokens_out: 20\nfiles_changed: []\n---\n\n## Summary\nFinished %s", tID)
 
@@ -318,13 +310,7 @@ func TestFinishedTaskIsNotPausedForCacheReads(t *testing.T) {
 		var body map[string]any
 		_ = json.NewDecoder(r.Body).Decode(&body)
 		messages, _ := body["messages"].([]any)
-		tID := "T01"
-		for _, m := range messages {
-			if content, _ := m.(map[string]any)["content"].(string); strings.Contains(content, "T02") {
-				tID = "T02"
-				break
-			}
-		}
+		tID := taskAsking(messages)
 		// Second call of a task: the report is written, so the automaton stops
 		last, _ := messages[len(messages)-1].(map[string]any)
 		message := map[string]any{"role": "assistant", "content": "done"}
@@ -551,14 +537,11 @@ func TestUnusableReportIsRetriedNotSentToTheUser(t *testing.T) {
 		var body map[string]any
 		_ = json.NewDecoder(r.Body).Decode(&body)
 		messages, _ := body["messages"].([]any)
-		tID := "T01"
+		tID := taskAsking(messages)
 		all := ""
 		for _, m := range messages {
 			content, _ := m.(map[string]any)["content"].(string)
 			all += content + "\n"
-			if strings.Contains(content, "T02") {
-				tID = "T02"
-			}
 		}
 		last, _ := messages[len(messages)-1].(map[string]any)
 
@@ -667,12 +650,7 @@ func reportingMock(t *testing.T, calls *int, mu *sync.Mutex) *httptest.Server {
 		var body map[string]any
 		_ = json.NewDecoder(r.Body).Decode(&body)
 		messages, _ := body["messages"].([]any)
-		tID := "T01"
-		for _, m := range messages {
-			if content, _ := m.(map[string]any)["content"].(string); strings.Contains(content, "T02") {
-				tID = "T02"
-			}
-		}
+		tID := taskAsking(messages)
 		mu.Lock()
 		*calls++
 		mu.Unlock()
@@ -1037,4 +1015,20 @@ func TestAlwaysAskAcceptanceCommandIsAskedBeforeStarting(t *testing.T) {
 	if calls != 0 {
 		t.Errorf("the automaton was called %d time(s) before approval", calls)
 	}
+}
+
+// taskAsking returns the task a mock automaton is working on, from the
+// runner's opening instruction. Searching the whole prompt for "T02" is not
+// enough: a recorded answer carries a timestamp such as 2026-11-18T02:15:00Z,
+// which made these tests fail between 02:00 and 03:00 UTC.
+var taskInPrompt = regexp.MustCompile(`Begin implementation for task (T\d+)`)
+
+func taskAsking(messages []any) string {
+	for _, m := range messages {
+		content, _ := m.(map[string]any)["content"].(string)
+		if found := taskInPrompt.FindStringSubmatch(content); found != nil {
+			return found[1]
+		}
+	}
+	return "T01"
 }

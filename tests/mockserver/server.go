@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"regexp"
 	"strings"
 	"sync"
 )
@@ -103,9 +104,11 @@ func NewMockServer(s Scenario) *MockServer {
 
 		// 2. Worker Calls
 		ms.mu.Lock()
+		// The task comes from the runner's opening instruction: an answer's
+		// timestamp (2026-11-18T02:15:00Z) also contains "T02"
 		taskID := "T01"
-		if strings.Contains(fullText, "T02") {
-			taskID = "T02"
+		if found := taskInPrompt.FindStringSubmatch(fullText); found != nil {
+			taskID = found[1]
 		}
 		ms.calls[taskID]++
 		turn := ms.calls[taskID]
@@ -215,3 +218,5 @@ func (ms *MockServer) URL() string {
 func (ms *MockServer) Close() {
 	ms.server.Close()
 }
+
+var taskInPrompt = regexp.MustCompile(`Begin implementation for task (T\d+)`)
