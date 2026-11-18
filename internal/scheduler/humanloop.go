@@ -12,6 +12,7 @@ import (
 
 	"ringmaster/internal/schemas"
 	"ringmaster/internal/storage"
+	"ringmaster/internal/verify"
 )
 
 var answerTaskIDRegex = regexp.MustCompile(`^T\d{2,3}$`)
@@ -35,6 +36,13 @@ func QueueAnswer(projectRoot string, ans schemas.HumanAnswer) error {
 	if ans.Scope != "" && ans.Scope != "task" && ans.Scope != "project" {
 		return fmt.Errorf("invalid scope '%s': must be task or project", ans.Scope)
 	}
+	if len(ans.Acceptance) > 0 {
+		commands, err := CleanAcceptance(ans.Acceptance)
+		if err != nil {
+			return err
+		}
+		ans.Acceptance = commands
+	}
 	if err := os.MkdirAll(answersDir(projectRoot), 0755); err != nil {
 		return err
 	}
@@ -57,6 +65,9 @@ func QueueAnswer(projectRoot string, ans schemas.HumanAnswer) error {
 			prev.Scope = ans.Scope
 		}
 		prev.Text = strings.TrimSpace(prev.Text + "\n" + ans.Text)
+		if len(ans.Acceptance) > 0 {
+			prev.Acceptance = ans.Acceptance
+		}
 		ans = *prev
 	}
 	return storage.WriteJSONAtomic(file, ans)
@@ -106,7 +117,47 @@ func (e *Engine) applyQueuedAnswers() {
 	}
 }
 
+// CleanAcceptance trims new acceptance commands, drops empty ones, and
+// refuses any Ringmaster could never run.
+func CleanAcceptance(commands []string) ([]string, error) {
+	var out []string
+	for _, c := range commands {
+		c = strings.TrimSpace(c)
+		if c == "" {
+			continue
+		}
+		if why := verify.UnrunnableReason(c); why != "" {
+			return nil, fmt.Errorf("acceptance command '%s' cannot run: %s", c, why)
+		}
+		if !slices.Contains(out, c) {
+			out = append(out, c)
+		}
+	}
+	if len(out) == 0 {
+		return nil, fmt.Errorf("a task needs at least one acceptance command")
+	}
+	return out, nil
+}
+
 func (e *Engine) applyAnswer(ts schemas.TaskState, ans schemas.HumanAnswer) error {
+	// New acceptance commands go into the task's file first: if they cannot
+	// be used, nothing else of the answer is applied and the task keeps
+	// waiting, with the reason
+	if len(ans.Acceptance) > 0 {
+		commands, err := CleanAcceptance(ans.Acceptance)
+		if err == nil {
+			err = e.replaceAcceptance(ans.TaskID, commands)
+		}
+		if err != nil {
+			_ = e.stateMgr.UpdateTaskState(ans.TaskID, func(cur *schemas.TaskState) {
+				cur.Error = "Your new acceptance commands were not used: " + err.Error() + "\n\n" + cur.Error
+			})
+			fmt.Printf("✗ [Scheduler] New acceptance commands for %s were not used: %v\n", ans.TaskID, err)
+			return nil
+		}
+		ans.Acceptance = commands
+	}
+
 	if len(ans.Allow) > 0 {
 		approvals := LoadApprovals(e.projectRoot)
 		for _, cmd := range ans.Allow {
@@ -185,35 +236,66 @@ func renderHumanAnswer(requests []schemas.HumanRequest, ans schemas.HumanAnswer)
 		}
 		sb.WriteString(fmt.Sprintf("- Approved for %s: `%s`\n", scope, strings.Join(ans.Allow, "`, `")))
 	}
+	if len(ans.Acceptance) > 0 {
+		sb.WriteString(fmt.Sprintf("- The user replaced this task's acceptance commands with: `%s`. "+
+			"Ringmaster now runs only these; do not run, or try to satisfy, the ones they replaced. "+
+			"If the work is already done, do not change any file: write only the report.\n",
+			strings.Join(ans.Acceptance, "`, `")))
+	}
 	if t := strings.TrimSpace(ans.Text); t != "" {
 		sb.WriteString(t + "\n")
 	}
 	return sb.String()
 }
 
-// appendHumanAnswers adds text to the "## Human Answers" section of tasks/<id>-*.md.
-func (e *Engine) appendHumanAnswers(taskID, text string) error {
-	tasksDir := filepath.Join(e.projectRoot, ".ringmaster", "tasks")
-	entries, err := os.ReadDir(tasksDir)
+// replaceAcceptance writes new acceptance commands into tasks/<id>-*.md.
+func (e *Engine) replaceAcceptance(taskID string, commands []string) error {
+	path, err := e.taskFile(taskID)
 	if err != nil {
 		return err
 	}
+	content, err := os.ReadFile(path)
+	if err != nil {
+		return err
+	}
+	updated, err := schemas.ReplaceAcceptance(string(content), commands)
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(path, []byte(updated), 0644)
+}
+
+// taskFile finds the task's spec file in .ringmaster/tasks/.
+func (e *Engine) taskFile(taskID string) (string, error) {
+	tasksDir := filepath.Join(e.projectRoot, ".ringmaster", "tasks")
+	entries, err := os.ReadDir(tasksDir)
+	if err != nil {
+		return "", err
+	}
 	for _, entry := range entries {
 		if strings.HasPrefix(entry.Name(), taskID) && strings.HasSuffix(entry.Name(), ".md") {
-			path := filepath.Join(tasksDir, entry.Name())
-			content, err := os.ReadFile(path)
-			if err != nil {
-				return err
-			}
-			s := strings.TrimRight(string(content), "\n")
-			if !strings.Contains(s, "## Human Answers") {
-				s += "\n\n## Human Answers"
-			}
-			s += "\n\n" + strings.TrimRight(text, "\n") + "\n"
-			return os.WriteFile(path, []byte(s), 0644)
+			return filepath.Join(tasksDir, entry.Name()), nil
 		}
 	}
-	return fmt.Errorf("task file for '%s' not found", taskID)
+	return "", fmt.Errorf("task file for '%s' not found", taskID)
+}
+
+// appendHumanAnswers adds text to the "## Human Answers" section of tasks/<id>-*.md.
+func (e *Engine) appendHumanAnswers(taskID, text string) error {
+	path, err := e.taskFile(taskID)
+	if err != nil {
+		return err
+	}
+	content, err := os.ReadFile(path)
+	if err != nil {
+		return err
+	}
+	s := strings.TrimRight(string(content), "\n")
+	if !strings.Contains(s, "## Human Answers") {
+		s += "\n\n## Human Answers"
+	}
+	s += "\n\n" + strings.TrimRight(text, "\n") + "\n"
+	return os.WriteFile(path, []byte(s), 0644)
 }
 
 func (e *Engine) appendEvent(taskID, action string, payload any) {

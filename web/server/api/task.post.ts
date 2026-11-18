@@ -21,15 +21,27 @@ export default defineEventHandler(async (event) => {
     .filter(Boolean)
   const scope = body.scope === 'project' ? 'project' : 'task'
   const text = typeof body.text === 'string' ? body.text.trim() : ''
+  // New acceptance commands, one per entry. Ringmaster checks them again
+  // when it applies the answer, and keeps the task waiting if one cannot run.
+  const acceptance = [...new Set((Array.isArray(body.acceptance) ? body.acceptance : [])
+    .map((c: unknown) => String(c).trim())
+    .filter(Boolean))] as string[]
+  if (Array.isArray(body.acceptance) && !acceptance.length) {
+    return { ok: false, error: 'A task needs at least one acceptance command.' }
+  }
+  if (acceptance.some((c) => c.length > 500 || /[\r\n]/.test(c))) {
+    return { ok: false, error: 'Each acceptance command is one line, at most 500 characters.' }
+  }
 
-  if (!text && !allow.length && !Object.keys(replies).length) {
+  if (!text && !allow.length && !acceptance.length && !Object.keys(replies).length) {
     return { ok: false, error: 'Nothing to answer: add a reply, an approval or a note.' }
   }
 
   const projectDir = resolveProjectDir()
   const answersDir = path.join(projectDir, '.ringmaster', 'answers')
   fs.mkdirSync(answersDir, { recursive: true })
-  const answer = { task_id: id, replies, allow, scope, text }
+  const answer: Record<string, any> = { task_id: id, replies, allow, scope, text }
+  if (acceptance.length) answer.acceptance = acceptance
 
   // Merge with an answer still waiting in the inbox rather than dropping it
   const inboxFile = path.join(answersDir, `${id}.json`)
@@ -40,6 +52,7 @@ export default defineEventHandler(async (event) => {
       answer.allow = [...new Set([...(prev.allow || []), ...allow])]
       if (!allow.length && prev.scope) answer.scope = prev.scope
       answer.text = [prev.text, text].filter(Boolean).join('\n')
+      if (!acceptance.length && prev.acceptance?.length) answer.acceptance = prev.acceptance
     } catch {}
   }
   const tmp = path.join(answersDir, `.${id}.json.tmp`)

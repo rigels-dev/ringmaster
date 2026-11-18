@@ -1,8 +1,10 @@
 package schemas
 
 import (
+	"encoding/json"
 	"fmt"
 	"regexp"
+	"slices"
 	"strings"
 
 	"gopkg.in/yaml.v3"
@@ -98,4 +100,74 @@ func ParseTaskMarkdown(content string) (*TaskSpec, error) {
 	}
 
 	return &spec, nil
+}
+
+// ReplaceAcceptance returns a task file's content with the commands under
+// 'acceptance:' in its frontmatter replaced by commands. Everything else in
+// the file, the body and the user's earlier answers included, is kept as
+// it is.
+func ReplaceAcceptance(content string, commands []string) (string, error) {
+	if len(commands) == 0 {
+		return "", fmt.Errorf("a task needs at least one acceptance command")
+	}
+	lines := strings.Split(content, "\n")
+	if len(lines) == 0 || strings.TrimSpace(lines[0]) != "---" {
+		return "", fmt.Errorf("missing frontmatter delimiter '---'")
+	}
+	end := -1
+	for i := 1; i < len(lines); i++ {
+		if strings.TrimSpace(lines[i]) == "---" {
+			end = i
+			break
+		}
+	}
+	if end < 0 {
+		return "", fmt.Errorf("unterminated frontmatter delimiter '---'")
+	}
+
+	list := []string{"acceptance:"}
+	for _, c := range commands {
+		// A JSON string is a YAML double-quoted scalar
+		var b strings.Builder
+		enc := json.NewEncoder(&b)
+		enc.SetEscapeHTML(false)
+		if err := enc.Encode(c); err != nil {
+			return "", err
+		}
+		list = append(list, "  - "+strings.TrimSpace(b.String()))
+	}
+
+	var front []string
+	replaced := false
+	for i := 1; i < end; i++ {
+		line := lines[i]
+		if !replaced && (line == "acceptance:" || strings.HasPrefix(line, "acceptance:")) {
+			front = append(front, list...)
+			replaced = true
+			// The old list: its items, indented or not, up to the next key
+			for i+1 < end && (strings.HasPrefix(lines[i+1], " ") || strings.HasPrefix(lines[i+1], "\t") ||
+				strings.HasPrefix(lines[i+1], "-") || strings.TrimSpace(lines[i+1]) == "") {
+				i++
+			}
+			continue
+		}
+		front = append(front, line)
+	}
+	if !replaced {
+		front = append(front, list...)
+	}
+
+	out := append([]string{lines[0]}, front...)
+	out = append(out, lines[end:]...)
+	result := strings.Join(out, "\n")
+
+	// The file must still read back as the same task with the new commands
+	spec, err := ParseTaskMarkdown(result)
+	if err != nil {
+		return "", fmt.Errorf("the task file would no longer parse: %w", err)
+	}
+	if !slices.Equal(spec.Acceptance, commands) {
+		return "", fmt.Errorf("the task file would not hold the new acceptance commands")
+	}
+	return result, nil
 }

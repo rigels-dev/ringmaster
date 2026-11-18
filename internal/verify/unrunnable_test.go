@@ -87,3 +87,45 @@ func TestAcceptanceKeepsQuotedArgumentsTogether(t *testing.T) {
 		t.Errorf("check 3 exit code = %d, want 7 (the quoted program ran as written)", checks[2].ExitCode)
 	}
 }
+
+// A program that is not installed fails the same way every time, so it is
+// a question for the user, not another attempt: whether it is missing from
+// PATH, or there and only saying it is unavailable, like Docker Desktop's
+// docker in a WSL distro without WSL integration.
+func TestMissingProgramIsUnrunnable(t *testing.T) {
+	if why := MissingProgram("ringmaster-no-such-program --version"); !strings.Contains(why, "not installed") {
+		t.Errorf("MissingProgram = %q", why)
+	}
+	if why := MissingProgram("go version"); why != "" {
+		t.Errorf("go was reported missing: %q", why)
+	}
+
+	bin := t.TempDir()
+	stub := "#!/bin/sh\necho \"The command 'docker' could not be found in this WSL 2 distro.\"\nexit 1\n"
+	if err := os.WriteFile(filepath.Join(bin, "docker"), []byte(stub), 0755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+	task := schemas.TaskSpec{ID: "T01", Acceptance: []string{"docker build -t shorty:test .", "ringmaster-no-such-program", "true"}}
+	results, err := RunAcceptance(context.Background(), task, t.TempDir(), nil, nil, 10*time.Second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(results) != 3 {
+		t.Fatalf("results = %+v", results)
+	}
+	for _, r := range results[:2] {
+		if !r.Unrunnable || !strings.Contains(r.StderrTail, "not installed") {
+			t.Errorf("%s: want unrunnable, not installed: %+v", r.Command, r)
+		}
+	}
+	if !results[2].Passed || results[2].Unrunnable {
+		t.Errorf("true: %+v", results[2])
+	}
+
+	d := Decide(&schemas.WorkerReport{Status: schemas.ReportStatusCompleted}, results, 1, 2, false)
+	if d.Type != DecisionNEED_REVIEW || len(d.Requests) != 1 || d.Requests[0].Options[0] != OptionChangeAcceptance {
+		t.Errorf("decision = %+v, want a stop offering to change the acceptance commands", d)
+	}
+}

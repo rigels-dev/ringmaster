@@ -159,6 +159,6 @@ func Decide(
 // command that cannot run: the automaton cannot fix it, because the command
 // belongs to the task, not to the work.
 func UnrunnableAcceptanceMessage(command string) string {
-	return fmt.Sprintf("Acceptance command cannot run as written: '%s'. An automaton cannot fix this. "+
-		"Either re-plan, or replace the command under 'acceptance:' in the task's file in .ringmaster/tasks/ and resume.", command)
+	return fmt.Sprintf("Acceptance command cannot run: '%s'. An automaton cannot fix this. "+
+		"Change the task's acceptance commands (or the 'acceptance:' list in its file in .ringmaster/tasks/), or re-plan.", command)
 }

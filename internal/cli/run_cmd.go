@@ -12,6 +12,7 @@ import (
 	"github.com/spf13/cobra"
 	"ringmaster/internal/scheduler"
 	"ringmaster/internal/schemas"
+	"ringmaster/internal/verify"
 )
 
 var runMaxParallel int
@@ -96,13 +97,22 @@ otherwise it is applied when you run 'ringmaster resume'.
 Examples:
   ringmaster answer T06 --reply r1=approve --allow "docker build -t app ."
   ringmaster answer T06 --reply r2=distroless --reply r3=API_KEY
-  ringmaster answer T02 --text "Drop the gofmt check; go vet covers it."`,
+  ringmaster answer T02 --text "Drop the gofmt check; go vet covers it."
+  ringmaster answer T13 --acceptance "go test ./..." --acceptance "go vet ./..."
+
+--acceptance replaces the task's acceptance commands (repeat it for each
+command to keep). An automaton cannot skip or change a check; this can.`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		ans := schemas.HumanAnswer{TaskID: strings.ToUpper(args[0])}
 		ans.Text, _ = cmd.Flags().GetString("text")
 		ans.Allow, _ = cmd.Flags().GetStringArray("allow")
 		ans.Scope, _ = cmd.Flags().GetString("scope")
+		ans.Acceptance, _ = cmd.Flags().GetStringArray("acceptance")
+		if len(ans.Acceptance) > 0 && ans.Replies == nil {
+			// Say which way the task goes on, as the web UI does
+			ans.Replies = map[string]string{verify.NextStepID: verify.OptionChangeAcceptance}
+		}
 
 		replies, _ := cmd.Flags().GetStringArray("reply")
 		for _, r := range replies {
@@ -116,7 +126,7 @@ Examples:
 			ans.Replies[strings.TrimSpace(id)] = strings.TrimSpace(value)
 		}
 		if strings.TrimSpace(ans.Text) == "" && len(ans.Replies) == 0 && len(ans.Allow) == 0 {
-			return fmt.Errorf("nothing to answer: pass --text, --reply or --allow")
+			return fmt.Errorf("nothing to answer: pass --text, --reply, --allow or --acceptance")
 		}
 
 		projectDir, err := ResolveProjectDir()
@@ -147,6 +157,7 @@ func init() {
 	answerCmd.Flags().StringArray("reply", nil, "Answer to one request, as <request_id>=<answer> (repeatable)")
 	answerCmd.Flags().StringArray("allow", nil, "Approve a command beyond the sandbox allow list (repeatable)")
 	answerCmd.Flags().String("scope", "task", "Approval scope for --allow: task or project")
+	answerCmd.Flags().StringArray("acceptance", nil, "Replace the task's acceptance commands (repeatable, one per command)")
 
 	RootCmd.AddCommand(runCmd)
 	RootCmd.AddCommand(answerCmd)

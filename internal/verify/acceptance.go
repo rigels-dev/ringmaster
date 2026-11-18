@@ -45,6 +45,37 @@ func UnrunnableReason(cmd string) string {
 	return ""
 }
 
+// MissingProgram says, when the program an acceptance command starts is not
+// installed here (not on PATH), what to do about it, or "" when it is found.
+// No attempt can make such a check pass, so it is asked before any work.
+func MissingProgram(cmd string) string {
+	args, err := worker.SplitCommand(cmd)
+	if err != nil || len(args) == 0 {
+		return ""
+	}
+	if _, err := exec.LookPath(args[0]); err != nil {
+		return notInstalledNote(args[0])
+	}
+	return ""
+}
+
+func notInstalledNote(program string) string {
+	return fmt.Sprintf("[ringmaster] '%s' is not installed on this machine, or is not on PATH, so this check cannot run. "+
+		"Install it, or change the task's acceptance commands.", program)
+}
+
+// notFoundOutput recognises a program that is on PATH but only reports it is
+// not available, like Docker Desktop's stand-in for docker in a WSL distro
+// without WSL integration, and a shell's "command not found".
+func notFoundOutput(exitCode int, output string) bool {
+	if exitCode == 127 {
+		return true
+	}
+	lower := strings.ToLower(output)
+	return strings.Contains(lower, "could not be found in this wsl") ||
+		strings.Contains(lower, "command not found")
+}
+
 // RunAcceptance runs each command in task.Acceptance independently inside worktree,
 // each limited to timeout. All commands must exit with code 0 to pass.
 // They get the same environment as worker commands (worker.CommandEnv).
@@ -100,12 +131,14 @@ func RunAcceptance(ctx context.Context, task schemas.TaskSpec, worktree string, 
 
 		exitCode := 0
 		passed := true
+		missing := false
 		if err != nil {
 			passed = false
 			if exitErr, ok := err.(*exec.ExitError); ok {
 				exitCode = exitErr.ExitCode()
 			} else {
 				exitCode = 1
+				missing = errors.Is(err, exec.ErrNotFound)
 			}
 		}
 
@@ -120,6 +153,18 @@ func RunAcceptance(ctx context.Context, task schemas.TaskSpec, worktree string, 
 		}
 
 		errTail = strings.TrimSpace(errTail)
+		// A program that is not installed fails the same way on every attempt
+		if !passed && !timedOut && (missing || notFoundOutput(exitCode, stdout.String()+"\n"+stderr.String())) {
+			results = append(results, CheckResult{
+				Command:    cmdStr,
+				ExitCode:   exitCode,
+				Passed:     false,
+				Unrunnable: true,
+				StdoutTail: strings.TrimSpace(outTail),
+				StderrTail: strings.TrimSpace(notInstalledNote(fields[0]) + "\n" + errTail),
+			})
+			continue
+		}
 		if timedOut {
 			passed = false
 			errTail = strings.TrimSpace(errTail + fmt.Sprintf("\n[ringmaster] stopped after %s (acceptance timeout)", timeout))
