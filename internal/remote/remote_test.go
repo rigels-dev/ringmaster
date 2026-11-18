@@ -154,8 +154,9 @@ func TestPushSendsMainAndTaskBranchesOnly(t *testing.T) {
 	if len(st.Branches) != 3 || st.Branches[0].Name != "main" {
 		t.Fatalf("status branches = %+v, want main first then the two task branches", st.Branches)
 	}
-	if st.Pending() != 3 {
-		t.Fatalf("pending = %d before the first push, want 3", st.Pending())
+	// rm/T01 is merged: its work goes with main, so it is not waiting on a push
+	if st.Pending() != 2 || st.Merged() != 1 || !st.Branches[1].Merged || st.Branches[2].Merged {
+		t.Fatalf("pending = %d, merged = %d before the first push, want 2 and 1 (%+v)", st.Pending(), st.Merged(), st.Branches)
 	}
 
 	rs, err := Push(ctx, dir, false)
@@ -334,5 +335,97 @@ func TestPushSendsRecordedTaskBranchesNotTheUsers(t *testing.T) {
 	onRemote := strings.Join(strings.Fields(git(t, remotePath, "for-each-ref", "--format=%(refname:short)", "refs/heads")), " ")
 	if want := "docs/usage feat/link-store main rm/T01 rm/T02"; onRemote != want {
 		t.Fatalf("remote branches = %q, want %q", onRemote, want)
+	}
+}
+
+func pruned(rs []PruneResult) map[string][]string {
+	m := map[string][]string{}
+	for _, r := range rs {
+		m[r.Branch] = append(m[r.Branch], r.Result)
+	}
+	return m
+}
+
+// Only merged task branches go; main, an unmerged task branch, a branch
+// checked out in a worktree and the user's own branch stay.
+func TestPruneDeletesMergedTaskBranchesOnly(t *testing.T) {
+	ctx := context.Background()
+	dir := project(t)
+	git(t, dir, "branch", "rm/T03")
+	git(t, dir, "worktree", "add", "-q", filepath.Join(t.TempDir(), "T03"), "rm/T03")
+
+	st, _ := GetStatus(ctx, dir)
+	for _, b := range st.Branches {
+		if b.Name == "rm/T03" && b.Merged {
+			t.Error("a branch checked out in a worktree counts as merged")
+		}
+	}
+
+	rs, err := Prune(ctx, dir, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := pruned(rs); len(got) != 1 || got["rm/T01"][0] != PruneDeleted {
+		t.Fatalf("prune = %+v, want only rm/T01 deleted", rs)
+	}
+	left := git(t, dir, "for-each-ref", "--format=%(refname:short)", "refs/heads")
+	if left != "main\nrm/T02\nrm/T03\nscratch" {
+		t.Fatalf("branches left = %q", left)
+	}
+
+	// Nothing left to prune
+	if rs, err := Prune(ctx, dir, false); err != nil || len(rs) != 0 {
+		t.Fatalf("second prune = %+v, %v", rs, err)
+	}
+}
+
+// With onRemote, merged task branches are deleted on the remote too,
+// including ones already gone here, but not one the remote has moved on.
+func TestPruneOnRemote(t *testing.T) {
+	ctx := context.Background()
+	dir := project(t)
+	git(t, dir, "branch", "rm/T04")
+	remotePath, remoteURL := bareRemote(t)
+
+	if _, err := Prune(ctx, dir, true); err == nil {
+		t.Fatal("pruning on a remote that is not set should fail")
+	}
+	if err := SetURL(ctx, dir, remoteURL); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Push(ctx, dir, false); err != nil {
+		t.Fatal(err)
+	}
+
+	// rm/T04 was deleted here earlier, and is still on the remote
+	git(t, dir, "branch", "-d", "rm/T04")
+
+	// Someone moves rm/T01 on the remote after this project last saw it
+	other := filepath.Join(t.TempDir(), "other")
+	git(t, filepath.Dir(other), "clone", "-q", remoteURL, other)
+	git(t, other, "checkout", "-q", "rm/T01")
+	commit(t, other, "d.txt", "someone else's work")
+	git(t, other, "push", "-q", "origin", "rm/T01")
+
+	rs, err := Prune(ctx, dir, true)
+	got := pruned(rs)
+	if err == nil {
+		t.Error("a refused remote deletion should be reported as an error")
+	}
+	if strings.Join(got["rm/T01"], ",") != PruneDeleted+","+PruneKept {
+		t.Errorf("rm/T01 = %v, want deleted here and kept on the remote (%+v)", got["rm/T01"], rs)
+	}
+
+	onRemote := git(t, remotePath, "for-each-ref", "--format=%(refname:short)", "refs/heads")
+	if strings.Contains(onRemote, "rm/T04") {
+		t.Errorf("rm/T04 was not deleted on the remote: %q", onRemote)
+	}
+	for _, keep := range []string{"main", "rm/T01", "rm/T02"} {
+		if !strings.Contains(onRemote, keep) {
+			t.Errorf("%s was deleted on the remote: %q", keep, onRemote)
+		}
+	}
+	if strings.Join(got["rm/T04"], ",") != PruneRemoteDeleted {
+		t.Errorf("rm/T04 = %v (%+v)", got["rm/T04"], rs)
 	}
 }

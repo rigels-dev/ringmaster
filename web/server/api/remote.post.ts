@@ -3,6 +3,8 @@ import { cliError } from '../utils/cli'
 
 // { action: 'set', url }            point origin at a repository
 // { action: 'push', mainOnly? }     push main and the task branches to it
+// { action: 'prune', remote? }      delete task branches merged into main,
+//                                   here and, with remote, on origin too
 //
 // Both go through the CLI, which validates the URL and never forces a push.
 export default defineEventHandler(async (event) => {
@@ -38,5 +40,21 @@ export default defineEventHandler(async (event) => {
     }
   }
 
-  return { ok: false, error: "Unknown action; use 'set' or 'push'" }
+  if (body.action === 'prune') {
+    const args = ['prune', '--json']
+    if (body.remote === true) args.push('--remote')
+    try {
+      const { stdout } = await runCommand(bin, args, { cwd, timeout: 200000 })
+      return JSON.parse(stdout)
+    } catch (err: any) {
+      // A prune that failed part way still reports what it did
+      try {
+        const report = JSON.parse(String(err.stdout || ''))
+        if (report && typeof report === 'object') return report
+      } catch {}
+      return { ok: false, results: [], error: cliError(err, 'Deleting the branches failed') }
+    }
+  }
+
+  return { ok: false, error: "Unknown action; use 'set', 'push' or 'prune'" }
 })

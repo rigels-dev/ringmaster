@@ -12,6 +12,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -44,6 +45,9 @@ const (
 type Branch struct {
 	Name  string `json:"name"`
 	State string `json:"state"`
+	// Merged marks a task branch whose commits are all in main. Its work is
+	// published with main, so it need not be pushed, and it can be pruned.
+	Merged bool `json:"merged,omitempty"`
 }
 
 // Status is the project's remote and how its branches compare with it. It is
@@ -57,11 +61,26 @@ type Status struct {
 	Author workspace.Author `json:"author"`
 }
 
-// Pending counts the branches that a push would send something for.
+// Pending counts the branches whose work is not on the remote yet: main, and
+// task branches not merged into main. A merged task branch's commits go
+// with main, so it is not counted even when the branch itself was never
+// pushed.
 func (s Status) Pending() int {
 	n := 0
 	for _, b := range s.Branches {
-		if b.State != StateSynced {
+		if b.State != StateSynced && !b.Merged {
+			n++
+		}
+	}
+	return n
+}
+
+// Merged counts the task branches that are merged into main and could be
+// pruned.
+func (s Status) Merged() int {
+	n := 0
+	for _, b := range s.Branches {
+		if b.Merged {
 			n++
 		}
 	}
@@ -194,6 +213,7 @@ func GetStatus(ctx context.Context, projectRoot string) (Status, error) {
 		return names[i] < names[j]
 	})
 
+	merged := mergedIntoMain(ctx, projectRoot)
 	for _, name := range names {
 		state := StateUnpushed
 		if sha, ok := pushed[name]; ok {
@@ -202,9 +222,161 @@ func GetStatus(ctx context.Context, projectRoot string) (Status, error) {
 				state = StateSynced
 			}
 		}
-		st.Branches = append(st.Branches, Branch{Name: name, State: state})
+		st.Branches = append(st.Branches, Branch{Name: name, State: state, Merged: name != MainBranch && merged[name]})
 	}
 	return st, nil
+}
+
+// mergedIntoMain lists the local branches whose tips main contains. A
+// branch checked out in a worktree is left out: a task that is running, or
+// waiting on the user, may not have committed yet, and its branch is then
+// "merged" only because it has nothing of its own.
+func mergedIntoMain(ctx context.Context, projectRoot string) map[string]bool {
+	out, err := workspace.RunGit(ctx, projectRoot, "for-each-ref", "--merged", "refs/heads/"+MainBranch,
+		"--format=%(refname:short)", "refs/heads")
+	merged := map[string]bool{}
+	if err != nil {
+		return merged
+	}
+	for _, name := range strings.Fields(out) {
+		merged[name] = true
+	}
+	if wt, err := workspace.RunGit(ctx, projectRoot, "worktree", "list", "--porcelain"); err == nil {
+		for _, line := range strings.Split(wt, "\n") {
+			if name, ok := strings.CutPrefix(strings.TrimSpace(line), "branch refs/heads/"); ok {
+				delete(merged, name)
+			}
+		}
+	}
+	return merged
+}
+
+// Prune outcomes for one branch.
+const (
+	PruneDeleted       = "deleted"        // the local branch is gone
+	PruneRemoteDeleted = "remote-deleted" // the branch on the remote is gone
+	PruneKept          = "kept"           // left alone; Detail says why
+)
+
+// PruneResult is what happened to one branch, locally or on the remote.
+type PruneResult struct {
+	Branch string `json:"branch"`
+	Result string `json:"result"`
+	Detail string `json:"detail,omitempty"`
+}
+
+// Prune deletes the task branches that are merged into main. Their commits
+// stay in main's history, merge commits and Ringmaster-* trailers included;
+// only the branch names go. main, a task branch that is not merged, and any
+// branch of the user's own are never touched. A branch still checked out in
+// a worktree is kept.
+//
+// With onRemote, the same branches are also deleted on origin, where the
+// remote still has them as they were last fetched or pushed and main
+// contains that commit: a branch someone has moved on the remote is kept.
+func Prune(ctx context.Context, projectRoot string, onRemote bool) ([]PruneResult, error) {
+	merged := mergedIntoMain(ctx, projectRoot)
+	results := []PruneResult{}
+
+	// What origin has, from the last fetch or push, before anything changes
+	remoteTips := map[string]string{}
+	if onRemote {
+		if URL(ctx, projectRoot) == "" {
+			return nil, errors.New("this project has no remote yet; set one first (ringmaster remote set <url>)")
+		}
+		out, err := workspace.RunGit(ctx, projectRoot, "for-each-ref", "--format=%(refname) %(objectname)", "refs/remotes/"+Name)
+		if err != nil {
+			return nil, err
+		}
+		for _, line := range strings.Split(strings.TrimSpace(out), "\n") {
+			ref, sha, ok := strings.Cut(line, " ")
+			if name, isBranch := strings.CutPrefix(ref, "refs/remotes/"+Name+"/"); ok && isBranch {
+				remoteTips[name] = sha
+			}
+		}
+	}
+
+	var toDeleteRemote []string
+	for _, branch := range TaskBranches(ctx, projectRoot) {
+		if !merged[branch] {
+			continue
+		}
+		// -d, not -D: git refuses a branch that is not merged or is checked out
+		if _, err := workspace.RunGit(ctx, projectRoot, "branch", "-d", "--", branch); err != nil {
+			results = append(results, PruneResult{Branch: branch, Result: PruneKept, Detail: gitReason(err)})
+			continue
+		}
+		results = append(results, PruneResult{Branch: branch, Result: PruneDeleted})
+		if sha, ok := remoteTips[branch]; ok {
+			if _, err := workspace.RunGit(ctx, projectRoot, "merge-base", "--is-ancestor", sha, "refs/heads/"+MainBranch); err == nil {
+				toDeleteRemote = append(toDeleteRemote, branch)
+			} else {
+				results = append(results, PruneResult{Branch: branch, Result: PruneKept,
+					Detail: "on " + Name + " it has commits that are not in main"})
+			}
+		}
+	}
+
+	// Task branches already gone here but still on the remote
+	if onRemote {
+		recorded := map[string]bool{}
+		for _, b := range recordedTaskBranches(projectRoot) {
+			recorded[b] = true
+		}
+		var leftover []string
+		for name := range remoteTips {
+			if name == MainBranch || !(recorded[name] || strings.HasPrefix(name, TaskPrefix)) {
+				continue
+			}
+			if slices.Contains(toDeleteRemote, name) {
+				continue // deleted here just now, and already queued
+			}
+			if _, err := workspace.RunGit(ctx, projectRoot, "rev-parse", "--verify", "--quiet", "refs/heads/"+name); err == nil {
+				continue // still here, so not merged or still in use: handled above
+			}
+			if _, err := workspace.RunGit(ctx, projectRoot, "merge-base", "--is-ancestor", remoteTips[name], "refs/heads/"+MainBranch); err == nil {
+				leftover = append(leftover, name)
+			}
+		}
+		sort.Strings(leftover)
+		toDeleteRemote = append(toDeleteRemote, leftover...)
+	}
+
+	if len(toDeleteRemote) == 0 {
+		return results, nil
+	}
+	// Each deletion is leased on the commit last seen there, so a branch
+	// that moved on the remote since is refused instead of lost
+	refspecs := make([]string, 0, 2*len(toDeleteRemote))
+	for _, branch := range toDeleteRemote {
+		refspecs = append(refspecs, fmt.Sprintf("--force-with-lease=refs/heads/%s:%s", branch, remoteTips[branch]))
+	}
+	for _, branch := range toDeleteRemote {
+		refspecs = append(refspecs, ":refs/heads/"+branch)
+	}
+	pushed, err := gitPush(ctx, projectRoot, refspecs)
+	for _, r := range pushed {
+		switch r.Result {
+		case ResultRejected:
+			results = append(results, PruneResult{Branch: r.Branch, Result: PruneKept, Detail: "on " + Name + ": " + r.Detail})
+		default:
+			results = append(results, PruneResult{Branch: r.Branch, Result: PruneRemoteDeleted})
+			// The remote-tracking ref would otherwise show it as still there
+			_, _ = workspace.RunGit(ctx, projectRoot, "update-ref", "-d", "refs/remotes/"+Name+"/"+r.Branch)
+		}
+	}
+	return results, err
+}
+
+// gitReason is the first line git gave for a failure.
+func gitReason(err error) string {
+	msg := strings.TrimSpace(err.Error())
+	for _, line := range strings.Split(msg, "\n") {
+		if line = strings.TrimSpace(line); strings.HasPrefix(line, "error:") || strings.HasPrefix(line, "fatal:") {
+			return strings.TrimSpace(strings.TrimPrefix(strings.TrimPrefix(line, "error:"), "fatal:"))
+		}
+	}
+	return msg
 }
 
 // Outcomes of pushing one branch.
@@ -290,15 +462,30 @@ func PushRelease(ctx context.Context, projectRoot, tag string) ([]PushResult, er
 }
 
 func push(ctx context.Context, projectRoot string, refspecs []string) ([]PushResult, error) {
+	if _, err := workspace.RunGit(ctx, projectRoot, "rev-parse", "--verify", "--quiet", "refs/heads/"+MainBranch); err != nil {
+		return nil, fmt.Errorf("the project has no %q branch to push", MainBranch)
+	}
+	return gitPush(ctx, projectRoot, refspecs)
+}
+
+// gitPush runs one non-interactive git push to origin. Options such as
+// --force-with-lease may come before the refspecs.
+func gitPush(ctx context.Context, projectRoot string, refspecs []string) ([]PushResult, error) {
 	remoteURL := URL(ctx, projectRoot)
 	if remoteURL == "" {
 		return nil, errors.New("this project has no remote yet; set one first (ringmaster remote set <url>)")
 	}
-	if _, err := workspace.RunGit(ctx, projectRoot, "rev-parse", "--verify", "--quiet", "refs/heads/"+MainBranch); err != nil {
-		return nil, fmt.Errorf("the project has no %q branch to push", MainBranch)
-	}
 
-	args := append([]string{"-C", projectRoot, "push", "--porcelain", Name}, refspecs...)
+	var opts, specs []string
+	for _, r := range refspecs {
+		if strings.HasPrefix(r, "--") {
+			opts = append(opts, r)
+		} else {
+			specs = append(specs, r)
+		}
+	}
+	args := append([]string{"-C", projectRoot, "push", "--porcelain"}, opts...)
+	args = append(append(args, Name), specs...)
 
 	tCtx, cancel := context.WithTimeout(ctx, pushTimeout)
 	defer cancel()
@@ -331,7 +518,11 @@ func parsePorcelain(out string) []PushResult {
 		if len(fields) != 3 {
 			continue // "To <url>" and "Done"
 		}
-		from, _, _ := strings.Cut(fields[1], ":")
+		from, to, _ := strings.Cut(fields[1], ":")
+		if from == "" || from == "(delete)" {
+			// A deletion: "(delete):refs/heads/<branch>"
+			from = to
+		}
 		// A branch is reported by its name, a tag as "tag <name>"
 		branch, ok := strings.CutPrefix(from, "refs/heads/")
 		if !ok {

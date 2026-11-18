@@ -165,9 +165,13 @@ ringmaster remote set git@github.com:you/project.git
 ringmaster remote        # the remote, and which branches still need pushing
 ringmaster push          # main and every task branch, merged or not
 ringmaster push --main-only
+ringmaster prune         # delete the task branches already merged into main
+ringmaster prune --remote  # and delete them on origin too
 ```
 
 Only `main` and the task branches are pushed, each named explicitly from Ringmaster's own record of its tasks; your other branches are left alone, even ones with similar names. A push is never forced: if the remote has commits this project does not, that branch is rejected and reported. Pushing uses your own git login (an SSH key or a credential helper) and never prompts, so a missing login fails at once. Ringmaster refuses a URL with credentials in it, since it would be stored in `.git/config`.
+
+A task branch merged into `main` does not need pushing: its commits go with `main`. So once `main` (and any unfinished task branch) is on the remote, the Branches view says everything is pushed. Merged task branches can then be deleted with **Delete merged branches…** or `ringmaster prune`. The work stays in `main`'s history; only the branch names go. `main`, unfinished task branches, branches checked out in a worktree and your own branches are never deleted. With `--remote` (or the checkbox in the web UI) they are deleted on origin too, unless someone has moved the branch there since this project last saw it.
 
 **When every task is done.** A finished plan becomes a *step* of the project: Step 1, Step 2, and so on, each ending at the commit on `main` where its last task was merged. The Tasks view says the step is done and links to Branches, where each step can be named, released, downloaded, or finished without a release. From the command line:
 

@@ -14,6 +14,8 @@ var (
 	remoteJSON   bool
 	pushJSON     bool
 	pushMainOnly bool
+	pruneJSON    bool
+	pruneRemote  bool
 )
 
 var remoteCmd = &cobra.Command{
@@ -107,6 +109,73 @@ does not prompt, so a missing login fails at once instead of hanging.`,
 	},
 }
 
+// pruneReport is what `ringmaster prune --json` prints.
+type pruneReport struct {
+	OK      bool                 `json:"ok"`
+	Results []remote.PruneResult `json:"results"`
+	Error   string               `json:"error,omitempty"`
+}
+
+var pruneCmd = &cobra.Command{
+	Use:   "prune",
+	Short: "Delete the task branches that are merged into main",
+	Long: `Deletes every task branch whose commits are all in main. The work stays
+in main's history, merge commits included; only the branch names go.
+main, unmerged task branches, branches checked out in a worktree and your
+own branches are never touched.
+
+With --remote, the same task branches are deleted on origin too, as long as
+the remote still has them where this project last saw them. A branch that
+was moved on the remote since is kept.`,
+	Args: cobra.NoArgs,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		projectDir, err := ResolveProjectDir()
+		if err != nil {
+			return err
+		}
+		results, pruneErr := remote.Prune(context.Background(), projectDir, pruneRemote)
+		if pruneJSON {
+			report := pruneReport{OK: pruneErr == nil, Results: results}
+			if report.Results == nil {
+				report.Results = []remote.PruneResult{}
+			}
+			if pruneErr != nil {
+				report.Error = pruneErr.Error()
+			}
+			if err := printJSON(report); err != nil {
+				return err
+			}
+			return pruneErr
+		}
+		fmt.Print(buildPruneView(results))
+		return pruneErr
+	},
+}
+
+func buildPruneView(results []remote.PruneResult) string {
+	if len(results) == 0 {
+		return "No merged task branches to delete.\n"
+	}
+	var sb strings.Builder
+	labels := map[string]string{
+		remote.PruneDeleted:       "deleted",
+		remote.PruneRemoteDeleted: "deleted on " + remote.Name,
+		remote.PruneKept:          "kept",
+	}
+	for _, r := range results {
+		mark := "✓"
+		if r.Result == remote.PruneKept {
+			mark = "·"
+		}
+		line := fmt.Sprintf("%s %s  %s", mark, r.Branch, labels[r.Result])
+		if r.Detail != "" {
+			line += ": " + r.Detail
+		}
+		sb.WriteString(line + "\n")
+	}
+	return sb.String()
+}
+
 func printJSON(v any) error {
 	data, err := json.MarshalIndent(v, "", "  ")
 	if err != nil {
@@ -144,10 +213,17 @@ func buildRemoteView(st remote.Status) string {
 		}
 	}
 	for _, b := range st.Branches {
-		fmt.Fprintf(&sb, "  %-*s  %s\n", width, b.Name, labels[b.State])
+		label := labels[b.State]
+		if b.Merged {
+			label += ", merged into main"
+		}
+		fmt.Fprintf(&sb, "  %-*s  %s\n", width, b.Name, label)
 	}
 	if st.URL != "" && st.Pending() > 0 {
 		fmt.Fprintf(&sb, "\n%d branch(es) to push: ringmaster push\n", st.Pending())
+	}
+	if st.Merged() > 0 {
+		fmt.Fprintf(&sb, "%d merged task branch(es) can be deleted: ringmaster prune\n", st.Merged())
 	}
 	return sb.String()
 }
@@ -181,5 +257,7 @@ func init() {
 	remoteCmd.AddCommand(remoteSetCmd)
 	pushCmd.Flags().BoolVar(&pushMainOnly, "main-only", false, "Push only main, not the task branches")
 	pushCmd.Flags().BoolVar(&pushJSON, "json", false, "Print the result of each branch as JSON")
-	RootCmd.AddCommand(remoteCmd, pushCmd)
+	pruneCmd.Flags().BoolVar(&pruneRemote, "remote", false, "Also delete the merged task branches on origin")
+	pruneCmd.Flags().BoolVar(&pruneJSON, "json", false, "Print what happened to each branch as JSON")
+	RootCmd.AddCommand(remoteCmd, pushCmd, pruneCmd)
 }
