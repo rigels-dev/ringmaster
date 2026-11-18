@@ -2,12 +2,15 @@ package planner
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -533,8 +536,74 @@ func TestPlannerIsToldTheAllowedCommands(t *testing.T) {
 	if !strings.Contains(system, "cargo test, cargo clippy, make lint") {
 		t.Errorf("the prompt does not list the project's allowlist and approved commands:\n%s", system[strings.Index(system, "ALLOWED COMMANDS"):][:200])
 	}
-	// "ruff" is only in the fleet's default list, which this project's own list replaces
-	if strings.Contains(system, "only-for-t09") || strings.Contains(system, "ruff") {
-		t.Error("the prompt lists a command approved for another task only, or the fleet's list the project replaced")
+	// "ruff" is only in the fleet's default list, which this project's own list replaces.
+	// (It still appears among the presets the plan could add.)
+	allowedLine := system[strings.Index(system, "ALLOWED COMMANDS"):]
+	allowedLine = allowedLine[:strings.Index(allowedLine, "\n")]
+	if strings.Contains(system, "only-for-t09") || strings.Contains(allowedLine, "ruff") {
+		t.Errorf("the prompt lists a command approved for another task only, or the fleet's list the project replaced:\n%s", allowedLine)
+	}
+}
+
+// The master is shown the presets with their commands, and asked to name the
+// ones the plan needs. The names it gives are kept, cleaned up, and approving
+// the plan adds them to the project.
+func TestPlanStackBecomesTheProjectsPresets(t *testing.T) {
+	plan := `{"project":"p","stack":["Go"," docker","go",""],"tasks":[{"id":"T01","title":"A","type":"backend","depends_on":[],"worker":"w","max_retries":2,"acceptance":["go test ./..."],"description":"d"}],"open_questions":[],"assumptions":[]}`
+	url, _, _ := planServer(t, plan)
+	root, cfg := planningProject(t, url)
+
+	prompt := MasterSystemPrompt(cfg, "w", nil)
+	for _, want := range []string{"STACK", "- go: go build, go test", "- docker: docker build, docker compose (always asked: docker compose down", `"stack": ["go"]`, "git push"} {
+		if !strings.Contains(prompt, want) {
+			t.Errorf("planner prompt lacks %q", want)
+		}
+	}
+
+	p, _, err := GeneratePlan(context.Background(), root, cfg, cfg.Agents["m"], llm.NewProvider("openai", url, "MOCK_KEY"))
+	if err != nil {
+		t.Fatalf("GeneratePlan failed: %v", err)
+	}
+	if !reflect.DeepEqual(p.Stack, []string{"go", "docker"}) {
+		t.Fatalf("stack = %v", p.Stack)
+	}
+
+	// The stack is part of what is approved
+	h1, _ := p.PlanHash()
+	other := *p
+	other.Stack = []string{"go"}
+	if h2, _ := other.PlanHash(); h1 == h2 {
+		t.Error("changing the stack does not change the plan hash")
+	}
+	reordered := *p
+	reordered.Stack = []string{"docker", "go"}
+	if h3, _ := reordered.PlanHash(); h1 != h3 {
+		t.Error("the order of the stack changes the plan hash")
+	}
+
+	if _, err := ApprovePlan(root, p); err != nil {
+		t.Fatal(err)
+	}
+	m, err := config.LoadProjectManifest(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(m.Sandbox.Presets, []string{"go", "docker"}) {
+		t.Errorf("project presets after approval = %v", m.Sandbox.Presets)
+	}
+}
+
+// A plan without a stack hashes as it did before stacks existed, so plans
+// approved by an older version stay approved.
+func TestPlanWithoutStackKeepsItsHash(t *testing.T) {
+	p := &schemas.Plan{Project: "p", Tasks: []schemas.PlanTask{{ID: "T01", Title: "A", DependsOn: []string{}, Acceptance: []string{"go test ./..."}}}}
+	h, _ := p.PlanHash()
+	data, _ := json.Marshal(struct {
+		Project string             `json:"project"`
+		Tasks   []schemas.PlanTask `json:"tasks"`
+	}{p.Project, p.Tasks})
+	sum := sha256.Sum256(data)
+	if want := hex.EncodeToString(sum[:]); h != want {
+		t.Errorf("hash = %s, want %s", h, want)
 	}
 }

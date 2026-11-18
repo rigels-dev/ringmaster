@@ -79,6 +79,8 @@ func RunAttempt(
 	}
 
 	toolSet := NewToolSet(worktree, sandboxCfg.Allow)
+	toolSet.AlwaysAsk = sandboxCfg.AlwaysAsk
+	toolSet.Approved = sandboxCfg.Approved
 	toolSet.PassEnv = sandboxCfg.PassEnv
 	tools := toolSet.Definitions()
 
@@ -169,7 +171,7 @@ What is done so far and what is waiting on the user.
 Never ask for a secret's value; ask for the name of the environment variable that holds it.
 Do not ask about anything already answered under HUMAN ANSWERS & FEEDBACK.
 `, task.ID, briefContent, task.ID, task.Title, task.Description, humanAnswersSection, skills.PromptSection(skills.InWorkspace(worktree)), strings.Join(task.Acceptance, "\n- "), testsRule, task.ID, attemptNum,
-		strings.Join(sandboxCfg.Allow, ", "), task.ID, attemptNum)
+		commandRules(sandboxCfg), task.ID, attemptNum)
 
 	messages := []llm.Message{
 		{Role: "system", Content: systemPrompt},
@@ -181,6 +183,9 @@ Do not ask about anything already answered under HUMAN ANSWERS & FEEDBACK.
 		Worktree: worktree,
 		LogsPath: logFile,
 	}
+
+	// What an agentic provider may run by itself; always-ask commands are denied to it
+	runnable, denied := RunnableCommands(sandboxCfg)
 
 	maxTokens := budget.MaxTokensPerTask
 	if maxTokens == 0 {
@@ -212,11 +217,12 @@ Do not ask about anything already answered under HUMAN ANSWERS & FEEDBACK.
 
 		step := 0
 		req := llm.ChatRequest{
-			Messages:        messages,
-			Tools:           tools,
-			WorkDir:         worktree,
-			AllowedCommands: sandboxCfg.Allow,
-			CommandEnv:      CommandEnv(sandboxCfg.PassEnv),
+			Messages:           messages,
+			Tools:              tools,
+			WorkDir:            worktree,
+			AllowedCommands:    runnable,
+			DisallowedCommands: denied,
+			CommandEnv:         CommandEnv(sandboxCfg.PassEnv),
 			// Agentic providers run many steps inside one call; surface each
 			// one live in the run log and the transcript.
 			OnProgress: func(ev llm.ProgressEvent) {
@@ -380,4 +386,15 @@ func oneLine(s string, max int) string {
 		s = string(r[:max]) + "…"
 	}
 	return s
+}
+
+// commandRules tells the automaton which commands it may run, and which
+// always need the user's approval first.
+func commandRules(sb config.SandboxConfig) string {
+	runnable, denied := RunnableCommands(sb)
+	rules := strings.Join(runnable, ", ")
+	if len(denied) > 0 {
+		rules += ". These always need the user's approval first, even where an allowed command covers them: " + strings.Join(denied, ", ")
+	}
+	return rules
 }

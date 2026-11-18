@@ -253,22 +253,34 @@ func (e *Engine) executeTask(ctx context.Context, planTask schemas.PlanTask) {
 		}
 	}
 
-	// An acceptance command the user has not allowed cannot be run either.
-	// Ask for it now, as an approval, before the automaton does work that
-	// could not be checked.
-	allowed := append(append([]string{}, e.cfg.Sandbox.Allow...), LoadApprovals(e.projectRoot).For(planTask.ID)...)
+	// The sandbox this task runs in: the project's allowlist and presets, the
+	// always-ask list, and the commands the user approved
+	sandbox := e.cfg.EffectiveSandbox()
+	sandbox.Approved = LoadApprovals(e.projectRoot).For(planTask.ID)
+
+	// An acceptance command the user has not allowed cannot be run either,
+	// nor one that always needs their approval. Ask for it now, before the
+	// automaton does work that could not be checked.
 	var approvals []schemas.HumanRequest
 	for _, command := range taskSpec.Acceptance {
 		command = strings.TrimSpace(command)
-		if command == "" || len(allowed) == 0 || worker.CheckCommand(command, allowed) {
+		if command == "" {
 			continue
+		}
+		perm, why := worker.CommandPermission(command, sandbox)
+		if perm == worker.Allowed {
+			continue
+		}
+		reason := "This is one of the task's acceptance checks, and it is not on your command allowlist."
+		if perm == worker.Ask {
+			reason = "This is one of the task's acceptance checks, and " + why + "."
 		}
 		approvals = append(approvals, schemas.HumanRequest{
 			ID:      fmt.Sprintf("a%d", len(approvals)+1),
 			Type:    schemas.RequestApproval,
 			Command: command,
-			Reason: "This is one of the task's acceptance checks, and it is not on your command allowlist. " +
-				"Nothing has been run yet. If you would rather not allow it, replace it under 'acceptance:' in the task's file in .ringmaster/tasks/, or re-plan.",
+			Reason: reason + " Nothing has been run yet. If you would rather not allow it, replace it under 'acceptance:' " +
+				"in the task's file in .ringmaster/tasks/, or re-plan.",
 		})
 	}
 	if len(approvals) > 0 {
@@ -307,9 +319,7 @@ func (e *Engine) executeTask(ctx context.Context, planTask schemas.PlanTask) {
 		return
 	}
 
-	// 6. Execute task attempt loop, with commands the user approved added to the sandbox
-	sandbox := e.cfg.Sandbox
-	sandbox.Allow = append(append([]string{}, e.cfg.Sandbox.Allow...), LoadApprovals(e.projectRoot).For(planTask.ID)...)
+	// 6. Execute task attempt loop in the sandbox worked out above
 
 	// Whether this task may change existing tests is the approved plan's call,
 	// not the task file's. When it may not, such changes are undone before

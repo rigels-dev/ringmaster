@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"ringmaster/internal/config"
 
 	"ringmaster/internal/schemas"
 	"ringmaster/internal/storage"
@@ -39,6 +40,13 @@ func ApprovePlan(projectRoot string, plan *schemas.Plan) (string, error) {
 	approvedPath := filepath.Join(projectRoot, ".ringmaster", "plan.approved.json")
 	if err := storage.WriteJSONAtomic(approvedPath, approved); err != nil {
 		return "", fmt.Errorf("failed to write plan.approved.json: %w", err)
+	}
+
+	// Approving the plan approves the command presets it named
+	if len(plan.Stack) > 0 {
+		if _, err := config.AddProjectPresets(projectRoot, plan.Stack); err != nil {
+			return "", fmt.Errorf("the plan is approved, but its presets could not be added to ringmaster.toml: %w", err)
+		}
 	}
 
 	return hash, nil

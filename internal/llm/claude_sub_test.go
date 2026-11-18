@@ -158,3 +158,49 @@ echo '{"type":"result","subtype":"success","is_error":false,"result":"Done.","st
 		t.Errorf("expected the caller's environment for a plain chat:\n%s", got)
 	}
 }
+
+// Always-ask commands are denied to Claude Code even where an allowed
+// command covers them: deny rules win over allow rules.
+func TestClaudeSubscriptionDeniesAlwaysAskCommands(t *testing.T) {
+	tempDir := t.TempDir()
+	argsFile := filepath.Join(tempDir, "args")
+	mockClaudePath := filepath.Join(tempDir, "claude")
+	script := `#!/bin/sh
+for a in "$@"; do printf '%s\n' "$a"; done > ` + argsFile + `
+echo '{"type":"result","subtype":"success","is_error":false,"result":"Done.","usage":{"input_tokens":1,"output_tokens":1}}'
+`
+	if err := os.WriteFile(mockClaudePath, []byte(script), 0755); err != nil {
+		t.Fatal(err)
+	}
+	client := &ClaudeSubscriptionClient{CLIPath: mockClaudePath}
+	if _, err := client.Chat(context.Background(), "haiku", ChatRequest{
+		Messages:           []Message{{Role: "user", Content: "work"}},
+		WorkDir:            t.TempDir(),
+		AllowedCommands:    []string{"npm", "go test"},
+		DisallowedCommands: []string{"npm publish", "git push"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(argsFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	args := strings.Split(strings.TrimSpace(string(data)), "\n")
+	value := func(flag string) string {
+		for i, a := range args {
+			if a == flag && i+1 < len(args) {
+				return args[i+1]
+			}
+		}
+		return ""
+	}
+	if got := value("--allowedTools"); !strings.Contains(got, "Bash(npm:*)") || !strings.Contains(got, "Bash(go test:*)") {
+		t.Errorf("--allowedTools = %q", got)
+	}
+	if got := value("--disallowedTools"); got != "Bash(npm publish:*),Bash(git push:*)" {
+		t.Errorf("--disallowedTools = %q", got)
+	}
+	if prompt := value("--append-system-prompt") + value("--system-prompt"); prompt != "" && !strings.Contains(prompt, "npm publish") {
+		t.Errorf("the automaton is not told which commands need approval")
+	}
+}

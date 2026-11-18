@@ -29,11 +29,21 @@ func MasterSystemPrompt(cfg *config.Config, defaultWorker string, skillList []sk
 		workers = append(workers, fmt.Sprintf("- %s (%s)", alias, cfg.Agents[alias].Model))
 	}
 
-	// What acceptance commands may start with; cfg carries the project's list
-	allowedCommands := strings.Join(cfg.Sandbox.Allow, ", ")
-	if allowedCommands == "" {
-		allowedCommands = strings.Join(config.DefaultAllowedCommands, ", ")
+	// What acceptance commands may start with: the project's sandbox as it
+	// is now, and the presets the plan can add to it
+	sb := cfg.EffectiveSandbox()
+	allowedCommands := strings.Join(append(append([]string{}, sb.Allow...), sb.Approved...), ", ")
+	var presetLines []string
+	for _, name := range cfg.PresetNames() {
+		p, _ := cfg.Preset(name)
+		line := fmt.Sprintf("- %s: %s", name, strings.Join(p.Allow, ", "))
+		if len(p.AlwaysAsk) > 0 {
+			line += fmt.Sprintf(" (always asked: %s)", strings.Join(p.AlwaysAsk, ", "))
+		}
+		presetLines = append(presetLines, line)
 	}
+	presetList := strings.Join(presetLines, "\n")
+	alwaysAsk := strings.Join(sb.AlwaysAsk, ", ")
 
 	workerListStr := strings.Join(workers, "\n")
 	if workerListStr == "" {
@@ -86,10 +96,12 @@ INSTRUCTIONS:
    An argument that contains spaces MUST be quoted, or it is split into several arguments:
    write python -c "import mypkg", never python -c import mypkg. Nothing inside quotes is expanded.
    Prefer a command that runs the project's tests over inline code.
-   ALLOWED COMMANDS: an acceptance command must begin with one of the commands the user allows: %s.
-   A command outside this list (for example a build or lint tool that is not listed) stops the task until
-   the user approves it. Use one only when no allowed command can check the work; a test run usually can
-   (a test command also compiles the code, so a separate build check is rarely needed).
+   ALLOWED COMMANDS: the project allows these commands now: %s.
+   A plan adds the command PRESETS it needs (see STACK below); their commands are allowed once the user
+   approves the plan. Any other command stops the task until the user approves it, and so do these,
+   even where an allowed command covers them: %s.
+   Use a command outside the allowed ones and the presets only when nothing else can check the work;
+   a test run usually can (a test command also compiles the code, so a separate build check is rarely needed).
    EXISTING TESTS are protected: a worker may add test files, but any change it makes to a test file that
    already exists in the repository is undone before the acceptance commands run. If a task must change
    existing tests because the intended behaviour changes, set "edits_tests": true on that task (omit it
@@ -105,7 +117,11 @@ INSTRUCTIONS:
 8. EARLIER WORK: when the user's message lists tasks that are ALREADY DONE, their code is already in the
    repository. Do not plan them again. Plan only what is still missing, number your tasks from the first
    free ID you are given, and let "depends_on" name only tasks of this new plan.
-9. OUTPUT FORMAT:
+9. STACK: list in "stack" the presets this plan's tasks and acceptance commands need, by name, from:
+%s
+   Name only presets from this list, and only ones the plan really uses (a Go service with a Dockerfile:
+   ["go", "docker"]). The user sees them before approving.
+10. OUTPUT FORMAT:
 You MUST respond with a single, valid, raw JSON object matching this schema without any markdown formatting or commentary:
 
 {
@@ -123,10 +139,11 @@ You MUST respond with a single, valid, raw JSON object matching this schema with
       "description": "Full detailed specification of what to implement."
     }
   ],
+  "stack": ["go"],
   "open_questions": [
     {"id": "Q1", "question": "Which storage backend?", "options": ["in-memory", "SQLite"], "recommended": "in-memory"}
   ],
   "assumptions": ["Server listens on :8080 unless PORT is set"]
 }
-`, workerListStr, defaultWorker, skillsSection, allowedCommands, defaultWorker)
+`, workerListStr, defaultWorker, skillsSection, allowedCommands, alwaysAsk, presetList, defaultWorker)
 }

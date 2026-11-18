@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"ringmaster/internal/config"
 	"strings"
 	"time"
 
@@ -23,6 +24,9 @@ const (
 type ToolSet struct {
 	worktreeRoot string
 	allowlist    []string
+	// AlwaysAsk and Approved refine allowlist (see CommandPermission)
+	AlwaysAsk []string
+	Approved  []string
 
 	// PassEnv lists extra environment variables run_cmd hands to commands,
 	// on top of the defaults (see CommandEnv)
@@ -292,8 +296,11 @@ func (ts *ToolSet) runCmd(ctx context.Context, cmdStr string) string {
 	if why := UnquotedInlineCode(fields); why != "" {
 		return fmt.Sprintf("Error: command '%s' cannot be run: %s", cmdStr, why)
 	}
-	if !CheckCommand(cmdStr, ts.allowlist) {
-		return fmt.Sprintf("Error: command '%s' is not in sandbox allowlist", cmdStr)
+	switch perm, why := CommandPermission(cmdStr, config.SandboxConfig{Allow: ts.allowlist, AlwaysAsk: ts.AlwaysAsk, Approved: ts.Approved}); perm {
+	case Ask:
+		return fmt.Sprintf("Error: command '%s' was not run: %s. If you need it, request approval for this exact command (status AWAITING_INPUT, a request of type approval).", cmdStr, why)
+	case NotAllowed:
+		return fmt.Sprintf("Error: command '%s' is not in sandbox allowlist. If you need it, request approval for this exact command (status AWAITING_INPUT, a request of type approval).", cmdStr)
 	}
 	c := fields[0]
 	args := fields[1:]

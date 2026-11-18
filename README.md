@@ -263,7 +263,9 @@ The manifest can tune how this project's tasks run:
 
 ```toml
 [sandbox]
-allow = ["go test", "go vet", "go build"]   # commands workers and acceptance checks may run
+presets = ["go", "docker"]                   # command packages, usually added by approving a plan
+allow = ["make test"]                        # single commands on top of the presets
+always_ask = ["make deploy"]                 # stop and ask even though allowed
 acceptance_timeout = 600                     # seconds per acceptance command
 pass_env = ["DATABASE_URL", "AWS_*"]         # extra environment variables those commands may see
 
@@ -274,6 +276,30 @@ max_tokens_per_task = 300000
 Budgets apply even when you set none: 300,000 tokens per task and 2,000,000 per project by default. The project budget is for the plan being run; a later plan starts from zero. A token read from the prompt cache counts as a tenth of a token, which is what providers charge for it; agents that re-read their conversation from the cache on every step (a Claude subscription agent does) would otherwise hit the limit on small tasks. A task that reaches its budget before finishing is paused, and resuming gives it another full budget. An attempt that finishes its work is always verified, even if its last step went over.
 
 A project's `allow` replaces the fleet's list, while its `pass_env` adds to it; a trailing `*` matches a prefix. A task in the plan can also set its own `acceptance_timeout`.
+
+### Commands: presets and always-ask
+
+A *preset* is a package of commands for one language or tool: what automatons may run without asking, and what still needs your approval although an allowed command covers it. Ringmaster has presets for `go`, `python`, `node`, `rust` and `docker`:
+
+| Preset | Allowed | Always asked |
+|---|---|---|
+| `go` | `go build`, `go test`, `go vet`, `go mod`, `gofmt` | `go clean` |
+| `python` | `python`, `python3`, `pytest`, `ruff`, `mypy` | `pip uninstall` |
+| `node` | `node`, `npm`, `npx` | `npm publish` and the other registry commands |
+| `rust` | `cargo build`, `cargo test`, `cargo check`, `cargo clippy`, `cargo fmt` | `cargo publish`, `cargo yank`, `cargo login` |
+| `docker` | `docker build`, `docker compose` | `docker compose down`, `docker push`, `docker system prune`, removals |
+
+The master names the presets a plan needs in its `stack` (`["go", "docker"]`). The approval banner shows what each one allows, and approving the plan adds them to the project's `[sandbox] presets`; Ringmaster only ever adds to that line, and leaves the rest of the file as it was. A preset of the same name under `[presets.<name>]` in the fleet config replaces the built-in one, and new names can be defined there too:
+
+```toml
+[presets.go]
+allow = ["go build", "go test", "go vet", "go mod", "gofmt", "go generate"]
+always_ask = ["go clean"]
+```
+
+Some commands always stop the task to ask, in every project, even where an allowed entry would cover them: `git push`, `git reset --hard`, `git clean`, `rm`, `sudo`, `curl`, `ssh` and similar ones that leave the machine, discard work or delete files. A command you approve while a task runs is allowed as approved, for that task or the whole project. `ringmaster presets` lists the presets and what the project's automatons may run now.
+
+A project that names no presets keeps the old built-in list (`pytest`, `npm`, `go test`, …). Once it has presets, they replace that list, so a Go project does not also get `npm`.
 
 ### Protected tests
 

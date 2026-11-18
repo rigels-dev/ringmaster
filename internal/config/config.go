@@ -49,6 +49,17 @@ type SandboxConfig struct {
 	// TestFiles replaces the built-in patterns for what counts as a test file:
 	// "name/" is a directory anywhere in the path, anything else a file-name glob.
 	TestFiles []string `toml:"test_files,omitempty"`
+	// Presets name packages of commands by language or tool ("go", "docker"),
+	// defined in [presets.<name>] or built in. A plan names the ones it needs,
+	// and approving the plan adds them to the project.
+	Presets []string `toml:"presets,omitempty"`
+	// AlwaysAsk lists commands that stop the task to ask the user even when
+	// an allowed entry covers them, on top of DefaultAlwaysAsk and the
+	// presets' own.
+	AlwaysAsk []string `toml:"always_ask,omitempty"`
+	// Approved holds the commands the user approved while tasks ran
+	// (.ringmaster/approvals.json). Set by the scheduler, never read from a file.
+	Approved []string `toml:"-"`
 }
 
 // DefaultAcceptanceTimeout fits a cold docker build or an integration suite.
@@ -83,6 +94,8 @@ type Config struct {
 	Web       WebConfig                 `toml:"web,omitempty"`
 	Skills    SkillsConfig              `toml:"skills,omitempty"`
 	Estimates map[string]EstimateConfig `toml:"estimates"`
+	// Presets defines or overrides command packages ([presets.go] ...)
+	Presets map[string]PresetConfig `toml:"presets,omitempty"`
 }
 
 var DefaultAllowedCommands = []string{
