@@ -62,7 +62,7 @@ func GeneratePlan(
 	}
 	if approvals, aErr := storage.ReadJSON[schemas.CommandApprovals](filepath.Join(projectRoot, ".ringmaster", "approvals.json")); aErr == nil && approvals != nil && len(approvals.Project) > 0 {
 		withApproved := *promptCfg
-		withApproved.Sandbox.Allow = append(append([]string{}, promptCfg.Sandbox.Allow...), approvals.Project...)
+		withApproved.Sandbox.Approved = append([]string{}, approvals.Project...)
 		promptCfg = &withApproved
 	}
 	systemPrompt := MasterSystemPrompt(promptCfg, defaultWorker, skills.Enabled(skills.Discover(projectRoot), disabledSkills))
@@ -115,6 +115,7 @@ func GeneratePlan(
 			Tasks         []rawTask              `json:"tasks"`
 			OpenQuestions []schemas.PlanQuestion `json:"open_questions"`
 			Assumptions   []string               `json:"assumptions"`
+			Stack         []string               `json:"stack"`
 		}
 
 		if err := json.Unmarshal([]byte(content), &raw); err != nil {
@@ -139,6 +140,7 @@ func GeneratePlan(
 			Tasks:         make([]schemas.PlanTask, len(raw.Tasks)),
 			OpenQuestions: raw.OpenQuestions,
 			Assumptions:   raw.Assumptions,
+			Stack:         normalizeStack(raw.Stack),
 		}
 		// The master proposes questions; answers only ever come from the user
 		for i := range p.OpenQuestions {
@@ -305,4 +307,19 @@ func formatListYAML(items []string) string {
 		sb.WriteString(fmt.Sprintf("  - %q\n", it))
 	}
 	return strings.TrimRight(sb.String(), "\n")
+}
+
+// normalizeStack lower-cases preset names and drops blanks and repeats.
+func normalizeStack(names []string) []string {
+	var out []string
+	seen := map[string]bool{}
+	for _, n := range names {
+		n = strings.ToLower(strings.TrimSpace(n))
+		if n == "" || seen[n] {
+			continue
+		}
+		seen[n] = true
+		out = append(out, n)
+	}
+	return out
 }

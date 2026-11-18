@@ -76,7 +76,8 @@
 
             <!-- Choice -->
             <template v-else-if="r.type === 'choice'">
-              <div class="text-zinc-300"><span class="text-zinc-500">[{{ r.id }}]</span> {{ r.question }}</div>
+              <div class="text-2xs uppercase tracking-wide text-zinc-500">Pick one · or write your own below</div>
+              <div class="text-zinc-300"><span v-if="r.id !== 'next'" class="text-zinc-500">[{{ r.id }}]</span> {{ r.question }}</div>
               <div class="flex flex-wrap gap-2">
                 <button v-for="opt in r.options" :key="opt" @click="form.replies[r.id] = opt"
                   class="px-2.5 py-1 rounded border text-xs font-bold"
@@ -84,15 +85,19 @@
                   {{ opt }}<span v-if="opt === r.recommended" class="text-emerald-400"> ★ recommended</span>
                 </button>
               </div>
-              <input v-model="form.replies[r.id]" placeholder="…or type another answer"
+              <input :value="r.options.includes(form.replies[r.id]) ? '' : form.replies[r.id]"
+                @input="form.replies[r.id] = $event.target.value" placeholder="…or write what it should do instead"
                 class="w-full bg-slate-dark border border-steel rounded px-2 py-1 text-zinc-200" />
             </template>
 
             <!-- Free input; secrets are referenced by env var name only -->
             <template v-else>
-              <div class="text-zinc-300"><span class="text-zinc-500">[{{ r.id }}]</span> {{ r.question }}</div>
+              <div class="text-2xs uppercase tracking-wide text-zinc-500">{{ r.secret ? 'A variable name is needed' : 'Your answer is needed' }}</div>
+              <div class="text-zinc-300"><span v-if="r.id !== 'next'" class="text-zinc-500">[{{ r.id }}]</span> {{ r.question }}</div>
               <div v-if="r.secret" class="text-xs text-amber-300">Secret: enter the NAME of the environment variable that holds it, never the value.</div>
-              <input v-model="form.replies[r.id]" :placeholder="r.secret ? 'e.g. MY_SERVICE_API_KEY' : 'Your answer'"
+              <textarea v-if="!r.secret && r.id === 'next'" v-model="form.replies[r.id]" rows="3" placeholder="Your answer"
+                class="w-full bg-slate-dark border border-steel rounded px-2 py-1 text-zinc-200"></textarea>
+              <input v-else v-model="form.replies[r.id]" :placeholder="r.secret ? 'e.g. MY_SERVICE_API_KEY' : 'Your answer'"
                 class="w-full bg-slate-dark border border-steel rounded px-2 py-1 text-zinc-200" />
             </template>
           </div>
@@ -183,7 +188,7 @@
 
 <script setup>
 import { statusLabel, statusClass } from '~/utils/status'
-import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
+import { ref, reactive, computed, watch, onMounted, onUnmounted } from 'vue'
 
 const { answerTask } = useRingmaster()
 
@@ -234,6 +239,17 @@ const approvalOptions = [
 ]
 
 const form = reactive({ approvals: {}, replies: {}, text: '' })
+
+// Ringmaster's own question after a stop comes with its recommended answer
+// picked, so the usual case is one click; a single option is always picked.
+// The automaton's own choices are left for the user to make.
+watch(requests, (list) => {
+  for (const r of list) {
+    if (r.type !== 'choice' || form.replies[r.id] !== undefined) continue
+    if (r.options?.length === 1) form.replies[r.id] = r.options[0]
+    else if (r.id === 'next' && r.recommended) form.replies[r.id] = r.recommended
+  }
+}, { immediate: true })
 const sending = ref(false)
 const formError = ref('')
 

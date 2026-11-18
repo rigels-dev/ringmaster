@@ -130,7 +130,9 @@ func RunTaskLoop(
 				}
 			}
 			var checkErr error
-			checks, checkErr = RunAcceptance(ctx, task, worktree, sandboxCfg.Allow, sandboxCfg.PassEnv, acceptanceTimeout(task, sandboxCfg))
+			// Every acceptance command was cleared with the user before the task started
+			runnable, _ := worker.RunnableCommands(sandboxCfg)
+			checks, checkErr = RunAcceptance(ctx, task, worktree, runnable, sandboxCfg.PassEnv, acceptanceTimeout(task, sandboxCfg))
 			if checkErr != nil {
 				return nil, fmt.Errorf("failed to run acceptance criteria: %w", checkErr)
 			}
@@ -252,7 +254,7 @@ func unusableReportDecision(taskID, problem string, attempt, maxRetries int) Dec
 	return Decision{
 		Type: DecisionNEED_REVIEW,
 		Reason: fmt.Sprintf("The automaton finished %d attempt(s), but each time left no report Ringmaster could use; the last time, %s. "+
-			"The acceptance checks were not run. Its last message is in the task's Report tab. "+
-			"If the work looks finished, resume with a note asking it to write only the report file.", attempt, problem),
+			"The acceptance checks were not run. Its last message is in the task's Report tab.", attempt, problem),
+		Requests: unusableReportRequests(),
 	}
 }

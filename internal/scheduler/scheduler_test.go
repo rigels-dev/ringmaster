@@ -17,6 +17,7 @@ import (
 	"ringmaster/internal/config"
 	"ringmaster/internal/planner"
 	"ringmaster/internal/schemas"
+	"ringmaster/internal/verify"
 	"ringmaster/internal/workspace"
 )
 
@@ -293,6 +294,9 @@ func TestSchedulerPausedTaskIsNotRedispatched(t *testing.T) {
 	}
 	if calls != 1 {
 		t.Errorf("expected exactly 1 LLM call (no re-dispatch loop), got %d", calls)
+	}
+	if reqs := state.TaskStates["T01"].Requests; len(reqs) != 1 || reqs[0].Options[0] != verify.OptionContinueBudget {
+		t.Errorf("a paused task does not offer to continue: %+v", reqs)
 	}
 	reason := state.TaskStates["T01"].Error
 	for _, want := range []string{"70 of 10 budget tokens", "max_tokens_per_task", "Resume"} {
@@ -651,6 +655,9 @@ func TestUnusableReportAfterAllRetriesIsExplained(t *testing.T) {
 	if strings.Contains(t01.Error, "requested human review") {
 		t.Errorf("the reason still claims the automaton asked for review:\n%s", t01.Error)
 	}
+	if len(t01.Requests) != 1 || t01.Requests[0].Type != schemas.RequestChoice || t01.Requests[0].Options[0] != verify.OptionReportOnly {
+		t.Errorf("the stop does not offer a choice of what to do next: %+v", t01.Requests)
+	}
 }
 
 // reportingMock is an automaton that writes a COMPLETED report and stops.
@@ -988,5 +995,46 @@ func TestProjectBudgetCountsOnlyTheCurrentPlan(t *testing.T) {
 	replacePlan(t, projectRoot, []schemas.PlanTask{planTask("T03", "C", "feat/c"), planTask("T04", "D", "feat/d")})
 	if st := runToEnd(t, projectRoot, cfg); st.Status != "COMPLETED" {
 		t.Fatalf("second round status = %s; the first round's tokens were counted against it", st.Status)
+	}
+}
+
+// An acceptance command that an allowed entry covers but that is on the
+// always-ask list is asked about before the task starts, like one that is
+// not allowed at all.
+func TestAlwaysAskAcceptanceCommandIsAskedBeforeStarting(t *testing.T) {
+	projectRoot, cfg := setupTestProject(t)
+	t.Setenv("MOCK_KEY", "dummy")
+	cfg.Sandbox.Allow = []string{"echo"}
+	cfg.Sandbox.AlwaysAsk = []string{"echo deploy"}
+
+	spec := "---\nid: T01\ntitle: \"Task One\"\ntype: backend\ndepends_on: []\nworker: \"test_worker\"\nmax_retries: 2\nacceptance:\n  - \"echo task_one_passed\"\n  - \"echo deploy now\"\n---\nImplement task one.\n"
+	if err := os.WriteFile(filepath.Join(projectRoot, ".ringmaster", "tasks", "T01-task-one.md"), []byte(spec), 0644); err != nil {
+		t.Fatal(err)
+	}
+	var mu sync.Mutex
+	calls := 0
+	tsMock := reportingMock(t, &calls, &mu)
+	defer tsMock.Close()
+	cfg.Providers["mock_prov"] = config.ProviderConfig{Type: "openai", BaseURL: tsMock.URL, APIKeyEnv: "MOCK_KEY"}
+
+	engine, err := NewEngine(projectRoot, cfg, 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	_ = engine.Run(ctx)
+
+	ts := engine.stateMgr.GetState().TaskStates["T01"]
+	if ts.Status != schemas.TaskStateAwaiting || len(ts.Requests) != 1 || ts.Requests[0].Command != "echo deploy now" {
+		t.Fatalf("T01 = %s %+v", ts.Status, ts.Requests)
+	}
+	if !strings.Contains(ts.Requests[0].Reason, "always needs the user's approval") {
+		t.Errorf("reason = %q", ts.Requests[0].Reason)
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if calls != 0 {
+		t.Errorf("the automaton was called %d time(s) before approval", calls)
 	}
 }

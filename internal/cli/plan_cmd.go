@@ -101,6 +101,7 @@ var planCmd = &cobra.Command{
 		// Render interactive preview gate
 		estimates := planner.CalculateEstimates(p, cfg.Estimates)
 		fmt.Print(planner.RenderPreview(p, estimates, cfg.Budget))
+		fmt.Print(stackPreview(cfg, p.Stack))
 		printOpenQuestions(p)
 
 		// Check approval status

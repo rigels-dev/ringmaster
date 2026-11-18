@@ -118,6 +118,9 @@
             </div>
           </div>
 
+          <!-- The command presets the plan needs, and what approving it allows -->
+          <PlanStack :stack="project.plan?.stack || []" :approved="planApprovalState.isApproved" />
+
           <!-- Master's open questions: all must be answered before approval -->
           <div v-if="openQuestions.length || assumptions.length" class="mt-3 pt-2 border-t border-amber-700/40 text-body divide-y divide-steel/40">
             <!-- Questions accordion: open while anything is unanswered, collapses to a one-line summary once done -->

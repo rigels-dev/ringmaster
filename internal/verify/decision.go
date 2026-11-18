@@ -37,8 +37,9 @@ func Decide(
 ) Decision {
 	if budgetExceeded {
 		return Decision{
-			Type:   DecisionPAUSED,
-			Reason: "Task budget exceeded configured token limit. Execution paused for human intervention.",
+			Type:     DecisionPAUSED,
+			Reason:   "Task budget exceeded configured token limit. Execution paused for human intervention.",
+			Requests: budgetRequests(),
 		}
 	}
 
@@ -51,15 +52,17 @@ func Decide(
 			}
 		}
 		return Decision{
-			Type:   DecisionNEED_REVIEW,
-			Reason: "Worker produced no report and max retries exhausted.",
+			Type:     DecisionNEED_REVIEW,
+			Reason:   "Worker produced no report and max retries exhausted.",
+			Requests: unusableReportRequests(),
 		}
 	}
 
 	if report.Status == schemas.ReportStatusBlocked {
 		return Decision{
-			Type:   DecisionBLOCKED,
-			Reason: fmt.Sprintf("Worker reported BLOCKED: %s", report.Blockers),
+			Type:     DecisionBLOCKED,
+			Reason:   fmt.Sprintf("Worker reported BLOCKED: %s", report.Blockers),
+			Requests: blockedRequests(),
 		}
 	}
 
@@ -77,8 +80,9 @@ func Decide(
 			reason += " " + summary
 		}
 		return Decision{
-			Type:   DecisionNEED_REVIEW,
-			Reason: reason,
+			Type:     DecisionNEED_REVIEW,
+			Reason:   reason,
+			Requests: reviewRequests(),
 		}
 	}
 
@@ -89,6 +93,7 @@ func Decide(
 				Type:        DecisionNEED_REVIEW,
 				Reason:      UnrunnableAcceptanceMessage(chk.Command),
 				FailureLogs: chk.StderrTail,
+				Requests:    UnrunnableAcceptanceRequests(),
 			}
 		}
 	}
@@ -101,6 +106,7 @@ func Decide(
 				Reason: fmt.Sprintf("Acceptance command '%s' ran past its time limit. Raise acceptance_timeout for this task "+
 					"(in the plan) or [sandbox] acceptance_timeout in ringmaster.toml, then resume.", chk.Command),
 				FailureLogs: chk.StderrTail,
+				Requests:    timeoutRequests(),
 			}
 		}
 	}
@@ -145,6 +151,7 @@ func Decide(
 		Type:        DecisionNEED_REVIEW,
 		Reason:      fmt.Sprintf("Acceptance checks failed and max retries (%d) exhausted.", maxRetries),
 		FailureLogs: failuresCombined,
+		Requests:    checksFailedRequests(),
 	}
 }
 

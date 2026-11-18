@@ -103,6 +103,14 @@ func (c *ClaudeSubscriptionClient) Chat(ctx context.Context, model string, req C
 			"--permission-mode", "acceptEdits",
 			"--allowedTools", strings.Join(allowed, ","),
 		)
+		// Deny rules win over allow rules, so npm publish stays refused under npm
+		if len(req.DisallowedCommands) > 0 {
+			var disallowed []string
+			for _, command := range req.DisallowedCommands {
+				disallowed = append(disallowed, fmt.Sprintf("Bash(%s:*)", command))
+			}
+			args = append(args, "--disallowedTools", strings.Join(disallowed, ","))
+		}
 		systemPrompt += "\n\nYou are running as Claude Code inside the task workspace (the current directory). " +
 			// The workspace path itself contains .ringmaster/ (worktrees live in the project's state dir),
 			// so spell out how relative paths resolve or the report can land in the wrong .ringmaster/.
@@ -111,6 +119,7 @@ func (c *ClaudeSubscriptionClient) Chat(ctx context.Context, model string, req C
 			"Never read or write outside " + req.WorkDir + ". " +
 			"Use your built-in tools (Read, Glob, Grep, Write, Edit, Bash) in place of read_file, list_dir, search, write_file and run_cmd. " +
 			"Only these shell commands are permitted: " + strings.Join(req.AllowedCommands, ", ") + ". " +
+			alwaysAskNote(req.DisallowedCommands) +
 			"Run one command per Bash call from the current directory, without cd, &&, pipes or redirects; create files with Write. " +
 			"If you need any other command, request approval as described under WHEN YOU NEED THE USER instead of working around it. " +
 			"Finish the whole task in this session, including writing the report file."
@@ -338,4 +347,11 @@ func claudeWorkerEnv(commandEnv, full []string) []string {
 		}
 	}
 	return env
+}
+
+func alwaysAskNote(denied []string) string {
+	if len(denied) == 0 {
+		return ""
+	}
+	return "These need the user's approval first, even where a permitted command covers them: " + strings.Join(denied, ", ") + ". "
 }

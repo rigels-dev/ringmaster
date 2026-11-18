@@ -52,6 +52,9 @@ type ChatRequest struct {
 	// WorkDir is the workspace they operate in, AllowedCommands the shell commands they may run.
 	WorkDir         string   `json:"-"`
 	AllowedCommands []string `json:"-"`
+	// DisallowedCommands are refused even where AllowedCommands covers them
+	// (npm publish under npm): they need the user's approval first.
+	DisallowedCommands []string `json:"-"`
 	// CommandEnv is the environment those commands may see ("NAME=value").
 	// The provider's own process is started with it, plus what it needs to
 	// log in, since its commands inherit whatever it has. Nil keeps the caller's.

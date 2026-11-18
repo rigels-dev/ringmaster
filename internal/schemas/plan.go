@@ -42,6 +42,9 @@ type Plan struct {
 	Tasks         []PlanTask     `json:"tasks"`
 	OpenQuestions []PlanQuestion `json:"open_questions,omitempty"`
 	Assumptions   []string       `json:"assumptions,omitempty"`
+	// Stack names the command presets the plan needs ("go", "docker").
+	// Approving the plan adds them to the project's [sandbox] presets.
+	Stack []string `json:"stack,omitempty"`
 }
 
 // UnansweredQuestions returns the open questions that still need an answer.
@@ -206,17 +209,23 @@ func (p *Plan) PlanHash() (string, error) {
 		sort.Strings(tasksCopy[i].Acceptance)
 	}
 
-	// Questions and assumptions are omitted when empty, so older plan hashes stay stable
+	// The stack is part of what is approved; its order is not
+	stack := append([]string(nil), p.Stack...)
+	sort.Strings(stack)
+
+	// Questions, assumptions and the stack are omitted when empty, so older plan hashes stay stable
 	normalized := struct {
 		Project       string         `json:"project"`
 		Tasks         []PlanTask     `json:"tasks"`
 		OpenQuestions []PlanQuestion `json:"open_questions,omitempty"`
 		Assumptions   []string       `json:"assumptions,omitempty"`
+		Stack         []string       `json:"stack,omitempty"`
 	}{
 		Project:       p.Project,
 		Tasks:         tasksCopy,
 		OpenQuestions: p.OpenQuestions,
 		Assumptions:   p.Assumptions,
+		Stack:         stack,
 	}
 
 	canonicalJSON, err := json.Marshal(normalized)

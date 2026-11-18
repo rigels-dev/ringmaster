@@ -23,6 +23,27 @@ type HumanRequest struct {
 	Secret bool `yaml:"secret,omitempty" json:"secret,omitempty"`
 }
 
+// NormalizeRequest makes a request's type match what it holds, so the user
+// is shown the right control: a question with options is a choice, a choice
+// without enough options is a question to answer in words.
+func NormalizeRequest(r HumanRequest) HumanRequest {
+	switch r.Type {
+	case RequestInput:
+		if len(r.Options) >= 2 {
+			r.Type = RequestChoice
+		}
+	case RequestChoice:
+		if len(r.Options) < 2 {
+			r.Type = RequestInput
+			if len(r.Options) == 1 && r.Recommended == "" {
+				r.Recommended = r.Options[0]
+			}
+			r.Options = nil
+		}
+	}
+	return r
+}
+
 func ValidateHumanRequest(r HumanRequest) error {
 	if r.ID == "" {
 		return fmt.Errorf("request is missing an id")

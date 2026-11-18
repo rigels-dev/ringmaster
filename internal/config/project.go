@@ -42,10 +42,14 @@ func LoadProjectManifest(projectDir string) (*ProjectManifest, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to read project manifest: %w", err)
 	}
-	if err := toml.Unmarshal(data, m); err != nil {
+	if err := unmarshalManifest(data, m); err != nil {
 		return nil, fmt.Errorf("failed to parse project manifest %s: %w", ProjectManifestPath(projectDir), err)
 	}
 	return m, nil
+}
+
+func unmarshalManifest(data []byte, m *ProjectManifest) error {
+	return toml.Unmarshal(data, m)
 }
 
 // ForProject returns a copy of the fleet config with the project's budget and
@@ -78,6 +82,13 @@ func (c *Config) ForProject(m *ProjectManifest) *Config {
 	}
 	if len(m.Sandbox.TestFiles) > 0 {
 		out.Sandbox.TestFiles = append([]string(nil), m.Sandbox.TestFiles...)
+	}
+	// A project's presets and always-ask entries add to the fleet's
+	if len(m.Sandbox.Presets) > 0 {
+		out.Sandbox.Presets = dedupe(append(append([]string(nil), c.Sandbox.Presets...), m.Sandbox.Presets...))
+	}
+	if len(m.Sandbox.AlwaysAsk) > 0 {
+		out.Sandbox.AlwaysAsk = append(append([]string(nil), c.Sandbox.AlwaysAsk...), m.Sandbox.AlwaysAsk...)
 	}
 	if m.Web.Port > 0 {
 		out.Web.Port = m.Web.Port

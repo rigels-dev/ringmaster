@@ -248,27 +248,40 @@ func (e *Engine) executeTask(ctx context.Context, planTask schemas.PlanTask) {
 			_ = e.stateMgr.UpdateTaskState(planTask.ID, func(ts *schemas.TaskState) {
 				ts.Status = schemas.TaskStateReview
 				ts.Error = reason
+				ts.Requests = verify.UnrunnableAcceptanceRequests()
 			})
 			return
 		}
 	}
 
-	// An acceptance command the user has not allowed cannot be run either.
-	// Ask for it now, as an approval, before the automaton does work that
-	// could not be checked.
-	allowed := append(append([]string{}, e.cfg.Sandbox.Allow...), LoadApprovals(e.projectRoot).For(planTask.ID)...)
+	// The sandbox this task runs in: the project's allowlist and presets, the
+	// always-ask list, and the commands the user approved
+	sandbox := e.cfg.EffectiveSandbox()
+	sandbox.Approved = LoadApprovals(e.projectRoot).For(planTask.ID)
+
+	// An acceptance command the user has not allowed cannot be run either,
+	// nor one that always needs their approval. Ask for it now, before the
+	// automaton does work that could not be checked.
 	var approvals []schemas.HumanRequest
 	for _, command := range taskSpec.Acceptance {
 		command = strings.TrimSpace(command)
-		if command == "" || len(allowed) == 0 || worker.CheckCommand(command, allowed) {
+		if command == "" {
 			continue
+		}
+		perm, why := worker.CommandPermission(command, sandbox)
+		if perm == worker.Allowed {
+			continue
+		}
+		reason := "This is one of the task's acceptance checks, and it is not on your command allowlist."
+		if perm == worker.Ask {
+			reason = "This is one of the task's acceptance checks, and " + why + "."
 		}
 		approvals = append(approvals, schemas.HumanRequest{
 			ID:      fmt.Sprintf("a%d", len(approvals)+1),
 			Type:    schemas.RequestApproval,
 			Command: command,
-			Reason: "This is one of the task's acceptance checks, and it is not on your command allowlist. " +
-				"Nothing has been run yet. If you would rather not allow it, replace it under 'acceptance:' in the task's file in .ringmaster/tasks/, or re-plan.",
+			Reason: reason + " Nothing has been run yet. If you would rather not allow it, replace it under 'acceptance:' " +
+				"in the task's file in .ringmaster/tasks/, or re-plan.",
 		})
 	}
 	if len(approvals) > 0 {
@@ -307,9 +320,7 @@ func (e *Engine) executeTask(ctx context.Context, planTask schemas.PlanTask) {
 		return
 	}
 
-	// 6. Execute task attempt loop, with commands the user approved added to the sandbox
-	sandbox := e.cfg.Sandbox
-	sandbox.Allow = append(append([]string{}, e.cfg.Sandbox.Allow...), LoadApprovals(e.projectRoot).For(planTask.ID)...)
+	// 6. Execute task attempt loop in the sandbox worked out above
 
 	// Whether this task may change existing tests is the approved plan's call,
 	// not the task file's. When it may not, such changes are undone before
@@ -396,6 +407,7 @@ func (e *Engine) executeTask(ctx context.Context, planTask schemas.PlanTask) {
 			_ = e.stateMgr.UpdateTaskState(planTask.ID, func(ts *schemas.TaskState) {
 				ts.Status = schemas.TaskStateReview
 				ts.Error = reason
+				ts.Requests = verify.MergeConflictRequests()
 			})
 			return
 		}
@@ -410,9 +422,11 @@ func (e *Engine) executeTask(ctx context.Context, planTask schemas.PlanTask) {
 
 	case verify.DecisionBLOCKED:
 		fmt.Printf("❌ [Scheduler] Task %s reported BLOCKED: %s\n", planTask.ID, loopRes.Decision.Reason)
+		printStopQuestions(planTask.ID, loopRes.Decision.Requests)
 		_ = e.stateMgr.UpdateTaskState(planTask.ID, func(ts *schemas.TaskState) {
 			ts.Status = schemas.TaskStateBlocked
 			ts.Error = loopRes.Decision.Reason
+			ts.Requests = loopRes.Decision.Requests
 		})
 
 	case verify.DecisionNEED_REVIEW:
@@ -421,10 +435,12 @@ func (e *Engine) executeTask(ctx context.Context, planTask schemas.PlanTask) {
 			reason += "\n\n" + loopRes.Decision.FailureLogs
 		}
 		fmt.Printf("⚠ [Scheduler] Task %s needs review: %s\n", planTask.ID, reason)
+		printStopQuestions(planTask.ID, loopRes.Decision.Requests)
 		fmt.Printf("   Transcript: %s\n", filepath.Join(worktree, ".ringmaster", "logs"))
 		_ = e.stateMgr.UpdateTaskState(planTask.ID, func(ts *schemas.TaskState) {
 			ts.Status = schemas.TaskStateReview
 			ts.Error = reason
+			ts.Requests = loopRes.Decision.Requests
 		})
 
 	case verify.DecisionAWAITING_INPUT:
@@ -449,6 +465,7 @@ func (e *Engine) executeTask(ctx context.Context, planTask schemas.PlanTask) {
 		_ = e.stateMgr.UpdateTaskState(planTask.ID, func(ts *schemas.TaskState) {
 			ts.Status = schemas.TaskStatePaused
 			ts.Error = loopRes.Decision.Reason
+			ts.Requests = loopRes.Decision.Requests
 		})
 	}
 }
@@ -617,4 +634,19 @@ func firstLine(s string) string {
 		return line
 	}
 	return ""
+}
+
+// printStopQuestions says in the run log what a stopped task asks, and how to
+// answer it from the command line.
+func printStopQuestions(taskID string, requests []schemas.HumanRequest) {
+	for _, r := range requests {
+		if len(r.Options) > 0 {
+			fmt.Printf("   [%s] %s Options: %s\n", r.ID, r.Question, strings.Join(r.Options, " / "))
+		} else {
+			fmt.Printf("   [%s] %s\n", r.ID, r.Question)
+		}
+	}
+	if len(requests) > 0 {
+		fmt.Printf("   Answer in the Web UI task panel, or with: ringmaster answer %s --reply %s=\"...\"\n", taskID, requests[0].ID)
+	}
 }
