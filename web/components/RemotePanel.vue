@@ -9,15 +9,24 @@
 
         <div class="ml-auto flex items-center gap-3">
           <span class="text-xs" :class="pending > 0 ? 'text-amber-300' : 'text-zinc-400'">
-            {{ pending > 0 ? `${pending} of ${status.branches.length} branches not pushed` : 'Everything is pushed' }}
+            {{ pending > 0 ? `${pending} branch${pending === 1 ? '' : 'es'} not pushed` : 'Everything in main is pushed' }}
           </span>
+          <button
+            v-if="merged.length && !pruneOpen"
+            @click="openPrune"
+            :disabled="pushing || pruning"
+            class="px-3 py-1.5 rounded text-body border border-steel text-zinc-300 bg-slate-panel hover:bg-slate-dark disabled:opacity-40"
+            title="Delete the task branches whose work is already in main"
+          >
+            Delete merged branches…
+          </button>
           <!-- Something to push: push it -->
           <button
             v-if="pending > 0 || pushing"
             @click="confirmPush"
             :disabled="pushing"
             class="px-3.5 py-1.5 rounded text-body font-bold border transition bg-gear-gold hover:bg-gear-glow border-gear-gold text-ink disabled:opacity-40 disabled:cursor-not-allowed"
-            title="Push main and every task branch to the remote. Nothing is forced."
+            title="Push main and the task branches to the remote. Nothing is forced."
           >
             {{ pushing ? 'Pushing…' : '↑ Push' }}
           </button>
@@ -71,6 +80,31 @@
       <span v-if="errorHint" class="block mt-1 text-rose-300/80">{{ errorHint }}</span>
     </p>
 
+    <!-- Delete merged task branches -->
+    <div v-if="pruneOpen" class="p-3 rounded border border-steel bg-slate-inner/40 space-y-2">
+      <p class="text-xs text-zinc-300">
+        Delete {{ merged.length }} task branch{{ merged.length === 1 ? '' : 'es' }} merged into main. The work stays in main's
+        history; only the branch names go, and they leave the branch map below. Unfinished task branches and your own branches are kept.
+      </p>
+      <div class="flex flex-wrap gap-1.5">
+        <code v-for="b in merged" :key="b.name" class="px-1.5 py-0.5 rounded border border-steel text-2xs text-zinc-400">{{ b.name }}</code>
+      </div>
+      <label v-if="status.url && mergedOnRemote" class="flex items-center gap-2 text-xs text-zinc-300">
+        <input type="checkbox" v-model="pruneRemote" class="accent-amber-500" />
+        Also delete them on the remote ({{ mergedOnRemote }} there). A branch someone moved on the remote is kept.
+      </label>
+      <div class="flex items-center gap-2">
+        <button
+          @click="prune"
+          :disabled="pruning"
+          class="px-3.5 py-1.5 rounded text-body font-bold bg-rose-700 hover:bg-rose-600 text-white disabled:opacity-40"
+        >
+          {{ pruning ? 'Deleting…' : pruneRemote ? 'Delete here and on the remote' : 'Delete here' }}
+        </button>
+        <button @click="pruneOpen = false" :disabled="pruning" class="text-xs text-zinc-400 hover:text-zinc-200">Cancel</button>
+      </div>
+    </div>
+
     <GitIdentityNotice :author="status.author" />
 
     <!-- Push state of each branch -->
@@ -84,6 +118,7 @@
       >
         <span class="w-1.5 h-1.5 rounded-full" :class="stateStyle(b).dot"></span>
         {{ b.name }}
+        <span v-if="b.merged && b.state !== 'synced'" class="font-sans text-zinc-500">· in main</span>
         <span v-if="lastResult[b.name]" class="font-sans" :class="lastResult[b.name] === 'rejected' ? 'text-rose-300' : 'text-zinc-500'">· {{ resultLabel(lastResult[b.name]) }}</span>
       </span>
     </div>
@@ -97,6 +132,8 @@ const props = defineProps({
   // Bumped by the parent to ask for a reload
   refreshKey: { type: Number, default: 0 }
 })
+// Branches were deleted, so the branch map should reload
+const emit = defineEmits(['changed'])
 
 const { showToast, confirmDialog, setView, tasks, isRunActive } = useRingmaster()
 
@@ -117,14 +154,23 @@ const saving = ref(false)
 const pushing = ref(false)
 const lastResult = ref({}) // branch -> result of the most recent push
 
-const pending = computed(() => status.value.branches.filter(b => b.state !== 'synced').length)
+// A merged task branch's work goes with main, so only main and unfinished
+// task branches wait on a push
+const pending = computed(() => status.value.branches.filter(b => b.state !== 'synced' && !b.merged).length)
+const merged = computed(() => status.value.branches.filter(b => b.merged))
+const mergedOnRemote = computed(() => merged.value.filter(b => b.state !== 'unpushed').length)
+
+const pruneOpen = ref(false)
+const pruneRemote = ref(false)
+const pruning = ref(false)
 
 const STATE = {
   synced: { chip: 'border-green-800 bg-green-950 text-green-400', dot: 'bg-green-400', title: 'The remote has this branch as it is now' },
   ahead: { chip: 'border-amber-700 bg-amber-950 text-amber-300', dot: 'bg-amber-400', title: 'Has commits that are not on the remote yet' },
-  unpushed: { chip: 'border-steel bg-slate-inner text-zinc-400', dot: 'bg-zinc-500', title: 'Not on the remote yet' }
+  unpushed: { chip: 'border-steel bg-slate-inner text-zinc-400', dot: 'bg-zinc-500', title: 'Not on the remote yet' },
+  merged: { chip: 'border-steel/60 bg-slate-inner/50 text-zinc-500', dot: 'bg-zinc-600', title: 'Merged into main: its work is published with main, so the branch itself need not be pushed' }
 }
-const stateStyle = (b) => STATE[b.state] || STATE.unpushed
+const stateStyle = (b) => (b.merged && b.state !== 'synced' ? STATE.merged : STATE[b.state] || STATE.unpushed)
 
 const RESULT = { new: 'new', updated: 'updated', 'up-to-date': 'no change', rejected: 'rejected' }
 const resultLabel = (r) => RESULT[r] || r
@@ -210,6 +256,47 @@ async function push() {
     error.value = err.message
   } finally {
     pushing.value = false
+    await load()
+  }
+}
+
+function openPrune() {
+  pruneRemote.value = false
+  pruneOpen.value = true
+}
+
+const PRUNE = { deleted: 'deleted', 'remote-deleted': 'deleted on the remote', kept: 'kept' }
+
+async function prune() {
+  pruning.value = true
+  error.value = ''
+  errorHint.value = ''
+  try {
+    const res = await fetch('/api/remote', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'prune', remote: pruneRemote.value })
+    })
+    const data = await res.json()
+    const results = data.results || []
+    const here = results.filter(r => r.result === 'deleted').length
+    const there = results.filter(r => r.result === 'remote-deleted').length
+    const kept = results.filter(r => r.result === 'kept')
+    if (data.ok || here || there) {
+      const parts = [`${here} deleted here`]
+      if (pruneRemote.value) parts.push(`${there} on the remote`)
+      showToast('Branches Deleted', parts.join(', ') + '.', 'success')
+      pruneOpen.value = false
+    }
+    if (!data.ok || kept.length) {
+      error.value = data.error || 'Some branches were kept.'
+      errorHint.value = kept.map(r => `${r.branch}: ${PRUNE[r.result]}${r.detail ? ` (${r.detail})` : ''}`).join(' · ')
+    }
+    emit('changed')
+  } catch (err) {
+    error.value = err.message
+  } finally {
+    pruning.value = false
     await load()
   }
 }

@@ -10,7 +10,7 @@
 
         <p v-if="error" class="p-3 rounded border border-rose-700 bg-rose-950 text-rose-300 text-body">{{ error }}</p>
 
-        <RemotePanel :refresh-key="refreshKey" />
+        <RemotePanel :refresh-key="refreshKey" @changed="refresh" />
 
         <!-- Finished plans: release them, or finish them without a release -->
         <StepsPanel :steps="steps" @changed="refresh" />
