@@ -103,12 +103,16 @@ function createRingmaster() {
     confirmDialog.value.show = false
   }
 
+  // At most this many toasts are shown; a new one drops the oldest
+  const MAX_TOASTS = 3
+  // How long a toast stays. An error stays until it is closed: it has to be read
+  const TOAST_MS = { success: 5000, info: 6000 }
+
   function showToast(title, message, type = 'success', meta = null) {
     const id = Date.now() + Math.random()
-    toastList.value.push({ id, title, message, type, meta })
-    setTimeout(() => {
-      dismissToast(id)
-    }, 5000)
+    toastList.value = [...toastList.value, { id, title, message, type, meta }].slice(-MAX_TOASTS)
+    const ms = TOAST_MS[type]
+    if (ms) setTimeout(() => dismissToast(id), ms)
   }
 
   function dismissToast(id) {
