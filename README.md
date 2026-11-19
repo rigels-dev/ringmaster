@@ -181,6 +181,9 @@ ringmaster steps name 1 "First version"
 ringmaster release                        # the last release, and suggested next versions
 ringmaster release v0.2.0 --step 2        # tag where step 2 ended
 ringmaster release v0.2.0 --step 2 --push # and push main and that tag to origin
+ringmaster release notes --step 2 --ai     # draft the release notes, with a summary by AI
+ringmaster release v0.2.0 --step 2 --notes-file notes.md --push --github-release
+ringmaster release page v0.1.0            # a GitHub release page for a tag pushed earlier
 ringmaster steps close 2                  # or: finished without a release
 ringmaster archive v0.2.0                 # .ringmaster/archives/<project>-v0.2.0.zip
 ```
@@ -188,6 +191,8 @@ ringmaster archive v0.2.0                 # .ringmaster/archives/<project>-v0.2.
 Steps are kept in `.ringmaster/steps.json`, so they are never committed or pushed. Their releases are read from git tags, so a tag you make by hand on a step's last commit counts too. Without `--step`, `ringmaster release` tags the tip of `main`.
 
 A release is an annotated git tag on a commit of `main`, made in your name. The version is yours to choose, in any scheme. Ringmaster only suggests: from `v0.1.0` it offers `v0.1.1` (fixes only), `v0.2.0` (new features) and `v1.0.0` (breaking changes), and marks the one that fits what was built; with no tag yet it offers `v0.1.0`. A tag that is not a version number gets no suggestion. A version that exists is never moved or replaced, and a release is refused while tasks of the current plan are unfinished (`--force` overrides). An archive holds only the files git tracks at that tag, so Ringmaster's state and untracked files stay out; `--format tar.gz` is also available.
+
+**Release notes.** The Release form starts with notes drafted from the step's tasks, one line each under *Features*, *Fixes*, *Documentation* or *Tests* (from the kind its branch names), and a place for a summary. Write the summary yourself, or press **Write summary with AI**: the planner model reads the tasks' specs and the files they changed and writes a sentence or two. That is one model call on your provider's quota, made only when you press it; the answers you gave the automatons are not sent. The notes go into the tag's message and are kept in `.ringmaster/releases/`. When the remote is on GitHub and the [GitHub CLI](https://cli.github.com) (`gh`) is installed and logged in, **Tag and push** also creates the release's page on GitHub with those notes. A release pushed without a page gets a **Create GitHub release page…** button in Branches (or `ringmaster release page <version>`). If the page cannot be made, the tag and the push still stand, and the reason is shown.
 
 **Using a remote server?** The web UI listens on localhost only. Forward it over SSH:
 

@@ -154,7 +154,7 @@ func TestStepsFollowEachOtherAndReadTheirReleasesFromGit(t *testing.T) {
 	}
 
 	// Step 1 is released after main has moved on: the tag lands where it ended
-	if err := release.TagAt(ctx, dir, "v0.1.0", list[0].Commit); err != nil {
+	if err := release.TagAt(ctx, dir, "v0.1.0", list[0].Commit, ""); err != nil {
 		t.Fatal(err)
 	}
 	if git(t, dir, "rev-parse", "v0.1.0^{commit}") != firstEnd {

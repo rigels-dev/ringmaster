@@ -98,7 +98,7 @@ func TestInfoFollowsTheProjectsTags(t *testing.T) {
 		t.Fatalf("a project without tags: %+v", info)
 	}
 
-	if err := Tag(ctx, dir, "v0.1.0"); err != nil {
+	if err := Tag(ctx, dir, "v0.1.0", ""); err != nil {
 		t.Fatal(err)
 	}
 	info, _ = GetInfo(ctx, dir)
@@ -120,7 +120,7 @@ func TestTagIsAnnotatedAndMadeByTheUser(t *testing.T) {
 	ctx := context.Background()
 	dir := project(t)
 
-	if err := Tag(ctx, dir, "v0.1.0"); err != nil {
+	if err := Tag(ctx, dir, "v0.1.0", ""); err != nil {
 		t.Fatal(err)
 	}
 	if kind := git(t, dir, "cat-file", "-t", "v0.1.0"); kind != "tag" {
@@ -140,14 +140,14 @@ func TestTagAcceptsAnySchemeAndNeverMovesARelease(t *testing.T) {
 	dir := project(t)
 
 	for _, v := range []string{"v0.1.0", "2026.11", "release-november", "v1.0.0-rc.1", "1.0"} {
-		if err := Tag(ctx, dir, v); err != nil {
+		if err := Tag(ctx, dir, v, ""); err != nil {
 			t.Errorf("Tag(%q) failed: %v", v, err)
 		}
 	}
 
 	first := git(t, dir, "rev-parse", "v0.1.0^{commit}")
 	commit(t, dir, "more.go", "second")
-	if err := Tag(ctx, dir, "v0.1.0"); err == nil || !strings.Contains(err.Error(), "already exists") {
+	if err := Tag(ctx, dir, "v0.1.0", ""); err == nil || !strings.Contains(err.Error(), "already exists") {
 		t.Fatalf("tagging an existing version: %v", err)
 	}
 	if git(t, dir, "rev-parse", "v0.1.0^{commit}") != first {
@@ -155,7 +155,7 @@ func TestTagAcceptsAnySchemeAndNeverMovesARelease(t *testing.T) {
 	}
 
 	for _, v := range []string{"", "-f", "--force", "has space", "a..b", "a~1", "a:b", "tail.lock", strings.Repeat("x", 101)} {
-		if err := Tag(ctx, dir, v); err == nil {
+		if err := Tag(ctx, dir, v, ""); err == nil {
 			t.Errorf("Tag(%q) succeeded, want an error", v)
 		}
 	}
@@ -164,7 +164,7 @@ func TestTagAcceptsAnySchemeAndNeverMovesARelease(t *testing.T) {
 func TestArchiveHoldsOnlyCommittedFiles(t *testing.T) {
 	ctx := context.Background()
 	dir := project(t)
-	if err := Tag(ctx, dir, "v0.1.0"); err != nil {
+	if err := Tag(ctx, dir, "v0.1.0", ""); err != nil {
 		t.Fatal(err)
 	}
 	// Later work, an untracked file and Ringmaster's state must all stay out of the v0.1.0 archive
@@ -226,7 +226,7 @@ func TestPushReleaseSendsOnlyTheReleaseTag(t *testing.T) {
 		t.Fatal(err)
 	}
 	git(t, dir, "tag", "private-experiment")
-	if err := Tag(ctx, dir, "v0.1.0"); err != nil {
+	if err := Tag(ctx, dir, "v0.1.0", ""); err != nil {
 		t.Fatal(err)
 	}
 

@@ -11,6 +11,8 @@ import (
 	"strings"
 
 	"github.com/spf13/cobra"
+	"ringmaster/internal/config"
+	"ringmaster/internal/llm"
 	"ringmaster/internal/planner"
 	"ringmaster/internal/registry"
 	"ringmaster/internal/schemas"
@@ -46,23 +48,9 @@ var planCmd = &cobra.Command{
 		// written, because the planner reads it to name the tasks already done.
 		if _, err := os.Stat(planPath); os.IsNotExist(err) || forcePlan {
 			fmt.Printf("Generating plan for '%s' using Master Planner agent...\n", projectName)
-			reg := registry.NewRegistry(cfg)
-			masterAlias := cfg.Routing.DefaultMaster
-			if masterAlias == "" {
-				for aName, a := range cfg.Agents {
-					if a.Role == "master" {
-						masterAlias = aName
-						break
-					}
-				}
-			}
-			if masterAlias == "" {
-				return fmt.Errorf("no master agent configured in ringmaster.toml")
-			}
-
-			provider, agentCfg, err := reg.GetProviderForAgent(masterAlias)
+			provider, agentCfg, err := masterProvider(cfg)
 			if err != nil {
-				return fmt.Errorf("failed resolving provider for master agent '%s': %w", masterAlias, err)
+				return err
 			}
 
 			generatedPlan, usage, err := planner.GeneratePlan(context.Background(), projectDir, cfg, *agentCfg, provider)
@@ -239,4 +227,25 @@ func init() {
 	planCmd.Flags().BoolVar(&headlessPlan, "headless", false, "Generate plan without opening interactive terminal prompt")
 	planCmd.Flags().BoolVarP(&approvePlan, "approve", "y", false, "Directly approve current plan and generate plan.approved.json")
 	RootCmd.AddCommand(planCmd)
+}
+
+// masterProvider resolves the master agent, the one that plans, and its provider.
+func masterProvider(cfg *config.Config) (llm.Provider, *config.AgentConfig, error) {
+	masterAlias := cfg.Routing.DefaultMaster
+	if masterAlias == "" {
+		for aName, a := range cfg.Agents {
+			if a.Role == "master" {
+				masterAlias = aName
+				break
+			}
+		}
+	}
+	if masterAlias == "" {
+		return nil, nil, fmt.Errorf("no master agent configured in ringmaster.toml")
+	}
+	provider, agentCfg, err := registry.NewRegistry(cfg).GetProviderForAgent(masterAlias)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed resolving provider for master agent '%s': %w", masterAlias, err)
+	}
+	return provider, agentCfg, nil
 }

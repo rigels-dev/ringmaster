@@ -80,6 +80,39 @@
             class="px-2.5 py-1 rounded text-xs text-zinc-500 hover:text-zinc-300 underline"
           >Undo</button>
         </template>
+        <template v-else>
+          <a
+            v-if="pageOf(s)"
+            :href="pageOf(s)"
+            target="_blank"
+            rel="noopener"
+            class="px-2.5 py-1 rounded text-xs text-zinc-300 border border-steel bg-slate-panel hover:bg-slate-dark"
+          >Release page ↗</a>
+          <button
+            v-else-if="canMakePage(s) && pageStep !== s.number"
+            @click="openPage(s)"
+            class="px-2.5 py-1 rounded text-xs font-bold border border-gear-dark text-gear-gold hover:bg-slate-dark"
+            :title="`Create the release page of ${s.releases[0]} on GitHub, with its notes`"
+          >Create GitHub release page…</button>
+        </template>
+      </div>
+
+      <!-- Release page for a release that is pushed but has none -->
+      <div v-if="pageStep === s.number && s.releases.length" class="pt-2 border-t border-steel/60 space-y-2">
+        <p class="text-xs text-zinc-300">
+          <code class="text-zinc-200">{{ s.releases[0] }}</code> is on GitHub as a tag. Its release page shows these notes
+          on <code class="text-zinc-200">{{ info.github.repo }}</code>.
+        </p>
+        <ReleaseNotesEditor v-model="notes" :step="s.number" :version="s.releases[0]" existing :disabled="busy" />
+        <div class="flex flex-wrap items-center gap-2">
+          <button
+            @click="confirmPage(s)"
+            :disabled="busy || !info.github.cli"
+            class="px-3.5 py-2 rounded text-body font-bold bg-gear-gold hover:bg-gear-glow text-ink disabled:opacity-40 disabled:cursor-not-allowed"
+          >{{ busy ? 'Working…' : 'Create release page' }}</button>
+          <button type="button" @click="pageStep = 0" class="text-xs text-zinc-400 hover:text-zinc-200">Cancel</button>
+          <span v-if="!info.github.cli" class="text-2xs text-zinc-500">Needs the GitHub CLI: install <code>gh</code>, then run <code>gh auth login</code>.</span>
+        </div>
       </div>
 
       <!-- Release form for the open step -->
@@ -103,6 +136,12 @@
             <span v-if="sg.kind === info.recommended" class="text-emerald-400"> ★</span>
           </button>
         </div>
+        <ReleaseNotesEditor v-model="notes" :step="s.number" :version="version" :disabled="busy" />
+        <label v-if="remoteUrl && info.github.repo" class="flex flex-wrap items-center gap-2 text-xs text-zinc-300">
+          <input type="checkbox" v-model="githubRelease" :disabled="!info.github.cli" class="accent-amber-500" />
+          With Tag and push, also create a GitHub release page with these notes
+          <span v-if="!info.github.cli" class="text-zinc-500">(needs the GitHub CLI: install <code>gh</code>, then run <code>gh auth login</code>)</span>
+        </label>
         <form @submit.prevent="remoteUrl ? confirmReleaseAndPush(s) : release(s, false)" class="flex flex-wrap items-center gap-2">
           <input
             v-model="version"
@@ -149,7 +188,7 @@ const emit = defineEmits(['changed'])
 
 const { showToast, confirmDialog } = useRingmaster()
 
-const info = ref({ latest: '', suggestions: [], recommended: '' })
+const info = ref({ latest: '', suggestions: [], recommended: '', github: { repo: '', cli: false }, pages: {} })
 const remoteUrl = ref('')
 const unpushedTags = ref([])
 const openStep = ref(0)
@@ -158,6 +197,10 @@ const busy = ref(false)
 const error = ref('')
 const renaming = ref(0)
 const nameInput = ref('')
+const notes = ref('')
+const githubRelease = ref(true)
+// The released step whose GitHub release page is being made
+const pageStep = ref(0)
 
 // Newest first
 const ordered = computed(() => [...props.steps].sort((a, b) => b.number - a.number))
@@ -196,7 +239,12 @@ const archiveUrl = (s) => `/api/archive?format=zip&ref=${encodeURIComponent(refO
 async function loadInfo() {
   try {
     const data = await (await fetch('/api/release')).json()
-    if (data.ok) info.value = { latest: data.latest || '', suggestions: data.suggestions || [], recommended: data.recommended || '' }
+    if (data.ok) {
+      info.value = {
+        latest: data.latest || '', suggestions: data.suggestions || [], recommended: data.recommended || '',
+        github: data.github || { repo: '', cli: false }, pages: data.pages || {}
+      }
+    }
   } catch {}
   try {
     const data = await (await fetch('/api/remote')).json()
@@ -212,8 +260,55 @@ function pickSuggestion() {
 
 function openRelease(s) {
   error.value = ''
+  notes.value = ''
+  pageStep.value = 0
   openStep.value = s.number
   pickSuggestion()
+}
+
+// A release page is made on GitHub, for a tag that is there already
+const pageOf = (s) => s.releases.map(t => info.value.pages[t]).find(Boolean) || ''
+const canMakePage = (s) => Boolean(remoteUrl.value && info.value.github.repo) && !unpushedTags.value.includes(s.releases[0])
+
+function openPage(s) {
+  error.value = ''
+  notes.value = ''
+  openStep.value = 0
+  pageStep.value = s.number
+}
+
+// Making the page publishes the notes, so say where first
+function confirmPage(s) {
+  const v = s.releases[0]
+  confirmDialog.value = {
+    show: true,
+    title: 'Create release page',
+    message: `Create the release page of ${v} on github.com/${info.value.github.repo}, with these notes? Everyone with access to that repository will see it.`,
+    confirmLabel: 'Create release page',
+    danger: false,
+    action: () => makePage(s, v)
+  }
+}
+
+async function makePage(s, v) {
+  busy.value = true
+  error.value = ''
+  try {
+    const res = await fetch('/api/release', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'page', version: v, notes: notes.value })
+    })
+    const data = await res.json()
+    if (!data.ok) throw new Error(data.error || 'The release page could not be made')
+    showToast('Release Page Created', `${v} has its release page on GitHub.`, 'success')
+    pageStep.value = 0
+  } catch (err) {
+    error.value = err.message
+  } finally {
+    busy.value = false
+    await loadInfo()
+  }
 }
 
 // The newest step that is neither released nor finished without a release
@@ -271,12 +366,14 @@ function confirmReleaseAndPush(s) {
   confirmDialog.value = {
     show: true,
     title: 'Tag and push',
-    message: `Tag step ${s.number} as ${v}, then push main and that tag to ${remoteUrl.value}? Everyone with access to that repository will see the release. A release tag cannot be changed afterwards.`,
+    message: `Tag step ${s.number} as ${v}, then push main and that tag to ${remoteUrl.value}${wantsPage() ? `, and create its release page on GitHub with these notes` : ''}? Everyone with access to that repository will see the release. A release tag cannot be changed afterwards.`,
     confirmLabel: 'Tag and push',
     danger: false,
     action: () => release(s, true)
   }
 }
+
+const wantsPage = () => Boolean(githubRelease.value && info.value.github.repo && info.value.github.cli)
 
 async function release(s, push) {
   const v = version.value.trim()
@@ -287,13 +384,16 @@ async function release(s, push) {
     const res = await fetch('/api/release', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ version: v, push, step: s.number })
+      body: JSON.stringify({ version: v, push, step: s.number, notes: notes.value, githubRelease: push && wantsPage() })
     })
     const data = await res.json()
     if (data.ok) {
-      showToast('Released', push ? `Step ${s.number} is tagged ${v} and pushed.` : `Step ${s.number} is tagged ${v}.`, 'success')
+      showToast('Released', push ? `Step ${s.number} is tagged ${v} and pushed${data.page_url ? ', with its release page' : ''}.` : `Step ${s.number} is tagged ${v}.`, 'success')
       openStep.value = 0
       version.value = ''
+      notes.value = ''
+      // The tag and the push are made; only the page is missing, and it can be made from the step
+      if (data.page_error) error.value = `${v} is tagged and pushed, but its release page was not made: ${data.page_error}`
     } else {
       // Keep what was typed, so it can be corrected
       error.value = data.error || 'The release failed'
