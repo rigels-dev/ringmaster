@@ -51,7 +51,8 @@ export default defineEventHandler(async (event) => {
       answer.replies = { ...(prev.replies || {}), ...replies }
       answer.allow = [...new Set([...(prev.allow || []), ...allow])]
       if (!allow.length && prev.scope) answer.scope = prev.scope
-      answer.text = [prev.text, text].filter(Boolean).join('\n')
+      // The same note sent twice (a double click) is kept once
+      answer.text = prev.text === text ? text : [prev.text, text].filter(Boolean).join('\n')
       if (!acceptance.length && prev.acceptance?.length) answer.acceptance = prev.acceptance
     } catch {}
   }

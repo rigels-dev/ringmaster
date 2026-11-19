@@ -98,7 +98,9 @@ export default defineEventHandler((event) => {
     events,
     reportFile: report ? reportFile : '',
     report,
-    attempts
+    attempts,
+    // An answer sent but not yet applied: the scheduler removes the file when it applies it
+    answerQueued: fs.existsSync(path.join(projectDir, '.ringmaster', 'answers', `${id}.json`))
   }
 })
 

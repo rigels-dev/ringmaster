@@ -52,8 +52,24 @@
           <pre class="whitespace-pre-wrap break-words font-mono text-body text-red-200/90">{{ detail.state.error }}</pre>
         </div>
 
+        <!-- Answer sent: the scheduler applies it on its next tick, then the task runs again -->
+        <div v-if="needsYou && answerPending" role="status" aria-live="polite"
+          class="p-3 bg-emerald-950/40 border border-emerald-700/70 rounded space-y-1.5">
+          <div class="flex items-center gap-2 font-bold text-emerald-200">
+            <span class="inline-block w-3.5 h-3.5 rounded-full border-2 border-emerald-300 border-t-transparent animate-spin" aria-hidden="true"></span>
+            Answer sent. Waiting for Ringmaster to pick it up…
+          </div>
+          <p class="text-xs text-emerald-100/80">
+            There is no need to send it again. The task starts over with your answer as soon as the run applies it,
+            usually within a few seconds, and this panel updates by itself.
+          </p>
+          <p v-if="!isRunActive" class="text-xs text-amber-300">
+            No run is active, so nothing will pick the answer up yet. Start or resume the run from the header.
+          </p>
+        </div>
+
         <!-- Needs you: answer requests, approve commands, or give guidance -->
-        <div v-if="needsYou" class="p-3 bg-rose-950/40 border border-rose-700/70 rounded space-y-3">
+        <div v-else-if="needsYou" class="p-3 bg-rose-950/40 border border-rose-700/70 rounded space-y-3">
           <div class="font-bold text-rose-200">🙋 This task is waiting on you</div>
 
           <div v-for="r in requests" :key="r.id" class="bg-slate-inner border border-steel/60 rounded p-2.5 space-y-2">
@@ -121,8 +137,9 @@
 
           <div class="flex items-center justify-between gap-2">
             <span class="text-xs text-rose-200/80">{{ formError }}</span>
-            <button @click="submitAnswer" :disabled="sending"
-              class="px-4 py-1.5 rounded text-body font-bold bg-emerald-500 hover:bg-emerald-400 text-ink disabled:opacity-50">
+            <button @click="submitAnswer" :disabled="sending" :aria-busy="sending"
+              class="inline-flex items-center gap-2 px-4 py-1.5 rounded text-body font-bold bg-emerald-500 hover:bg-emerald-400 text-ink disabled:opacity-60 disabled:cursor-wait">
+              <span v-if="sending" class="inline-block w-3.5 h-3.5 rounded-full border-2 border-ink border-t-transparent animate-spin" aria-hidden="true"></span>
               {{ sending ? 'Sending…' : detail.state?.status === 'PAUSED' && !requests.length ? '▶ Resume task' : '✓ Send answer & resume' }}
             </button>
           </div>
@@ -201,7 +218,7 @@
 import { statusLabel, statusClass } from '~/utils/status'
 import { ref, reactive, computed, watch, onMounted, onUnmounted } from 'vue'
 
-const { answerTask } = useRingmaster()
+const { answerTask, isRunActive } = useRingmaster()
 
 const props = defineProps({
   taskId: { type: String, required: true },
@@ -271,8 +288,14 @@ watch(() => detail.value?.acceptance, (list) => {
 }, { immediate: true })
 const sending = ref(false)
 const formError = ref('')
+// Set the moment an answer is accepted, until the reload that follows: from
+// then on the server's answerQueued says whether it still waits to be applied,
+// across reloads and tabs, and a new stop shows its new questions
+const justSent = ref(false)
+const answerPending = computed(() => justSent.value || Boolean(detail.value?.answerQueued))
 
 async function submitAnswer() {
+  if (sending.value) return
   formError.value = ''
   const replies = {}
   const allow = []
@@ -325,11 +348,13 @@ async function submitAnswer() {
   const ok = await answerTask(props.taskId, { replies, allow, scope, text, ...(acceptance ? { acceptance } : {}) })
   sending.value = false
   if (ok) {
+    justSent.value = true
     form.approvals = {}
     form.replies = {}
     form.acceptance = ''
     form.text = ''
     await load()
+    justSent.value = false
   }
 }
 

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
@@ -23,6 +24,9 @@ type TaskAttemptLoopResult struct {
 	TotalUsage    schemas.Usage         `json:"total_usage"`
 	Duration      time.Duration         `json:"duration"`
 	FinalReport   *schemas.WorkerReport `json:"final_report,omitempty"`
+	// RestoredTests are the existing test files the automaton changed and
+	// Ringmaster put back, over every attempt
+	RestoredTests []string `json:"restored_tests,omitempty"`
 }
 
 // AuditEvent represents an entry in .ringmaster/logs/events.jsonl
@@ -127,6 +131,11 @@ func RunTaskLoop(
 				}
 				if len(restored) > 0 {
 					appendEvent(attempt, "TESTS_RESTORED", restored)
+					for _, f := range restored {
+						if !slices.Contains(res.RestoredTests, f) {
+							res.RestoredTests = append(res.RestoredTests, f)
+						}
+					}
 				}
 			}
 			var checkErr error

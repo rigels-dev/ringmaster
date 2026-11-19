@@ -93,7 +93,9 @@ func RunAttempt(
 	if ProtectsTests(task, sandboxCfg) {
 		testsRule = "Do NOT modify, rename or delete test files that already exist (" + strings.Join(TestFilePatterns(sandboxCfg), ", ") + ").\n" +
 			"They are the specification: Ringmaster puts them back before it runs the acceptance criteria, so such changes are lost.\n" +
-			"Make the code pass them. You may add new test files. If an existing test is wrong for this task, ask the user (see WHEN YOU NEED THE USER)."
+			"Make the code pass them. You may add new test files. If an existing test is wrong for this task, ask the user (see WHEN YOU NEED THE USER):\n" +
+			"an input or choice question that names the test file and says why it is outdated. Ringmaster then offers the user to let this task change it.\n" +
+			"Never ask for an \"approval\" of an instruction in words: an approval is only for a shell command you would run yourself."
 	}
 
 	systemPrompt := fmt.Sprintf(`You are an autonomous AI software engineer working for Ringmaster.

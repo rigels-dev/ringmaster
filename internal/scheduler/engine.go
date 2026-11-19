@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -329,7 +330,7 @@ func (e *Engine) executeTask(ctx context.Context, planTask schemas.PlanTask) {
 	// Whether this task may change existing tests is the approved plan's call,
 	// not the task file's. When it may not, such changes are undone before
 	// each acceptance check.
-	taskSpec.EditsTests = planTask.EditsTests
+	taskSpec.EditsTests = planTask.EditsTests || e.stateMgr.GetState().TaskStates[planTask.ID].EditsTests
 	var restoreTests func(context.Context) ([]string, error)
 	if worker.ProtectsTests(*taskSpec, sandbox) {
 		patterns := worker.TestFilePatterns(sandbox)
@@ -388,6 +389,7 @@ func (e *Engine) executeTask(ctx context.Context, planTask schemas.PlanTask) {
 	})
 
 	// 7. Handle verification decision
+	stopRequests := e.checkStopRequests(planTask.ID, *taskSpec, sandbox, loopRes)
 	switch loopRes.Decision.Type {
 	case verify.DecisionDONE:
 		fmt.Printf("✓ [Scheduler] Task %s passed acceptance tests! Queuing git merge...\n", planTask.ID)
@@ -426,11 +428,11 @@ func (e *Engine) executeTask(ctx context.Context, planTask schemas.PlanTask) {
 
 	case verify.DecisionBLOCKED:
 		fmt.Printf("❌ [Scheduler] Task %s reported BLOCKED: %s\n", planTask.ID, loopRes.Decision.Reason)
-		printStopQuestions(planTask.ID, loopRes.Decision.Requests)
+		printStopQuestions(planTask.ID, stopRequests)
 		_ = e.stateMgr.UpdateTaskState(planTask.ID, func(ts *schemas.TaskState) {
 			ts.Status = schemas.TaskStateBlocked
 			ts.Error = loopRes.Decision.Reason
-			ts.Requests = loopRes.Decision.Requests
+			ts.Requests = stopRequests
 		})
 
 	case verify.DecisionNEED_REVIEW:
@@ -439,17 +441,17 @@ func (e *Engine) executeTask(ctx context.Context, planTask schemas.PlanTask) {
 			reason += "\n\n" + loopRes.Decision.FailureLogs
 		}
 		fmt.Printf("⚠ [Scheduler] Task %s needs review: %s\n", planTask.ID, reason)
-		printStopQuestions(planTask.ID, loopRes.Decision.Requests)
+		printStopQuestions(planTask.ID, stopRequests)
 		fmt.Printf("   Transcript: %s\n", filepath.Join(worktree, ".ringmaster", "logs"))
 		_ = e.stateMgr.UpdateTaskState(planTask.ID, func(ts *schemas.TaskState) {
 			ts.Status = schemas.TaskStateReview
 			ts.Error = reason
-			ts.Requests = loopRes.Decision.Requests
+			ts.Requests = stopRequests
 		})
 
 	case verify.DecisionAWAITING_INPUT:
-		fmt.Printf("🙋 [Scheduler] Task %s needs your input (%d request(s)):\n", planTask.ID, len(loopRes.Decision.Requests))
-		for _, r := range loopRes.Decision.Requests {
+		fmt.Printf("🙋 [Scheduler] Task %s needs your input (%d request(s)):\n", planTask.ID, len(stopRequests))
+		for _, r := range stopRequests {
 			if r.Type == schemas.RequestApproval {
 				fmt.Printf("   [%s] approve command `%s`: %s\n", r.ID, r.Command, r.Reason)
 			} else {
@@ -460,7 +462,7 @@ func (e *Engine) executeTask(ctx context.Context, planTask schemas.PlanTask) {
 		_ = e.stateMgr.UpdateTaskState(planTask.ID, func(ts *schemas.TaskState) {
 			ts.Status = schemas.TaskStateAwaiting
 			ts.Error = loopRes.Decision.Reason
-			ts.Requests = loopRes.Decision.Requests
+			ts.Requests = stopRequests
 		})
 
 	case verify.DecisionPAUSED:
@@ -653,4 +655,34 @@ func printStopQuestions(taskID string, requests []schemas.HumanRequest) {
 	if len(requests) > 0 {
 		fmt.Printf("   Answer in the Web UI task panel, or with: ringmaster answer %s --reply %s=\"...\"\n", taskID, requests[0].ID)
 	}
+}
+
+// checkStopRequests is what a stopped task asks the user. An approval that
+// approving could not satisfy becomes a question (see verify.CheckRequests).
+// A task that may not change existing tests, and changed or asked about one,
+// is also offered to be let change them: only Ringmaster can allow that.
+func (e *Engine) checkStopRequests(taskID string, task schemas.TaskSpec, sandbox config.SandboxConfig, res *verify.TaskAttemptLoopResult) []schemas.HumanRequest {
+	approvals := LoadApprovals(e.projectRoot)
+	approved := func(command string) bool {
+		return slices.Contains(approvals.Project, command) || slices.Contains(approvals.Tasks[taskID], command)
+	}
+	requests := verify.CheckRequests(res.Decision.Requests, approved)
+	if len(requests) == 0 || !worker.ProtectsTests(task, sandbox) {
+		return requests
+	}
+	files := append([]string{}, res.RestoredTests...)
+	for _, f := range verify.MentionedTestFiles(requests, worker.TestFilePatterns(sandbox)) {
+		if !slices.Contains(files, f) {
+			files = append(files, f)
+		}
+	}
+	if len(files) == 0 {
+		return requests
+	}
+	for _, r := range requests {
+		if r.ID == verify.TestEditsID {
+			return requests
+		}
+	}
+	return append(requests, verify.TestEditsRequest(files))
 }

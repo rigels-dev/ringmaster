@@ -182,10 +182,14 @@ func (e *Engine) applyAnswer(ts schemas.TaskState, ans schemas.HumanAnswer) erro
 		return err
 	}
 
+	allowTests := verify.AllowsTestEdits(ans)
 	_ = e.stateMgr.UpdateTaskState(ans.TaskID, func(cur *schemas.TaskState) {
 		cur.Status = schemas.TaskStatePending
 		cur.Error = ""
 		cur.Requests = nil
+		if allowTests {
+			cur.EditsTests = true
+		}
 	})
 	e.resetSkippedTasks()
 	e.appendEvent(ans.TaskID, "HUMAN_DECISION", ans)
@@ -241,6 +245,10 @@ func renderHumanAnswer(requests []schemas.HumanRequest, ans schemas.HumanAnswer)
 			"Ringmaster now runs only these; do not run, or try to satisfy, the ones they replaced. "+
 			"If the work is already done, do not change any file: write only the report.\n",
 			strings.Join(ans.Acceptance, "`, `")))
+	}
+	if verify.AllowsTestEdits(ans) {
+		sb.WriteString("- The user lets this task change existing test files from now on, and Ringmaster keeps those changes. " +
+			"Change only the tests this task makes outdated, and say which in the report.\n")
 	}
 	if t := strings.TrimSpace(ans.Text); t != "" {
 		sb.WriteString(t + "\n")
