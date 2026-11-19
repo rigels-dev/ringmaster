@@ -37,7 +37,7 @@ Only you can change a task's checks. An answer goes to the automaton, which cann
   These commits are yours: author and committer are the identity you have set up for git (`user.name` and `user.email`), so a git host shows them under your name alone. Ringmaster's part stays visible in the commit message and the trailers. Use an email your git host knows if you want the commits linked to your account. If git has no identity set, `ringmaster init`, `ringmaster run` and the web UI say so and show the two `git config` commands; until then the commits are made as Ringmaster. Ringmaster never edits your git config.
 - **Any provider.** OpenAI-compatible APIs (OpenAI, OpenRouter, Ollama, vLLM, DeepSeek and others), the Anthropic API, and a local Claude subscription through the Claude Code CLI.
 - **One fleet for all projects.** Providers and agents are configured once, globally; a project only assigns agents to its tasks.
-- **Guardrails for workers.** Workers run commands only from an allowlist, and their file tools are confined to the task's worktree. Worker and acceptance commands see only a built-in set of environment variables (`PATH`, `HOME`, toolchain paths, proxies) plus the ones you name in `pass_env`, so your API keys and other credentials stay out unless you list them. For agents on a Claude subscription, the Claude Code CLI runs the commands itself, so they also see the CLI's own `CLAUDE_*` and `ANTHROPIC_*` variables. These are guardrails, not isolation: an allowed command such as `go test` still runs code the worker wrote, with your user's permissions. Run Ringmaster inside a container or VM if you need a hard boundary. Each acceptance command has a time limit (default 300 s), adjustable per project or per task.
+- **Guardrails for workers.** Workers run commands only from an allowlist, and their file tools are confined to the task's worktree. For agents on an API, Ringmaster checks every command and path itself. For agents on a Claude subscription, the Claude Code CLI enforces the same rules: Bash only for the allowed commands, file access granted in the worktree only, and Claude Code told to refuse reads and writes outside it (`blockReadsOutsideWorkingDirectories`, Claude Code 2.1.314 or later; older versions keep the worktree-only grants but not that refusal). Worker and acceptance commands see only a built-in set of environment variables (`PATH`, `HOME`, toolchain paths, proxies) plus the ones you name in `pass_env`, so your API keys and other credentials stay out unless you list them. For agents on a Claude subscription, the Claude Code CLI runs the commands itself, so they also see the CLI's own `CLAUDE_*` and `ANTHROPIC_*` variables. These are guardrails, not isolation: the limits apply to the file tools, not to commands, so an allowed command such as `go test` still runs code the worker wrote, with your user's permissions, and can read files outside the worktree. Run Ringmaster inside a container or VM if you need a hard boundary. Each acceptance command has a time limit (default 300 s), adjustable per project or per task.
 - **Tests a worker cannot weaken.** A worker may add tests, but its changes to test files that already existed are undone before the acceptance commands run, so a check cannot be passed by editing it. A task that really must change existing tests says so in the plan, where you see it before approving. If a task stops over a test that turned out to be outdated, Ringmaster offers to let that task change existing tests.
 - **Agent skills.** Drop a skill folder (a `SKILL.md` plus whatever it refers to) into Ringmaster and every worker can use it, whichever model it runs on. Turn skills on and off from the TUI or the command line.
 - **Live and lasting telemetry.** Worker steps stream to the logs as they happen. Every run is appended to `.ringmaster/logs/run.jsonl`, and reports and transcripts are kept after their worktree is removed. Token usage includes prompt-cache reads and writes, plus cost when the provider reports it.
@@ -208,6 +208,20 @@ port = 4000
 ```
 
 The most specific setting wins: the flag, then the environment variable, then the project, then the fleet config.
+
+## What a worker sees
+
+Each attempt starts a fresh conversation. The worker's prompt holds:
+
+- the project's whole brief (`.ringmaster/BRIEF.md`);
+- its own task: ID, title, description and acceptance commands;
+- the answers you gave this task (`## Human Answers` in its task file);
+- whether it may change existing tests;
+- the enabled skills, by name and description only (it reads a skill's full instructions when one fits);
+- the commands it may run, the report it must write, and how to ask you for something;
+- on a retry, the output of the checks that failed in the attempt before, and which test changes were undone.
+
+It is not given the chat with the master, the plan, other tasks' specs, or other attempts' transcripts. It reads the code itself, with its tools, from its worktree: a checkout of `main`, or of the task it depends on.
 
 ## Skills
 
