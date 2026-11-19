@@ -1,5 +1,6 @@
 import fs from 'node:fs'
 import path from 'node:path'
+import { execFileSync } from 'node:child_process'
 
 // Shared with the UI, which groups the chat by step the same way
 export { isGeneratePlanMessage } from '../../utils/chatSteps.js'
@@ -57,4 +58,54 @@ export function finishedWorkNote(projectDir: string): string {
     ...lines,
     'The user is now discussing a further change. Treat what is listed as already built: do not propose building it again, and plan only what is new or different.'
   ].join('\n')
+}
+
+// How many steps the project has finished, as recorded in steps.json
+export function finishedStepCount(projectDir: string): number {
+  try {
+    return JSON.parse(fs.readFileSync(path.join(projectDir, '.ringmaster', 'steps.json'), 'utf-8'))?.steps?.length || 0
+  } catch {
+    return 0
+  }
+}
+
+// Whether every task of the current plan is done
+export function currentPlanFinished(projectDir: string): boolean {
+  try {
+    const plan = JSON.parse(fs.readFileSync(path.join(projectDir, '.ringmaster', 'plan.json'), 'utf-8'))
+    const state = JSON.parse(fs.readFileSync(path.join(projectDir, '.ringmaster', 'state.json'), 'utf-8'))
+    const tasks = plan?.tasks || []
+    return tasks.length > 0 && tasks.every((t: any) => state?.task_states?.[t.id]?.status === 'COMPLETED')
+  } catch {
+    return false
+  }
+}
+
+// Files that state a project's language version, dependencies and build.
+// Must match manifestFiles in internal/planner/prior.go.
+export const MANIFEST_FILES = ['go.mod', 'package.json', 'pyproject.toml', 'requirements.txt', 'Cargo.toml', 'Gemfile', 'composer.json', 'Dockerfile']
+const MAX_MANIFEST_CHARS = 2000
+
+// The manifests as they are on main: what the project really uses (the Go
+// version in go.mod, say), which may differ from what an early request said.
+// Empty for a project without commits on main or without such files.
+export function projectFilesNote(projectDir: string): string {
+  const parts: string[] = []
+  for (const file of MANIFEST_FILES) {
+    let content = ''
+    try {
+      content = execFileSync('git', ['-C', projectDir, 'show', `main:${file}`], {
+        encoding: 'utf-8', stdio: ['ignore', 'pipe', 'ignore'], timeout: 5000
+      })
+    } catch {
+      continue
+    }
+    content = content.trim()
+    if (!content) continue
+    if (content.length > MAX_MANIFEST_CHARS) content = content.slice(0, MAX_MANIFEST_CHARS) + '\n…'
+    parts.push(`--- ${file} ---\n${content}`)
+  }
+  if (!parts.length) return ''
+  return 'PROJECT FILES: these files are on main now. They are the facts about versions and dependencies; ' +
+    'when an earlier request says otherwise, these win unless the user asks to change them.\n\n' + parts.join('\n\n')
 }

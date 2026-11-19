@@ -3,6 +3,7 @@ package planner
 import (
 	"context"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"reflect"
 	"strings"
@@ -143,5 +144,50 @@ func TestPlanBranchesAreUnique(t *testing.T) {
 	branches := []string{got.Tasks[0].Branch, got.Tasks[1].Branch, got.Tasks[2].Branch}
 	if want := []string{"feat/api", "feat/api-2", "feat/api-3"}; !reflect.DeepEqual(branches, want) {
 		t.Errorf("branches = %v, want %v", branches, want)
+	}
+}
+
+// The planner is told what the project really uses, from the files on main,
+// so a version agreed in an earlier step is not lost to an earlier request
+// that said otherwise ("go 1.22" in the first brief, go 1.27 in go.mod).
+func TestPriorWorkShowsTheManifestsOnMain(t *testing.T) {
+	ctx := context.Background()
+	dir := t.TempDir()
+	run := func(args ...string) {
+		t.Helper()
+		cmd := exec.Command("git", append([]string{"-C", dir}, args...)...)
+		cmd.Env = append(os.Environ(), "GIT_AUTHOR_NAME=a", "GIT_AUTHOR_EMAIL=a@x", "GIT_COMMITTER_NAME=a", "GIT_COMMITTER_EMAIL=a@x")
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, out)
+		}
+	}
+	run("init", "-q", "-b", "main")
+	if err := os.WriteFile(filepath.Join(dir, "go.mod"), []byte("module shorty\n\ngo 1.27\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "package.json"), []byte(strings.Repeat("x", maxManifestChars+50)), 0644); err != nil {
+		t.Fatal(err)
+	}
+	run("add", "-A")
+	run("commit", "-q", "-m", "first")
+	// A file only in the working tree is not a fact about main
+	if err := os.WriteFile(filepath.Join(dir, "Cargo.toml"), []byte("[package]\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	files := mainManifests(ctx, dir)
+	if !strings.Contains(files, "--- go.mod ---\nmodule shorty\n\ngo 1.27") {
+		t.Errorf("go.mod missing:\n%s", files)
+	}
+	if strings.Contains(files, "Cargo.toml") {
+		t.Error("a file that is not on main is shown")
+	}
+	if !strings.Contains(files, "--- package.json ---") || strings.Contains(files, strings.Repeat("x", maxManifestChars+1)) {
+		t.Error("a long manifest is not shortened")
+	}
+
+	section := priorWork{used: map[string]bool{"T01": true}, done: []doneTask{{ID: "T01", Title: "Store"}}, files: files}.promptSection()
+	if !strings.Contains(section, "# PROJECT FILES ON MAIN") || !strings.Contains(section, "go 1.27") {
+		t.Errorf("prompt section:\n%s", section)
 	}
 }
