@@ -198,13 +198,14 @@ func TestGitHubRepo(t *testing.T) {
 func fakeGH(t *testing.T, fn func(args []string) (string, error)) *[][]string {
 	t.Helper()
 	calls := &[][]string{}
-	old, oldHas := runGH, hasGH
+	old, oldHas, oldTag := runGH, hasGH, tagOnRemote
 	runGH = func(ctx context.Context, dir string, args ...string) (string, error) {
 		*calls = append(*calls, args)
 		return fn(args)
 	}
 	hasGH = func() bool { return true }
-	t.Cleanup(func() { runGH, hasGH = old, oldHas })
+	tagOnRemote = func(ctx context.Context, projectRoot, version string) error { return nil }
+	t.Cleanup(func() { runGH, hasGH, tagOnRemote = old, oldHas, oldTag })
 	return calls
 }
 
@@ -230,7 +231,7 @@ func TestCreatePage(t *testing.T) {
 		t.Fatalf("url: %s", url)
 	}
 	args := strings.Join((*calls)[0], " ")
-	for _, want := range []string{"release create v0.1.0", "--repo rigels-dev/shorty", "--title v0.1.0 · First version", "--verify-tag"} {
+	for _, want := range []string{"release create v0.1.0", "--repo rigels-dev/shorty", "--title v0.1.0 · First version"} {
 		if !strings.Contains(args, want) {
 			t.Errorf("gh %s: missing %q", args, want)
 		}
@@ -307,5 +308,39 @@ func TestSummarizeUsesTheTasksAndCleansTheReply(t *testing.T) {
 	p.reply = "  "
 	if _, _, err := Summarize(ctx, dir, p, "m", SummaryInput{Tasks: []NoteTask{{ID: "T01"}}}); err == nil {
 		t.Error("an empty reply is accepted")
+	}
+}
+
+// gh as packaged by distributions does not know --verify-tag, so it is not
+// passed; Ringmaster checks itself that the remote has the tag.
+func TestCreatePageNeedsTheTagOnTheRemote(t *testing.T) {
+	ctx := context.Background()
+	calls := fakeGH(t, func(args []string) (string, error) { return "https://example/r", nil })
+	tagOnRemote = func(ctx context.Context, projectRoot, version string) error {
+		return errors.New(version + " is not on the remote yet")
+	}
+	if _, err := CreatePage(ctx, t.TempDir(), "https://github.com/o/r", "v0.1.0", "", ""); err == nil || !strings.Contains(err.Error(), "not on the remote") {
+		t.Fatalf("err = %v", err)
+	}
+	if len(*calls) != 0 {
+		t.Fatalf("gh ran for a tag the remote does not have: %v", *calls)
+	}
+}
+
+func TestTagOnRemote(t *testing.T) {
+	ctx := context.Background()
+	dir := project(t)
+	bare := filepath.Join(t.TempDir(), "remote.git")
+	git(t, dir, "init", "-q", "--bare", bare)
+	git(t, dir, "remote", "add", "origin", bare)
+	if err := Tag(ctx, dir, "v0.1.0", ""); err != nil {
+		t.Fatal(err)
+	}
+	if err := tagOnRemote(ctx, dir, "v0.1.0"); err == nil || !strings.Contains(err.Error(), "push it first") {
+		t.Fatalf("an unpushed tag: %v", err)
+	}
+	git(t, dir, "push", "-q", "origin", "v0.1.0")
+	if err := tagOnRemote(ctx, dir, "v0.1.0"); err != nil {
+		t.Fatalf("a pushed tag: %v", err)
 	}
 }

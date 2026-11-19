@@ -10,6 +10,8 @@ import (
 	"regexp"
 	"strings"
 	"time"
+
+	"ringmaster/internal/workspace"
 )
 
 // GitHub is what Ringmaster knows about publishing release pages for a
@@ -92,9 +94,15 @@ func CreatePage(ctx context.Context, projectRoot, remoteURL, version, title, not
 	if title == "" {
 		title = version
 	}
-	// --verify-tag: the page belongs to the tag that was pushed, never to one gh would make
+	// The page belongs to the tag that was pushed: gh would make a tag of its
+	// own on the default branch for one the remote does not have. gh's
+	// --verify-tag checks that too, but older gh, as packaged by distributions,
+	// does not know the flag, so Ringmaster checks for itself.
+	if err := tagOnRemote(ctx, projectRoot, version); err != nil {
+		return "", err
+	}
 	out, err := runGH(ctx, projectRoot, "release", "create", version,
-		"--repo", repo, "--title", title, "--notes-file", file.Name(), "--verify-tag")
+		"--repo", repo, "--title", title, "--notes-file", file.Name())
 	if err != nil {
 		reason := err.Error()
 		switch {
@@ -108,6 +116,18 @@ func CreatePage(ctx context.Context, projectRoot, remoteURL, version, title, not
 	// gh prints the page's URL last
 	lines := strings.Split(out, "\n")
 	return strings.TrimSpace(lines[len(lines)-1]), nil
+}
+
+// tagOnRemote checks that origin has tag version; tests replace it with runGH.
+var tagOnRemote = func(ctx context.Context, projectRoot, version string) error {
+	out, err := workspace.RunGit(ctx, projectRoot, "ls-remote", "--tags", "origin", "refs/tags/"+version)
+	if err != nil {
+		return fmt.Errorf("could not check that %s is on the remote: %w", version, err)
+	}
+	if strings.TrimSpace(out) == "" {
+		return fmt.Errorf("%s is not on the remote yet; push it first, then create its release page", version)
+	}
+	return nil
 }
 
 // hasGH reports whether gh is installed; tests replace it with runGH.
