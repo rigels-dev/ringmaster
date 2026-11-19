@@ -1,7 +1,8 @@
 import path from 'node:path'
 import fs from 'node:fs'
 import { rootTomlPath, resolveProjectDir, runCommand } from '../utils/ringmaster'
-import { isGeneratePlanMessage, finishedWorkNote } from '../utils/chat'
+import { finishedWorkNote, projectFilesNote, finishedStepCount, currentPlanFinished } from '../utils/chat'
+import { conversationForMaster } from '../../utils/chatSteps.js'
 
 export default defineEventHandler(async (event) => {
   const projectDir = resolveProjectDir()
@@ -105,7 +106,7 @@ export default defineEventHandler(async (event) => {
         }
 
         // On a project with finished tasks, the Master is planning a next change, not a first build
-        const finishedWork = finishedWorkNote(projectDir)
+        const finishedWork = [finishedWorkNote(projectDir), projectFilesNote(projectDir)].filter(Boolean).join('\n\n')
 
         const systemPrompt = `You are the Master AI Architect and Project Planner of Ringmaster (Control Plane).
 You are currently engaged in a live planning discussion with the project lead/developer.
@@ -125,14 +126,8 @@ Format with clean markdown.` + (finishedWork ? `\n\n${finishedWork}` : '')
           { role: 'system', content: systemPrompt }
         ]
 
-        for (const m of history.slice(-8)) {
-          if (m.text && !isGeneratePlanMessage(m.text)) {
-            convMessages.push({
-              role: m.role === 'user' ? 'user' : 'assistant',
-              content: m.text
-            })
-          }
-        }
+        // What earlier steps agreed, then this step's own discussion
+        convMessages.push(...conversationForMaster(history, finishedStepCount(projectDir), currentPlanFinished(projectDir), userPrompt))
         convMessages.push({ role: 'user', content: userPrompt })
 
         let replyText = ''

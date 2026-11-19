@@ -19,6 +19,35 @@ import (
 type priorWork struct {
 	done []doneTask
 	used map[string]bool // every ID a task state or an rm/ branch already has
+	// files are the project's manifests on main, as "--- name ---" sections
+	files string
+}
+
+// manifestFiles state a project's language version, dependencies and build.
+// Must match MANIFEST_FILES in web/server/utils/chat.ts.
+var manifestFiles = []string{"go.mod", "package.json", "pyproject.toml", "requirements.txt", "Cargo.toml", "Gemfile", "composer.json", "Dockerfile"}
+
+const maxManifestChars = 2000
+
+// mainManifests reads the manifests on main: what the project really uses,
+// which may differ from what an early request said.
+func mainManifests(ctx context.Context, projectRoot string) string {
+	var parts []string
+	for _, file := range manifestFiles {
+		out, err := workspace.RunGit(ctx, projectRoot, "show", "main:"+file)
+		if err != nil {
+			continue
+		}
+		content := strings.TrimSpace(out)
+		if content == "" {
+			continue
+		}
+		if len(content) > maxManifestChars {
+			content = content[:maxManifestChars] + "\n…"
+		}
+		parts = append(parts, fmt.Sprintf("--- %s ---\n%s", file, content))
+	}
+	return strings.Join(parts, "\n\n")
 }
 
 type doneTask struct {
@@ -63,6 +92,9 @@ func loadPriorWork(ctx context.Context, projectRoot string) priorWork {
 	}
 
 	sort.Slice(prior.done, func(i, j int) bool { return taskNumber(prior.done[i].ID) < taskNumber(prior.done[j].ID) })
+	if len(prior.done) > 0 {
+		prior.files = mainManifests(ctx, projectRoot)
+	}
 	return prior
 }
 
@@ -110,6 +142,13 @@ func (p priorWork) promptSection() string {
 		}
 	}
 	fmt.Fprintf(&sb, "Number the tasks of this plan from %s.\n", p.firstFreeID())
+	if p.files != "" {
+		sb.WriteString("\n# PROJECT FILES ON MAIN\n")
+		sb.WriteString("These files are in the repository now. They are the facts about language version, dependencies and build: " +
+			"plan and write task specs to match them (the go directive in go.mod, say), even where an earlier request in the brief says otherwise, " +
+			"unless the brief asks to change them.\n\n")
+		sb.WriteString(p.files + "\n")
+	}
 	return sb.String()
 }
 

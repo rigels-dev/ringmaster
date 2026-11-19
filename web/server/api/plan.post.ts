@@ -2,6 +2,7 @@ import path from 'node:path'
 import fs from 'node:fs'
 import { ringmasterBinPath, rootTomlPath, resolveProjectDir, runCommand } from '../utils/ringmaster'
 import { briefByStep } from '../../utils/chatSteps.js'
+import { finishedStepCount, currentPlanFinished } from '../utils/chat'
 
 export default defineEventHandler(async (event) => {
   const projectDir = resolveProjectDir()
@@ -190,24 +191,3 @@ export default defineEventHandler(async (event) => {
     }
   }
 })
-
-// How many steps the project has finished, as recorded in steps.json
-function finishedStepCount(projectDir: string): number {
-  try {
-    return JSON.parse(fs.readFileSync(path.join(projectDir, '.ringmaster', 'steps.json'), 'utf-8'))?.steps?.length || 0
-  } catch {
-    return 0
-  }
-}
-
-// Whether every task of the current plan is done
-function currentPlanFinished(projectDir: string): boolean {
-  try {
-    const plan = JSON.parse(fs.readFileSync(path.join(projectDir, '.ringmaster', 'plan.json'), 'utf-8'))
-    const state = JSON.parse(fs.readFileSync(path.join(projectDir, '.ringmaster', 'state.json'), 'utf-8'))
-    const tasks = plan?.tasks || []
-    return tasks.length > 0 && tasks.every((t: any) => state?.task_states?.[t.id]?.status === 'COMPLETED')
-  } catch {
-    return false
-  }
-}
