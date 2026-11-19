@@ -9,7 +9,7 @@
 
         <div class="ml-auto flex items-center gap-3">
           <span class="text-xs" :class="pending > 0 ? 'text-amber-300' : 'text-zinc-400'">
-            {{ pending > 0 ? `${pending} branch${pending === 1 ? '' : 'es'} not pushed` : 'Everything in main is pushed' }}
+            {{ pending > 0 ? pendingLabel : 'Everything is pushed' }}
           </span>
           <button
             v-if="merged.length && !pruneOpen"
@@ -26,7 +26,7 @@
             @click="confirmPush"
             :disabled="pushing"
             class="px-3.5 py-1.5 rounded text-body font-bold border transition bg-gear-gold hover:bg-gear-glow border-gear-gold text-ink disabled:opacity-40 disabled:cursor-not-allowed"
-            title="Push main and the task branches to the remote. Nothing is forced."
+            title="Push main, the task branches and the release tags to the remote. Nothing is forced."
           >
             {{ pushing ? 'Pushing…' : '↑ Push' }}
           </button>
@@ -107,8 +107,8 @@
 
     <GitIdentityNotice :author="status.author" />
 
-    <!-- Push state of each branch -->
-    <div v-if="status.url && status.branches.length" class="flex flex-wrap gap-1.5">
+    <!-- Push state of each branch and release tag -->
+    <div v-if="status.url && (status.branches.length || status.tags.length)" class="flex flex-wrap gap-1.5">
       <span
         v-for="b in status.branches"
         :key="b.name"
@@ -120,6 +120,16 @@
         {{ b.name }}
         <span v-if="b.merged && b.state !== 'synced'" class="font-sans text-zinc-500">· in main</span>
         <span v-if="lastResult[b.name]" class="font-sans" :class="lastResult[b.name] === 'rejected' ? 'text-rose-300' : 'text-zinc-500'">· {{ resultLabel(lastResult[b.name]) }}</span>
+      </span>
+      <span
+        v-for="t in status.tags"
+        :key="`tag ${t.name}`"
+        class="px-2 py-0.5 rounded border text-2xs font-mono flex items-center gap-1.5"
+        :class="stateStyle(t).chip"
+        :title="t.state === 'synced' ? 'Release tag, pushed to the remote' : 'Release tag, only on this machine: Push sends it'"
+      >
+        ◆ {{ t.name }}
+        <span v-if="lastResult[`tag ${t.name}`]" class="font-sans" :class="lastResult[`tag ${t.name}`] === 'rejected' ? 'text-rose-300' : 'text-zinc-500'">· {{ resultLabel(lastResult[`tag ${t.name}`]) }}</span>
       </span>
     </div>
   </div>
@@ -144,7 +154,7 @@ const planFinished = computed(() =>
   tasks.value.every(t => t.status === 'COMPLETED' || t.status === 'DONE')
 )
 
-const status = ref({ url: '', branches: [], author: null })
+const status = ref({ url: '', branches: [], tags: [], author: null })
 const loaded = ref(false)
 const error = ref('')
 const errorHint = ref('')
@@ -156,7 +166,17 @@ const lastResult = ref({}) // branch -> result of the most recent push
 
 // A merged task branch's work goes with main, so only main and unfinished
 // task branches wait on a push
-const pending = computed(() => status.value.branches.filter(b => b.state !== 'synced' && !b.merged).length)
+const unpushedTags = computed(() => status.value.tags.filter(t => t.state !== 'synced'))
+const pending = computed(() =>
+  status.value.branches.filter(b => b.state !== 'synced' && !b.merged).length + unpushedTags.value.length)
+const pendingLabel = computed(() => {
+  const tags = unpushedTags.value.length
+  const branches = pending.value - tags
+  const parts = []
+  if (branches) parts.push(`${branches} branch${branches === 1 ? '' : 'es'}`)
+  if (tags) parts.push(`${tags} release tag${tags === 1 ? '' : 's'}`)
+  return `${parts.join(' and ')} not pushed`
+})
 const merged = computed(() => status.value.branches.filter(b => b.merged))
 const mergedOnRemote = computed(() => merged.value.filter(b => b.state !== 'unpushed').length)
 
@@ -180,7 +200,7 @@ async function load() {
     const res = await fetch('/api/remote')
     const data = await res.json()
     if (!data.ok) throw new Error(data.error || 'Failed to read the remote')
-    status.value = { url: data.url, branches: data.branches, author: data.author }
+    status.value = { url: data.url, branches: data.branches, tags: data.tags || [], author: data.author }
   } catch (err) {
     error.value = err.message
     errorHint.value = ''
@@ -220,10 +240,12 @@ async function saveUrl() {
 // Pushing publishes code, so name the destination and ask first
 function confirmPush() {
   const taskBranches = status.value.branches.filter(b => b.name !== 'main').length
+  const tags = status.value.tags.length
+  const tagPart = tags ? ` and ${tags} release tag${tags === 1 ? '' : 's'}` : ''
   confirmDialog.value = {
     show: true,
     title: 'Push to remote',
-    message: `Push main and ${taskBranches} task branch${taskBranches === 1 ? '' : 'es'} to ${status.value.url}? Everyone with access to that repository will see them. Nothing is overwritten.`,
+    message: `Push main, ${taskBranches} task branch${taskBranches === 1 ? '' : 'es'}${tagPart} to ${status.value.url}? Everyone with access to that repository will see them. Nothing is overwritten.`,
     confirmLabel: 'Push',
     danger: false,
     action: push
@@ -244,7 +266,8 @@ async function push() {
     lastResult.value = Object.fromEntries((data.results || []).map(r => [r.branch, r.result]))
     if (data.ok) {
       const sent = (data.results || []).filter(r => r.result === 'new' || r.result === 'updated').length
-      showToast('Pushed', sent ? `${sent} branch${sent === 1 ? '' : 'es'} sent to the remote.` : 'The remote already had everything.', 'success')
+      showToast('Pushed', sent ? `${sent} branch${sent === 1 ? '' : 'es'} and tag${sent === 1 ? '' : 's'} sent to the remote.` : 'The remote already had everything.', 'success')
+      emit('changed')
     } else {
       error.value = data.error || 'The push failed'
       const rejected = (data.results || []).some(r => r.result === 'rejected')

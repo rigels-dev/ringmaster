@@ -74,9 +74,9 @@ type pushReport struct {
 
 var pushCmd = &cobra.Command{
 	Use:   "push",
-	Short: "Push main and the task branches (rm/Txx) to the project's remote",
-	Long: `Pushes main and every task branch, merged or not, to origin. Other
-branches are left alone. Nothing is ever forced: if the remote has commits
+	Short: "Push main, the task branches and the release tags to the project's remote",
+	Long: `Pushes main, every task branch, merged or not, and the release tags of
+the project's steps to origin. Other branches and tags are left alone. Nothing is ever forced: if the remote has commits
 this project does not, that branch is rejected and reported.
 
 It uses your own git credentials (an SSH key or a credential helper) and
@@ -197,7 +197,7 @@ func buildRemoteView(st remote.Status) string {
 	} else {
 		sb.WriteString("author  Ringmaster (git has no user.name / user.email set; see 'git config --global user.name')\n")
 	}
-	if len(st.Branches) == 0 {
+	if len(st.Branches) == 0 && len(st.Tags) == 0 {
 		return sb.String()
 	}
 	sb.WriteString("\n")
@@ -207,7 +207,7 @@ func buildRemoteView(st remote.Status) string {
 		remote.StateUnpushed: "not pushed",
 	}
 	width := 0
-	for _, b := range st.Branches {
+	for _, b := range append(append([]remote.Branch{}, st.Branches...), st.Tags...) {
 		if len(b.Name) > width {
 			width = len(b.Name)
 		}
@@ -218,6 +218,13 @@ func buildRemoteView(st remote.Status) string {
 			label += ", merged into main"
 		}
 		fmt.Fprintf(&sb, "  %-*s  %s\n", width, b.Name, label)
+	}
+	for _, t := range st.Tags {
+		label := "release tag, pushed"
+		if t.State != remote.StateSynced {
+			label = "release tag, not pushed"
+		}
+		fmt.Fprintf(&sb, "  %-*s  %s\n", width, t.Name, label)
 	}
 	if st.URL != "" && st.Pending() > 0 {
 		fmt.Fprintf(&sb, "\n%d branch(es) to push: ringmaster push\n", st.Pending())

@@ -163,13 +163,13 @@ Project commands work from any subdirectory of a project, the way `go` finds `go
 ```bash
 ringmaster remote set git@github.com:you/project.git
 ringmaster remote        # the remote, and which branches still need pushing
-ringmaster push          # main and every task branch, merged or not
+ringmaster push          # main, every task branch (merged or not) and the release tags
 ringmaster push --main-only
 ringmaster prune         # delete the task branches already merged into main
 ringmaster prune --remote  # and delete them on origin too
 ```
 
-Only `main` and the task branches are pushed, each named explicitly from Ringmaster's own record of its tasks; your other branches are left alone, even ones with similar names. A push is never forced: if the remote has commits this project does not, that branch is rejected and reported. Pushing uses your own git login (an SSH key or a credential helper) and never prompts, so a missing login fails at once. Ringmaster refuses a URL with credentials in it, since it would be stored in `.git/config`.
+Only `main`, the task branches and the steps' release tags are pushed, each named explicitly from Ringmaster's own record; your other branches and tags are left alone, even ones with similar names. A release tagged without pushing (**Tag only**, or `ringmaster release` without `--push`) shows as *not pushed* in Branches and goes with the next push. A push is never forced: if the remote has commits this project does not, that branch is rejected and reported. Pushing uses your own git login (an SSH key or a credential helper) and never prompts, so a missing login fails at once. Ringmaster refuses a URL with credentials in it, since it would be stored in `.git/config`.
 
 A task branch merged into `main` does not need pushing: its commits go with `main`. So once `main` (and any unfinished task branch) is on the remote, the Branches view says everything is pushed. Merged task branches can then be deleted with **Delete merged branches…** or `ringmaster prune`. The work stays in `main`'s history; only the branch names go. `main`, unfinished task branches, branches checked out in a worktree and your own branches are never deleted. With `--remote` (or the checkbox in the web UI) they are deleted on origin too, unless someone has moved the branch there since this project last saw it.
 

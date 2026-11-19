@@ -1,5 +1,5 @@
 // Package remote connects a project to a git remote and pushes Ringmaster's
-// branches to it: main, plus the rm/Txx task branches.
+// branches to it: main, the task branches, and the steps' release tags.
 package remote
 
 import (
@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"ringmaster/internal/schemas"
+	"ringmaster/internal/steps"
 	"ringmaster/internal/storage"
 	"ringmaster/internal/workspace"
 )
@@ -59,6 +60,10 @@ type Status struct {
 	// Author is who the project's commits are attributed to, which is what a
 	// git host will show once they are pushed.
 	Author workspace.Author `json:"author"`
+	// Tags are the release tags of the project's steps. Git keeps no record
+	// of which tags a remote has, so a tag counts as pushed once Ringmaster
+	// has pushed it to this remote; until then it is "unpushed".
+	Tags []Branch `json:"tags"`
 }
 
 // Pending counts the branches whose work is not on the remote yet: main, and
@@ -69,6 +74,11 @@ func (s Status) Pending() int {
 	n := 0
 	for _, b := range s.Branches {
 		if b.State != StateSynced && !b.Merged {
+			n++
+		}
+	}
+	for _, t := range s.Tags {
+		if t.State != StateSynced {
 			n++
 		}
 	}
@@ -171,6 +181,15 @@ func GetStatus(ctx context.Context, projectRoot string) (Status, error) {
 		URL:      URL(ctx, projectRoot),
 		Branches: []Branch{},
 		Author:   workspace.CommitAuthor(ctx, projectRoot),
+		Tags:     []Branch{},
+	}
+	pushedTags := pushedTagsOf(projectRoot, st.URL)
+	for _, tag := range releaseTags(ctx, projectRoot) {
+		state := StateUnpushed
+		if pushedTags[tag] {
+			state = StateSynced
+		}
+		st.Tags = append(st.Tags, Branch{Name: tag, State: state})
 	}
 
 	out, err := workspace.RunGit(ctx, projectRoot, "for-each-ref",
@@ -406,7 +425,83 @@ func Push(ctx context.Context, projectRoot string, mainOnly bool) ([]PushResult,
 			refspecs = append(refspecs, "refs/heads/"+branch+":refs/heads/"+branch)
 		}
 	}
-	return push(ctx, projectRoot, refspecs)
+	// A release tagged without pushing goes with the next push
+	for _, tag := range releaseTags(ctx, projectRoot) {
+		refspecs = append(refspecs, "refs/tags/"+tag+":refs/tags/"+tag)
+	}
+	results, err := push(ctx, projectRoot, refspecs)
+	recordPushedTags(ctx, projectRoot, results)
+	return results, err
+}
+
+// releaseTags lists the tags on the commits where the project's steps
+// ended: its releases. Other tags are the user's and are never pushed.
+func releaseTags(ctx context.Context, projectRoot string) []string {
+	list, err := steps.List(ctx, projectRoot)
+	if err != nil {
+		return nil
+	}
+	var tags []string
+	for _, s := range list {
+		for _, tag := range s.Releases {
+			if !strings.HasPrefix(tag, "-") && !slices.Contains(tags, tag) {
+				tags = append(tags, tag)
+			}
+		}
+	}
+	return tags
+}
+
+// pushRecord is .ringmaster/remote.json: the release tags pushed to URL.
+type pushRecord struct {
+	URL  string   `json:"url"`
+	Tags []string `json:"pushed_tags"`
+}
+
+func pushRecordPath(projectRoot string) string {
+	return filepath.Join(projectRoot, ".ringmaster", "remote.json")
+}
+
+// pushedTagsOf returns the tags pushed to remoteURL. A record for another
+// URL does not count: the remote was changed since.
+func pushedTagsOf(projectRoot, remoteURL string) map[string]bool {
+	pushed := map[string]bool{}
+	rec, err := storage.ReadJSON[pushRecord](pushRecordPath(projectRoot))
+	if err != nil || rec == nil || remoteURL == "" || rec.URL != remoteURL {
+		return pushed
+	}
+	for _, tag := range rec.Tags {
+		pushed[tag] = true
+	}
+	return pushed
+}
+
+// recordPushedTags notes the tags a push left on the remote: sent now, or
+// already there.
+func recordPushedTags(ctx context.Context, projectRoot string, results []PushResult) {
+	remoteURL := URL(ctx, projectRoot)
+	if remoteURL == "" {
+		return
+	}
+	pushed := pushedTagsOf(projectRoot, remoteURL)
+	changed := false
+	for _, r := range results {
+		tag, isTag := strings.CutPrefix(r.Branch, "tag ")
+		if !isTag || r.Result == ResultRejected || pushed[tag] {
+			continue
+		}
+		pushed[tag] = true
+		changed = true
+	}
+	if !changed {
+		return
+	}
+	tags := make([]string, 0, len(pushed))
+	for tag := range pushed {
+		tags = append(tags, tag)
+	}
+	sort.Strings(tags)
+	_ = storage.WriteJSONAtomic(pushRecordPath(projectRoot), pushRecord{URL: remoteURL, Tags: tags})
 }
 
 // TaskBranches lists the task branches that exist in the repository: the
@@ -455,10 +550,12 @@ func PushRelease(ctx context.Context, projectRoot, tag string) ([]PushResult, er
 	if tag == "" || strings.HasPrefix(tag, "-") {
 		return nil, errors.New("no release tag to push")
 	}
-	return push(ctx, projectRoot, []string{
+	results, err := push(ctx, projectRoot, []string{
 		"refs/heads/" + MainBranch + ":refs/heads/" + MainBranch,
 		"refs/tags/" + tag + ":refs/tags/" + tag,
 	})
+	recordPushedTags(ctx, projectRoot, results)
+	return results, err
 }
 
 func push(ctx context.Context, projectRoot string, refspecs []string) ([]PushResult, error) {
