@@ -40,7 +40,7 @@
           <button @click="startRename(s)" class="text-xs text-zinc-500 hover:text-zinc-300 underline">Rename</button>
         </template>
 
-        <span class="ml-auto text-2xs px-2 py-0.5 rounded border font-bold whitespace-nowrap" :class="stateOf(s).cls">
+        <span class="ml-auto text-2xs px-2 py-0.5 rounded border font-bold whitespace-nowrap" :class="stateOf(s).cls" :title="stateOf(s).title">
           {{ stateOf(s).label }}
         </span>
       </div>
@@ -103,7 +103,7 @@
             <span v-if="sg.kind === info.recommended" class="text-emerald-400"> ★</span>
           </button>
         </div>
-        <form @submit.prevent="release(s, false)" class="flex flex-wrap items-center gap-2">
+        <form @submit.prevent="remoteUrl ? confirmReleaseAndPush(s) : release(s, false)" class="flex flex-wrap items-center gap-2">
           <input
             v-model="version"
             type="text"
@@ -113,20 +113,23 @@
             aria-label="Release version"
             class="w-56 bg-slate-inner border border-steel text-parchment text-body font-mono px-3 py-2 rounded focus:outline-none focus:border-gear-gold"
           />
+          <!-- With a remote, publishing is the usual aim: tagging only is the second choice -->
           <button
+            v-if="remoteUrl"
             type="submit"
             :disabled="busy || !version.trim()"
             class="px-3.5 py-2 rounded text-body font-bold bg-gear-gold hover:bg-gear-glow text-ink disabled:opacity-40 disabled:cursor-not-allowed"
-            title="Tag the end of this step as a release. Nothing leaves your machine."
-          >{{ busy ? 'Working…' : 'Tag release' }}</button>
-          <button
-            v-if="remoteUrl"
-            type="button"
-            @click="confirmReleaseAndPush(s)"
-            :disabled="busy || !version.trim()"
-            class="px-3.5 py-2 rounded text-body font-bold border border-gear-dark text-gear-gold hover:bg-slate-dark disabled:opacity-40 disabled:cursor-not-allowed"
             title="Tag the release, then push main and the tag to the remote"
-          >Tag and push</button>
+          >{{ busy ? 'Working…' : 'Tag and push' }}</button>
+          <button
+            :type="remoteUrl ? 'button' : 'submit'"
+            @click="remoteUrl && release(s, false)"
+            :disabled="busy || !version.trim()"
+            :class="remoteUrl
+              ? 'px-3.5 py-2 rounded text-body border border-steel text-zinc-300 bg-slate-panel hover:bg-slate-dark disabled:opacity-40 disabled:cursor-not-allowed'
+              : 'px-3.5 py-2 rounded text-body font-bold bg-gear-gold hover:bg-gear-glow text-ink disabled:opacity-40 disabled:cursor-not-allowed'"
+            :title="remoteUrl ? 'Tag the release on this machine only. Push sends it later.' : 'Tag the end of this step as a release. Nothing leaves your machine.'"
+          >{{ busy && !remoteUrl ? 'Working…' : remoteUrl ? 'Tag only' : 'Tag release' }}</button>
           <button type="button" @click="openStep = 0" class="text-xs text-zinc-400 hover:text-zinc-200">Cancel</button>
         </form>
       </div>
@@ -148,6 +151,7 @@ const { showToast, confirmDialog } = useRingmaster()
 
 const info = ref({ latest: '', suggestions: [], recommended: '' })
 const remoteUrl = ref('')
+const unpushedTags = ref([])
 const openStep = ref(0)
 const version = ref('')
 const busy = ref(false)
@@ -162,7 +166,15 @@ const KIND = { first: 'first release', patch: 'fixes only', minor: 'new features
 const kindLabel = (k) => KIND[k] || k
 
 function stateOf(s) {
-  if (s.releases.length) return { label: `Released ${s.releases.join(', ')}`, cls: 'bg-green-950 text-green-400 border-green-800' }
+  if (s.releases.length) {
+    // A tag made without pushing exists only on this machine
+    const local = remoteUrl.value ? s.releases.filter(t => unpushedTags.value.includes(t)) : []
+    if (local.length) {
+      return { label: `Tagged ${s.releases.join(', ')} · not pushed`, cls: 'bg-amber-950 text-amber-300 border-amber-700',
+        title: 'The tag is only on this machine. Push it with Push in the Remote panel above.' }
+    }
+    return { label: `Released ${s.releases.join(', ')}`, cls: 'bg-green-950 text-green-400 border-green-800' }
+  }
   if (s.closed) return { label: 'Finished without release', cls: 'bg-slate-inner text-zinc-400 border-steel' }
   return { label: 'Not released', cls: 'bg-amber-950 text-amber-300 border-amber-700' }
 }
@@ -189,6 +201,7 @@ async function loadInfo() {
   try {
     const data = await (await fetch('/api/remote')).json()
     remoteUrl.value = data.ok ? data.url : ''
+    unpushedTags.value = data.ok ? (data.tags || []).filter(t => t.state !== 'synced').map(t => t.name) : []
   } catch {}
 }
 
@@ -294,7 +307,12 @@ async function release(s, push) {
   }
 }
 
-watch(() => props.steps, openNewestPending)
+// The remote may have been set or pushed to since: "Tag and push" and the
+// pushed state of each release depend on it
+watch(() => props.steps, async () => {
+  await loadInfo()
+  openNewestPending()
+})
 onMounted(async () => {
   await loadInfo()
   openNewestPending()

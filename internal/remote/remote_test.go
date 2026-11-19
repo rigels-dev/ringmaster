@@ -429,3 +429,66 @@ func TestPruneOnRemote(t *testing.T) {
 		t.Errorf("rm/T04 = %v (%+v)", got["rm/T04"], rs)
 	}
 }
+
+// A release tagged without pushing goes with the next push, and the status
+// says whether it is on the remote. Tags that are not a step's release are
+// never pushed.
+func TestPushSendsReleaseTags(t *testing.T) {
+	ctx := context.Background()
+	dir := project(t)
+	remotePath, remoteURL := bareRemote(t)
+	if err := SetURL(ctx, dir, remoteURL); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Push(ctx, dir, true); err != nil {
+		t.Fatal(err)
+	}
+
+	// Step 1 ends at main and is released as v0.1.0, locally only
+	mainSha := git(t, dir, "rev-parse", "main")
+	steps := `{"steps":[{"number":1,"plan_hash":"x","tasks":["T01"],"commit":"` + mainSha + `","finished_at":"2026-11-19T08:08:00Z"}]}`
+	if err := os.MkdirAll(filepath.Join(dir, ".ringmaster"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, ".ringmaster", "steps.json"), []byte(steps), 0644); err != nil {
+		t.Fatal(err)
+	}
+	git(t, dir, "tag", "-a", "-m", "release", "v0.1.0")
+	git(t, dir, "tag", "mine", "rm/T02") // the user's own tag, on another commit
+
+	st, _ := GetStatus(ctx, dir)
+	if len(st.Tags) != 1 || st.Tags[0].Name != "v0.1.0" || st.Tags[0].State != StateUnpushed {
+		t.Fatalf("tags = %+v, want v0.1.0 not pushed", st.Tags)
+	}
+	if st.Pending() == 0 {
+		t.Fatal("an unpushed release tag does not count as waiting on a push")
+	}
+
+	rs, err := Push(ctx, dir, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if results(rs)["tag v0.1.0"] != ResultNew {
+		t.Fatalf("push = %+v, want the tag sent", rs)
+	}
+	onRemote := git(t, remotePath, "tag")
+	if onRemote != "v0.1.0" {
+		t.Fatalf("remote tags = %q, want only the release tag", onRemote)
+	}
+
+	st, _ = GetStatus(ctx, dir)
+	if st.Tags[0].State != StateSynced || st.Pending() != 1 {
+		// rm/T02 is unmerged and was not pushed with --main-only
+		t.Fatalf("after the push: tags = %+v, pending = %d", st.Tags, st.Pending())
+	}
+
+	// Another remote has not had it
+	other, otherURL := bareRemote(t)
+	_ = other
+	if err := SetURL(ctx, dir, otherURL); err != nil {
+		t.Fatal(err)
+	}
+	if st, _ = GetStatus(ctx, dir); st.Tags[0].State != StateUnpushed {
+		t.Fatalf("after changing the remote: tags = %+v", st.Tags)
+	}
+}
