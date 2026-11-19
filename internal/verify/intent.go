@@ -45,6 +45,10 @@ const (
 	OptionChangeAcceptance = "Change the acceptance commands, then check again"
 	OptionRaisedTimeout    = "I raised acceptance_timeout: try again"
 	OptionRetryAsIs        = "Try again as it is"
+	// OptionAllowTestEdits lets the task change existing tests from then on
+	// (TaskState.EditsTests), which no answer to the automaton can do
+	OptionAllowTestEdits = "Let this task change the existing tests it needs to"
+	OptionKeepTests      = "Keep the existing tests: make the code pass them"
 )
 
 // What a stopped task asks the user, for stops that are not already

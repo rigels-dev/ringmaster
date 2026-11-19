@@ -99,9 +99,14 @@ Examples:
   ringmaster answer T06 --reply r2=distroless --reply r3=API_KEY
   ringmaster answer T02 --text "Drop the gofmt check; go vet covers it."
   ringmaster answer T13 --acceptance "go test ./..." --acceptance "go vet ./..."
+  ringmaster answer T07 --allow-test-edits --text "TestE2EWrongMethodIsNot2xx is outdated: drop its GET /api/links case."
 
 --acceptance replaces the task's acceptance commands (repeat it for each
-command to keep). An automaton cannot skip or change a check; this can.`,
+command to keep). An automaton cannot skip or change a check; this can.
+
+--allow-test-edits lets a task that may not change existing tests change
+them from now on; telling the automaton to edit one is not enough, since
+Ringmaster puts protected tests back before every check.`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		ans := schemas.HumanAnswer{TaskID: strings.ToUpper(args[0])}
@@ -112,6 +117,13 @@ command to keep). An automaton cannot skip or change a check; this can.`,
 		if len(ans.Acceptance) > 0 && ans.Replies == nil {
 			// Say which way the task goes on, as the web UI does
 			ans.Replies = map[string]string{verify.NextStepID: verify.OptionChangeAcceptance}
+		}
+
+		if allow, _ := cmd.Flags().GetBool("allow-test-edits"); allow {
+			if ans.Replies == nil {
+				ans.Replies = map[string]string{}
+			}
+			ans.Replies[verify.TestEditsID] = verify.OptionAllowTestEdits
 		}
 
 		replies, _ := cmd.Flags().GetStringArray("reply")
@@ -126,7 +138,7 @@ command to keep). An automaton cannot skip or change a check; this can.`,
 			ans.Replies[strings.TrimSpace(id)] = strings.TrimSpace(value)
 		}
 		if strings.TrimSpace(ans.Text) == "" && len(ans.Replies) == 0 && len(ans.Allow) == 0 {
-			return fmt.Errorf("nothing to answer: pass --text, --reply, --allow or --acceptance")
+			return fmt.Errorf("nothing to answer: pass --text, --reply, --allow, --acceptance or --allow-test-edits")
 		}
 
 		projectDir, err := ResolveProjectDir()
@@ -158,6 +170,7 @@ func init() {
 	answerCmd.Flags().StringArray("allow", nil, "Approve a command beyond the sandbox allow list (repeatable)")
 	answerCmd.Flags().String("scope", "task", "Approval scope for --allow: task or project")
 	answerCmd.Flags().StringArray("acceptance", nil, "Replace the task's acceptance commands (repeatable, one per command)")
+	answerCmd.Flags().Bool("allow-test-edits", false, "Let the task change existing test files from now on")
 
 	RootCmd.AddCommand(runCmd)
 	RootCmd.AddCommand(answerCmd)

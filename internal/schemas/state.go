@@ -29,8 +29,12 @@ type TaskState struct {
 	Usage    Usage               `json:"usage"`
 	Error    string              `json:"error,omitempty"`
 	Requests []HumanRequest      `json:"requests,omitempty"`
-	StartAt  *time.Time          `json:"start_at,omitempty"`
-	FinishAt *time.Time          `json:"finish_at,omitempty"`
+	// EditsTests is set when the user let this task change existing tests
+	// after it stopped over one; the approved plan's edits_tests does the
+	// same from the start. Only the user's answer sets it, never the task file.
+	EditsTests bool       `json:"edits_tests,omitempty"`
+	StartAt    *time.Time `json:"start_at,omitempty"`
+	FinishAt   *time.Time `json:"finish_at,omitempty"`
 }
 
 type ProjectState struct {
