@@ -121,17 +121,18 @@ func ValidateVersion(ctx context.Context, projectRoot, version string) error {
 	return nil
 }
 
-// Tag marks main's tip as release version with an annotated tag. It refuses
-// to move or replace a tag: a version that exists is a release already made.
-func Tag(ctx context.Context, projectRoot, version string) error {
+// Tag marks main's tip as release version with an annotated tag whose
+// message carries notes. It refuses to move or replace a tag: a version that
+// exists is a release already made.
+func Tag(ctx context.Context, projectRoot, version, notes string) error {
 	if _, err := workspace.RunGit(ctx, projectRoot, "rev-parse", "--verify", "--quiet", "refs/heads/"+MainBranch); err != nil {
 		return fmt.Errorf("the project has no %q branch to release", MainBranch)
 	}
-	return TagAt(ctx, projectRoot, version, "refs/heads/"+MainBranch)
+	return TagAt(ctx, projectRoot, version, "refs/heads/"+MainBranch, notes)
 }
 
 // TagAt is Tag for a given commit of main, such as the end of an earlier step.
-func TagAt(ctx context.Context, projectRoot, version, commit string) error {
+func TagAt(ctx context.Context, projectRoot, version, commit, notes string) error {
 	if err := ValidateVersion(ctx, projectRoot, version); err != nil {
 		return err
 	}
@@ -144,7 +145,23 @@ func TagAt(ctx context.Context, projectRoot, version, commit string) error {
 	if _, err := workspace.RunGit(ctx, projectRoot, "rev-parse", "--verify", "--quiet", "refs/tags/"+version); err == nil {
 		return fmt.Errorf("%s already exists; choose another version", version)
 	}
-	if _, err := workspace.RunGit(ctx, projectRoot, "tag", "-a", version, "-m", "Release "+version, commit); err != nil {
+	if err := CheckNotes(notes); err != nil {
+		return err
+	}
+	msg, err := os.CreateTemp("", "ringmaster-tag-*.txt")
+	if err != nil {
+		return err
+	}
+	defer os.Remove(msg.Name())
+	_, err = msg.WriteString(TagMessage(version, notes))
+	if cerr := msg.Close(); err == nil {
+		err = cerr
+	}
+	if err != nil {
+		return err
+	}
+	// Verbatim, or git would drop the notes' "### Features" lines as comments
+	if _, err := workspace.RunGit(ctx, projectRoot, "tag", "-a", "--cleanup=verbatim", "-F", msg.Name(), version, commit); err != nil {
 		return err
 	}
 	return nil
