@@ -98,12 +98,16 @@
     </aside>
 
     <!-- Global Floating Toast Notification System (Replaces browser alert) -->
-    <!-- Bottom-left of the content area: clear of the sidebar (w-64) and of the terminal bubble on the right -->
-    <div class="fixed bottom-5 left-[17.25rem] z-50 flex flex-col gap-2 pointer-events-none max-w-sm">
-      <div 
-        v-for="toast in toastList" 
+    <!-- Top right, where the eye goes after an action: clear of the terminal bubble
+         (bottom right) and the chat input, and above dialogs (z-50), so a toast
+         raised from an open task is still seen -->
+    <div class="fixed top-4 right-4 left-4 sm:left-auto z-[60] flex flex-col items-end gap-2 pointer-events-none">
+      <div
+        v-for="toast in toastList"
         :key="toast.id"
-        class="p-4 rounded-xl shadow-2xl border backdrop-blur-md text-body pointer-events-auto transition-all duration-300"
+        :role="toast.type === 'error' ? 'alert' : 'status'"
+        :aria-live="toast.type === 'error' ? 'assertive' : 'polite'"
+        class="w-full sm:w-96 p-4 rounded-xl shadow-2xl border backdrop-blur-md text-body pointer-events-auto transition-all duration-300"
         :class="{
           'bg-slate-dark/95 border-green-500/50 text-parchment shadow-green-500/10': toast.type === 'success',
           'bg-slate-dark/95 border-red-500/50 text-parchment shadow-red-500/10': toast.type === 'error',
@@ -124,7 +128,7 @@
               <span v-if="toast.meta.tokens">Tokens: <strong class="text-zinc-300">{{ toast.meta.tokens }}</strong></span>
             </div>
           </div>
-          <button @click="dismissToast(toast.id)" class="text-zinc-500 hover:text-zinc-300 text-body">✕</button>
+          <button @click="dismissToast(toast.id)" aria-label="Close" class="text-zinc-500 hover:text-zinc-300 text-body">✕</button>
         </div>
       </div>
     </div>
