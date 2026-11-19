@@ -95,12 +95,17 @@ func (c *ClaudeSubscriptionClient) Chat(ctx context.Context, model string, req C
 	// As a worker, Claude Code works in the task workspace with its own tools:
 	// file edits are auto-accepted there, and Bash is limited to the sandbox allow list.
 	if req.WorkDir != "" {
-		allowed := []string{"Read", "Edit", "Write", "Glob", "Grep"}
+		// File access is allowed in the workspace only: a bare "Read" or "Edit"
+		// rule would allow it anywhere. Edit rules cover Write too, and Glob and
+		// Grep only read. workerSettings makes Claude Code itself refuse reads
+		// and writes outside the workspace.
+		allowed := []string{"Read(./**)", "Edit(./**)", "Glob", "Grep"}
 		for _, command := range req.AllowedCommands {
 			allowed = append(allowed, fmt.Sprintf("Bash(%s:*)", command))
 		}
 		args = append(args,
 			"--permission-mode", "acceptEdits",
+			"--settings", workerSettings,
 			"--allowedTools", strings.Join(allowed, ","),
 		)
 		// Deny rules win over allow rules, so npm publish stays refused under npm
@@ -205,6 +210,14 @@ func (c *ClaudeSubscriptionClient) Chat(ctx context.Context, model string, req C
 
 // claudeUsage counts every input token the model processed: the uncached
 // input plus prompt-cache writes and reads, with the reads also kept apart.
+// workerSettings keeps Claude Code's file tools (Read, Glob, Grep, Edit,
+// Write) inside the working directory, the task workspace, in every
+// permission mode. It does not cover shell commands: an allowed command such
+// as go test still runs with the user's permissions. Claude Code versions
+// older than 2.1.314 do not know these keys and ignore them; the
+// workspace-only allow rules above still apply there.
+const workerSettings = `{"permissions":{"blockReadsOutsideWorkingDirectories":true,"blockWritesOutsideWorkingDirectories":true}}`
+
 func claudeUsage(input, cacheWrite, cacheRead, output int, costUSD float64) TokenUsage {
 	prompt := input + cacheWrite + cacheRead
 	return TokenUsage{

@@ -2,6 +2,7 @@ package llm
 
 import (
 	"context"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -196,6 +197,25 @@ echo '{"type":"result","subtype":"success","is_error":false,"result":"Done.","us
 	}
 	if got := value("--allowedTools"); !strings.Contains(got, "Bash(npm:*)") || !strings.Contains(got, "Bash(go test:*)") {
 		t.Errorf("--allowedTools = %q", got)
+	}
+	// File tools are allowed in the workspace only, and Claude Code refuses the rest
+	got := value("--allowedTools")
+	for _, bare := range []string{"Read,", "Edit,", "Write,", ",Read", ",Edit", ",Write"} {
+		if strings.Contains(","+got+",", ","+strings.Trim(bare, ",")+",") {
+			t.Errorf("--allowedTools grants %s everywhere: %q", strings.Trim(bare, ","), got)
+		}
+	}
+	if !strings.HasPrefix(got, "Read(./**),Edit(./**),") {
+		t.Errorf("--allowedTools = %q", got)
+	}
+	var settings struct {
+		Permissions map[string]bool `json:"permissions"`
+	}
+	if err := json.Unmarshal([]byte(value("--settings")), &settings); err != nil {
+		t.Fatalf("--settings is not JSON: %v", err)
+	}
+	if !settings.Permissions["blockReadsOutsideWorkingDirectories"] || !settings.Permissions["blockWritesOutsideWorkingDirectories"] {
+		t.Errorf("--settings = %s", value("--settings"))
 	}
 	if got := value("--disallowedTools"); got != "Bash(npm publish:*),Bash(git push:*)" {
 		t.Errorf("--disallowedTools = %q", got)
