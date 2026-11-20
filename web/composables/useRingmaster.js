@@ -1077,6 +1077,12 @@ function createRingmaster() {
   const runConsoleRef = ref(null)
   const logsPageRef = ref(null)
 
+  // The console mounts when the Tasks view opens, often after the logs have
+  // loaded; start it at the newest line, as a live run would show it
+  watch(runConsoleRef, (el) => {
+    if (el) nextTick(() => { el.scrollTop = el.scrollHeight })
+  })
+
   function logLineClass(log) {
     if (log.includes('error') || log.includes('stderr') || log.includes('❌')) return 'text-rose-400 font-semibold'
     if (log.includes('✓') || log.includes('★') || log.includes('passed')) return 'text-green-400 font-semibold'

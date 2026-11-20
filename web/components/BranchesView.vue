@@ -13,7 +13,7 @@
         <RemotePanel :refresh-key="refreshKey" @changed="refresh" />
 
         <!-- Finished plans: release them, or finish them without a release -->
-        <StepsPanel :steps="steps" @changed="refresh" />
+        <StepsPanel :steps="steps" :loaded="stepsLoaded" @changed="refresh" />
 
         <!-- Summary -->
         <div v-if="branches.length" class="p-3 rounded-lg border border-steel bg-slate-panel flex flex-wrap gap-x-6 gap-y-2 text-body font-mono text-zinc-400">
@@ -252,12 +252,15 @@ function refresh() {
 }
 
 const steps = ref([])
+// False until the first answer, so the panel does not say "no step yet" while loading
+const stepsLoaded = ref(false)
 const stepAt = computed(() => Object.fromEntries(steps.value.map((st) => [st.commit, st])))
 async function loadSteps() {
   try {
     const json = await (await fetch('/api/steps')).json()
     if (json.ok) steps.value = json.steps
   } catch {}
+  stepsLoaded.value = true
 }
 
 async function load() {

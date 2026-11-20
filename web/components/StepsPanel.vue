@@ -7,7 +7,8 @@
       </p>
     </div>
 
-    <p v-if="!steps.length" class="text-xs text-zinc-500">
+    <p v-if="!loaded" class="text-xs text-zinc-500">Loading steps…</p>
+    <p v-else-if="!steps.length" class="text-xs text-zinc-500">
       No finished step yet. A plan becomes a step once all its tasks are done and merged.
     </p>
 
@@ -182,7 +183,9 @@
 import { ref, computed, watch, onMounted } from 'vue'
 
 const props = defineProps({
-  steps: { type: Array, default: () => [] }
+  steps: { type: Array, default: () => [] },
+  // False while the steps are still being fetched
+  loaded: { type: Boolean, default: true }
 })
 const emit = defineEmits(['changed'])
 

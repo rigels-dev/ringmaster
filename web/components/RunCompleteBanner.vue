@@ -1,5 +1,6 @@
 <template>
-  <div class="mb-6 p-4 rounded-xl border border-green-700/60 bg-green-950/30 space-y-3">
+  <!-- Shown once the steps are known, so it never offers to release a step that already has a release -->
+  <div v-if="loaded" class="mb-6 p-4 rounded-xl border border-green-700/60 bg-green-950/30 space-y-3">
     <!-- What the run did -->
     <div class="flex flex-wrap items-center gap-x-3 gap-y-1">
       <span class="text-xs font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-green-500 text-ink">
@@ -40,6 +41,7 @@ import { ref, computed, onMounted } from 'vue'
 const { tasks, setView, project } = useRingmaster()
 
 const steps = ref([])
+const loaded = ref(false)
 
 const attempts = computed(() =>
   tasks.value.reduce((n, t) => n + (project.value.state?.task_states?.[t.id]?.attempt || 0), 0)
@@ -55,5 +57,6 @@ onMounted(async () => {
     const data = await (await fetch('/api/steps')).json()
     if (data.ok) steps.value = data.steps
   } catch {}
+  loaded.value = true
 })
 </script>
