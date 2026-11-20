@@ -8,7 +8,7 @@
 
 Describe what you want built. Ringmaster plans it as a graph of tasks, gives each task to an AI worker in its own git worktree, runs real checks on the result, and merges only what passes into `main`. You watch, answer questions and approve from a web UI or the terminal.
 
-Current release: **v0.13.4-mira** · Linux and macOS · MIT
+Current release: **v0.13.5-mira** · Linux and macOS · MIT
 
 <p align="center"><img src="docs/assets/screenshots/demo.gif" alt="A tour of a finished Ringmaster project: providers and agents, tasks, a worker's transcript, branches, logs and analytics" /></p>
 
