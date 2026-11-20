@@ -80,6 +80,22 @@ var popularProviders = []ProviderOption{
 		},
 	},
 	{
+		ID:          "gemini",
+		Name:        "Google Gemini",
+		Description: "Gemini models through Google AI Studio",
+		AuthMethods: []AuthMethodOption{
+			{
+				ID:          "api_key",
+				Label:       "Google AI Studio API key",
+				Description: "generativelanguage.googleapis.com, OpenAI-compatible (GEMINI_API_KEY)",
+				Type:        "openai",
+				BaseURL:     "https://generativelanguage.googleapis.com/v1beta/openai",
+				DefaultEnv:  "GEMINI_API_KEY",
+				NeedsInput:  false,
+			},
+		},
+	},
+	{
 		ID:          "openrouter",
 		Name:        "OpenRouter",
 		Description: "Unified gateway to Claude, Llama, Gemini, etc.",
