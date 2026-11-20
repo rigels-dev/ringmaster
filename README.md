@@ -10,10 +10,7 @@ Describe what you want built. Ringmaster plans it as a graph of tasks, gives eac
 
 Current release: **v0.13.4-mira** · Linux and macOS · MIT
 
-<!--
-  Demo: add docs/assets/screenshots/demo.gif (30–60 s: brief → plan → run → merged) and uncomment.
-  <p align="center"><img src="docs/assets/screenshots/demo.gif" alt="Ringmaster planning and running a project" /></p>
--->
+<p align="center"><img src="docs/assets/screenshots/demo.gif" alt="A tour of a finished Ringmaster project: tasks, a worker's transcript, branches, logs and analytics" /></p>
 
 ## Why Ringmaster
 
@@ -24,14 +21,13 @@ Current release: **v0.13.4-mira** · Linux and macOS · MIT
 - **Parallel by default.** Independent tasks run at the same time, each on its own branch; dependent ones start from the branch they depend on.
 - **Everything visible.** Live logs per worker, transcripts of every attempt, and tokens, cost and time per task.
 
-<!--
-  Screenshots: add the files to docs/assets/screenshots/ and uncomment.
-  | Plan approval | Task detail |
-  |---|---|
-  | <img src="docs/assets/screenshots/tasks.png" alt="Task DAG and plan approval" /> | <img src="docs/assets/screenshots/question.png" alt="A task waiting for an answer" /> |
-  | **Branches** | **Logs** |
-  | <img src="docs/assets/screenshots/branches.png" alt="Commit graph per task branch" /> | <img src="docs/assets/screenshots/logs.png" alt="Live logs, one lane per worker" /> |
--->
+| Tasks | Branches |
+|---|---|
+| <img src="docs/assets/screenshots/tasks.png" alt="Task cards with their branches, dependencies and automatons" /> | <img src="docs/assets/screenshots/branches.png" alt="Three steps, each released, and the commit graph of the task branches" /> |
+| **Logs** | **Analytics** |
+| <img src="docs/assets/screenshots/logs.png" alt="A worker's steps from dispatch to merge" /> | <img src="docs/assets/screenshots/analytics.png" alt="Tokens, cost and time per task and per agent" /> |
+
+<p align="center"><img src="docs/assets/screenshots/providers.png" width="80%" alt="Providers and agents: Claude, Gemini and DeepSeek models side by side, one as the master and the rest as automatons" /><br /><sub>One fleet, many models: pick a master to plan and any mix of automatons to do the work.</sub></p>
 
 ## How it works
 
