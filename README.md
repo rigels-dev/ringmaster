@@ -17,7 +17,7 @@ Current release: **v0.13.4-mira** · Linux and macOS · MIT
 - **Checks, not trust.** Ringmaster runs each task's acceptance commands itself instead of believing the worker's report. A worker's edits to existing tests are undone before the checks run, so a test cannot be passed by rewriting it.
 - **Nothing runs without you.** You approve the plan before any work starts. A worker that needs a command outside its allowlist, a decision or a value only you know stops and asks.
 - **Your repository, your history.** It works in an existing repo without adding anything to git. Every attempt is a commit under your name, tagged with the task and the model that made it. Nothing leaves your machine until you push.
-- **Any model, side by side.** OpenAI-compatible APIs (OpenAI, OpenRouter, Ollama, vLLM, DeepSeek and others), the Anthropic API, and a Claude subscription through the Claude Code CLI. Use a strong model to plan and cheaper ones to do the work.
+- **Any model, side by side.** OpenAI-compatible APIs (OpenAI, Google Gemini, OpenRouter, DeepSeek, Ollama, vLLM and others), the Anthropic API, and a Claude subscription through the Claude Code CLI. Use a strong model to plan and cheaper ones to do the work. See [adding a provider](docs/guide/configuration.md#adding-a-provider).
 - **Parallel by default.** Independent tasks run at the same time, each on its own branch; dependent ones start from the branch they depend on.
 - **Everything visible.** Live logs per worker, transcripts of every attempt, and tokens, cost and time per task.
 
