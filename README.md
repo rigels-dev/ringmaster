@@ -10,7 +10,7 @@ Describe what you want built. Ringmaster plans it as a graph of tasks, gives eac
 
 Current release: **v0.13.4-mira** · Linux and macOS · MIT
 
-<p align="center"><img src="docs/assets/screenshots/demo.gif" alt="A tour of a finished Ringmaster project: tasks, a worker's transcript, branches, logs and analytics" /></p>
+<p align="center"><img src="docs/assets/screenshots/demo.gif" alt="A tour of a finished Ringmaster project: providers and agents, tasks, a worker's transcript, branches, logs and analytics" /></p>
 
 ## Why Ringmaster
 
