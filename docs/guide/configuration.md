@@ -38,7 +38,45 @@ default_master = "planner"
 default_worker = "haiku"
 ```
 
-Supported providers: OpenAI-compatible APIs (OpenAI, OpenRouter, Ollama, vLLM, DeepSeek and others), the Anthropic API, and a local Claude subscription through the Claude Code CLI (`claude`, logged in).
+## Adding a provider
+
+Add providers and agents from the **Providers** view of the web UI, from the TUI (`ringmaster config`), or by editing the fleet config. In the web UI:
+
+1. **Add or edit a provider.** Give it a short name, pick its type, and fill in the base URL and the API key. **Test Connection** checks both before you save.
+2. **Add an agent.** Pick the provider; its models are loaded from the provider's `/models` endpoint, so you choose from a list instead of typing an ID. Set the role (*Master* to plan, *Automaton* to do tasks), and press **Ping** to check that the model answers.
+3. **Pick the master and the default automaton** with **Set Master** and **Set Automaton**. Each task in a plan can still be given any automaton.
+
+Most providers speak the OpenAI API, so they use the type *OpenAI-compatible*:
+
+| Provider | Type | Base URL |
+|---|---|---|
+| OpenAI | OpenAI-compatible | `https://api.openai.com/v1` |
+| Google Gemini (AI Studio) | OpenAI-compatible | `https://generativelanguage.googleapis.com/v1beta/openai` |
+| OpenRouter | OpenAI-compatible | `https://openrouter.ai/api/v1` |
+| DeepSeek | OpenAI-compatible | `https://api.deepseek.com/v1` |
+| Ollama (local) | OpenAI-compatible | `http://localhost:11434/v1` |
+| vLLM (local) | OpenAI-compatible | `http://localhost:8000/v1` |
+| Anthropic API | Claude API | `https://api.anthropic.com/v1` (the default) |
+| Claude subscription | Claude Subscription | none: uses your local Claude Code login |
+
+Any other service with an OpenAI-compatible `/chat/completions` endpoint works the same way. A trailing `/` on the base URL does not matter.
+
+A few provider notes:
+
+- **Google Gemini.** Use a key from [Google AI Studio](https://aistudio.google.com) (it starts with `AIza`); a Vertex AI key does not work on this endpoint. Gemini lists its models with a `models/` prefix (`models/gemini-...`), which is how they appear in the list. The free tier allows few requests per minute, so run fewer tasks in parallel (`ringmaster run -p 1`) if you see HTTP 429.
+- **Automatons need tool calling.** A worker reads and edits files through tools, so pick models that support function calling and keep **Tool calling** on. The master does not need it.
+
+### API keys
+
+The API key field takes the **name of an environment variable** (`GEMINI_API_KEY`), and Ringmaster reads the key from it when it calls the provider. Export the variable in the shell that starts `ringmaster`, and restart it after you set a new one:
+
+```bash
+export GEMINI_API_KEY="AIza..."
+```
+
+The field also accepts the key itself: a value that starts with `sk-`, or that names no environment variable that is set, is used as the key. That is convenient for a quick test, but the key is then stored in plain text in the fleet config, and is sent to the web UI, which hides it behind dots but can reveal it. Prefer a variable name: the key then stays out of the file and out of the UI.
+
+Supported provider types, in short: OpenAI-compatible APIs, the Anthropic API, and a local Claude subscription through the Claude Code CLI (`claude`, logged in).
 
 ## Project manifest
 
