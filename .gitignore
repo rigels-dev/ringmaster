@@ -35,3 +35,8 @@ docs/mockups/
 *.markdown
 !/README.md
 markdowns/
+
+# Published docs
+!/CONTRIBUTING.md
+!/docs/guide/*.md
+!/.github/pull_request_template.md

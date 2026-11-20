@@ -1,0 +1,53 @@
+name: Bug report
+description: Something in Ringmaster does not work as it should
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting. Please remove API keys and private code from anything you paste.
+        Security problems go in a [private advisory](https://github.com/rigels-dev/ringmaster/security/advisories/new), not here.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you did, what you expected, and what happened instead.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. ringmaster init demo
+        2. ringmaster plan
+        3. ...
+  - type: input
+    id: version
+    attributes:
+      label: Ringmaster version
+      description: Output of `ringmaster --version`
+    validations:
+      required: true
+  - type: input
+    id: env
+    attributes:
+      label: Environment
+      description: OS, git version, Node.js version
+      placeholder: Ubuntu 24.04, git 2.43, Node 22.11
+  - type: dropdown
+    id: provider
+    attributes:
+      label: Provider type
+      multiple: true
+      options:
+        - OpenAI-compatible API
+        - Anthropic API
+        - Claude subscription (Claude Code CLI)
+        - Not related to a provider
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: Relevant lines from `.ringmaster/logs/run.jsonl` or `events.jsonl`
+      render: text
