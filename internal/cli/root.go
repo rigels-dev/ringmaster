@@ -28,6 +28,10 @@ focused, budget-friendly workers in isolated git worktrees.`,
 		// When run without subcommands, launch interactive UI selector
 		return RunInteractiveLauncher()
 	},
+	// Execute prints the error once; an error from a command (no plan yet, a
+	// task that does not exist) is not a usage mistake, so it gets no usage dump.
+	SilenceErrors: true,
+	SilenceUsage:  true,
 }
 
 func Execute() {
@@ -44,6 +48,12 @@ func init() {
 	RootCmd.Flags().IntVar(&webPort, "port", 0, fmt.Sprintf("port for the web UI (default: $RINGMASTER_PORT, [web] port in the config, or %d)", config.DefaultWebPort))
 
 	RootCmd.AddCommand(initCmd)
+
+	// A mistyped flag is a usage mistake: point at the help instead of
+	// printing all of it.
+	RootCmd.SetFlagErrorFunc(func(c *cobra.Command, err error) error {
+		return fmt.Errorf("%w\nRun '%s --help' for usage.", err, c.CommandPath())
+	})
 }
 
 func initConfig() {
